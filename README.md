@@ -1,4 +1,4 @@
-# GovtExpenditure-to-HealthEquity-Labeller
+# GovtExpenditure-to-HealthIndicator-Labeller
 
 Regional and Local governments have a limited budget to spread across multiple budget items. Assuming their goal is to improve the 'health equity' of their population, they must decide how to spread their money across different government budget items. This should usually be based on the affect of each budget item on a range of socioeconomic and health indicators.
 
