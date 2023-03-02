@@ -1,0 +1,1624 @@
+code,final_year,description,profile
+110,2021,Early years,EDUCATION SERVICES
+120,2021,Primary schools,EDUCATION SERVICES
+130,2021,Secondary schools,EDUCATION SERVICES
+140,2021,Special schools and alternative provision,EDUCATION SERVICES
+145,2021,Post-16 provision,EDUCATION SERVICES
+165,2021,Other education and community budget,EDUCATION SERVICES
+190,2021,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2021,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+230,2021,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2021,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2021,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2021,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2021,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+252,2021,Traffic management and road safety: traffic management – bus lane enforcement,HIGHWAYS AND TRANSPORT SERVICES
+254,2021,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2021,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2021,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2021,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2021,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2021,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2021,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2021,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2021,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2021,Sure start children's centres and early years,CHILDREN'S SOCIAL CARE
+313,2021,Children looked after,CHILDREN'S SOCIAL CARE
+315,2021,Other children and family services,CHILDREN'S SOCIAL CARE
+322,2021,Family support services,CHILDREN'S SOCIAL CARE
+323,2021,Youth justice,CHILDREN'S SOCIAL CARE
+325,2021,Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2021,Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2021,Services for young people,CHILDREN'S SOCIAL CARE
+330,2021,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2021,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2021,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2021,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2021,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2021,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2021,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2021,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2021,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2021,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2021,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2021,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2021,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2021,Social support: Support for carer,ADULT SOCIAL CARE
+351,2021,Social support: Social Isolation,ADULT SOCIAL CARE
+353,2021,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2021,Social care activities,ADULT SOCIAL CARE
+355,2021,Information and early intervention,ADULT SOCIAL CARE
+356,2021,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2021,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356) (b),ADULT SOCIAL CARE
+361,2021,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2021,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2021,"Sexual health services - Promotion, prevention and advice (non-prescribed functions)",PUBLIC HEALTH
+365,2021,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2021,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2021,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2021,Public health advice to NHS commissioners (prescribed functions),PUBLIC HEALTH
+371,2021,Obesity - adults,PUBLIC HEALTH
+372,2021,Obesity - children,PUBLIC HEALTH
+373,2021,Physical activity - adults,PUBLIC HEALTH
+374,2021,Physical activity - children,PUBLIC HEALTH
+376,2021,Substance misuse - Treatment for drug misuse in adults,PUBLIC HEALTH
+377,2021,Substance misuse - Treatment for alcohol misuse in adults,PUBLIC HEALTH
+378,2021,Substance misuse - Preventing and reducing harm from drug misuse in adults,PUBLIC HEALTH
+379,2021,Substance misuse - Preventing and reducing harm from alcohol misuse in adults,PUBLIC HEALTH
+380,2021,Substance misuse - Specialist drug and alcohol misuse services for children and young people,PUBLIC HEALTH
+381,2021,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+382,2021,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2021,Children 5–19 public health programmes,PUBLIC HEALTH
+384,2021,Mandated 0-5 children’s services (prescribed functions),PUBLIC HEALTH
+385,2021,All Other 0-5 children’s services (non-prescribed functions),PUBLIC HEALTH
+386,2021,Health at work,PUBLIC HEALTH
+387,2021,Public mental health,PUBLIC HEALTH
+389,2021,Miscellaneous public health services - other,PUBLIC HEALTH
+390,2021,TOTAL PUBLIC HEALTH (total of lines 361 to 386),PUBLIC HEALTH
+409,2021,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2021,Homelessness,HOUSING SERVICES (GFRA only)
+456,2021,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2021,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2021,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2021,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2021,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2021,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2021,Archives,CULTURAL AND RELATED SERVICES
+501,2021,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+504,2021,Tourism,CULTURAL AND RELATED SERVICES
+505,2021,Library service,CULTURAL AND RELATED SERVICES
+506,2021,Recreation and sport,CULTURAL AND RELATED SERVICES
+507,2021,Open spaces,CULTURAL AND RELATED SERVICES
+509,2021,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 507),CULTURAL AND RELATED SERVICES
+510,2021,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2021,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2021,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2021,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2021,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2021,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2021,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2021,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2021,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2021,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2021,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2021,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2021,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2021,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2021,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2021,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2021,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2021,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2021,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2021,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2021,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2021,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2021,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2021,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2021,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2021,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2021,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2021,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2021,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2021,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2021,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2021,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2021,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2021,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2021,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2021,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2021,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2021,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2021,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2021,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2021,Coroners' court services,CENTRAL SERVICES
+605,2021,Other court services,CENTRAL SERVICES
+610,2021,Corporate and democratic core,CENTRAL SERVICES
+623,2021,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2021,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2021,Local tax collection: other,CENTRAL SERVICES
+650,2021,Emergency planning,CENTRAL SERVICES
+675,2021,Central services to the public: other,CENTRAL SERVICES
+681,2021,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2021,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+684,2021,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2021,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2021,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2021,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2021,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2021,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2021,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2021,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2021,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2021,Parish Precepts,Precepts and levies
+822,2021,Integrated Transport Authority levy,Precepts and levies
+824,2021,Waste Disposal Authority levy,Precepts and levies
+827,2021,London Pensions Fund Authority levy,Precepts and levies
+828,2021,Other levies,Precepts and levies
+831,2021,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2021,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2021,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2021,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2021,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2021,Adjustments to net current expenditure,Precepts and levies
+849,2021,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2020,Early years,EDUCATION SERVICES
+120,2020,Primary schools,EDUCATION SERVICES
+130,2020,Secondary schools,EDUCATION SERVICES
+140,2020,Special schools and alternative provision,EDUCATION SERVICES
+145,2020,Post-16 provision,EDUCATION SERVICES
+165,2020,Other education and community budget,EDUCATION SERVICES
+190,2020,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2020,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+230,2020,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2020,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2020,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2020,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2020,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+252,2020,Traffic management and road safety: traffic management – bus lane enforcement,HIGHWAYS AND TRANSPORT SERVICES
+254,2020,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2020,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2020,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2020,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2020,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2020,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2020,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2020,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2020,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2020,Sure start children's centres and early years,CHILDREN'S SOCIAL CARE
+313,2020,Children looked after,CHILDREN'S SOCIAL CARE
+315,2020,Other children and family services,CHILDREN'S SOCIAL CARE
+322,2020,Family support services,CHILDREN'S SOCIAL CARE
+323,2020,Youth justice,CHILDREN'S SOCIAL CARE
+325,2020,Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2020,Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2020,Services for young people,CHILDREN'S SOCIAL CARE
+330,2020,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2020,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2020,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2020,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2020,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2020,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2020,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2020,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2020,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2020,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2020,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2020,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2020,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2020,Social support: Support for carer,ADULT SOCIAL CARE
+351,2020,Social support: Social Isolation,ADULT SOCIAL CARE
+353,2020,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2020,Social care activities,ADULT SOCIAL CARE
+355,2020,Information and early intervention,ADULT SOCIAL CARE
+356,2020,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2020,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356) (b),ADULT SOCIAL CARE
+361,2020,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2020,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2020,"Sexual health services - Promotion, prevention and advice (non-prescribed functions)",PUBLIC HEALTH
+365,2020,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2020,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2020,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2020,Public health advice to NHS commissioners (prescribed functions),PUBLIC HEALTH
+371,2020,Obesity - adults,PUBLIC HEALTH
+372,2020,Obesity - children,PUBLIC HEALTH
+373,2020,Physical activity - adults,PUBLIC HEALTH
+374,2020,Physical activity - children,PUBLIC HEALTH
+376,2020,Substance misuse - Treatment for drug misuse in adults,PUBLIC HEALTH
+377,2020,Substance misuse - Treatment for alcohol misuse in adults,PUBLIC HEALTH
+378,2020,Substance misuse - Preventing and reducing harm from drug misuse in adults,PUBLIC HEALTH
+379,2020,Substance misuse - Preventing and reducing harm from alcohol misuse in adults,PUBLIC HEALTH
+380,2020,Substance misuse - Specialist drug and alcohol misuse services for children and young people,PUBLIC HEALTH
+381,2020,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+382,2020,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2020,Children 5–19 public health programmes,PUBLIC HEALTH
+384,2020,Mandated 0-5 children’s services (prescribed functions),PUBLIC HEALTH
+385,2020,All Other 0-5 children’s services (non-prescribed functions),PUBLIC HEALTH
+386,2020,Health at work,PUBLIC HEALTH
+387,2020,Public mental health,PUBLIC HEALTH
+389,2020,Miscellaneous public health services - other,PUBLIC HEALTH
+390,2020,TOTAL PUBLIC HEALTH (total of lines 361 to 389),PUBLIC HEALTH
+409,2020,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2020,Homelessness,HOUSING SERVICES (GFRA only)
+456,2020,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2020,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2020,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2020,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2020,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2020,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2020,Archives,CULTURAL AND RELATED SERVICES
+501,2020,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2020,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2020,Open spaces,CULTURAL AND RELATED SERVICES
+504,2020,Tourism,CULTURAL AND RELATED SERVICES
+505,2020,Library service,CULTURAL AND RELATED SERVICES
+509,2020,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2020,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2020,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2020,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2020,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2020,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2020,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2020,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2020,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2020,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2020,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2020,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2020,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2020,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2020,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2020,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2020,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2020,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2020,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2020,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2020,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2020,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2020,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2020,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2020,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2020,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2020,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2020,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2020,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2020,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2020,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2020,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2020,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2020,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2020,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2020,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2020,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2020,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2020,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2020,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2020,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2020,Coroners' court services,CENTRAL SERVICES
+605,2020,Other court services,CENTRAL SERVICES
+610,2020,Corporate and democratic core,CENTRAL SERVICES
+623,2020,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2020,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2020,Local tax collection: other,CENTRAL SERVICES
+650,2020,Emergency planning,CENTRAL SERVICES
+675,2020,Central services to the public: other,CENTRAL SERVICES
+681,2020,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2020,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+684,2020,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2020,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2020,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2020,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2020,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2020,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2020,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2020,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2020,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2020,Parish Precepts,Precepts and levies
+822,2020,Integrated Transport Authority levy,Precepts and levies
+824,2020,Waste Disposal Authority levy,Precepts and levies
+827,2020,London Pensions Fund Authority levy,Precepts and levies
+828,2020,Other levies,Precepts and levies
+831,2020,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2020,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2020,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2020,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2020,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2020,Adjustments to net current expenditure,Precepts and levies
+849,2020,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2019,Early years,EDUCATION SERVICES
+120,2019,Primary schools,EDUCATION SERVICES
+130,2019,Secondary schools,EDUCATION SERVICES
+140,2019,Special schools and alternative provision,EDUCATION SERVICES
+145,2019,Post-16 provision,EDUCATION SERVICES
+165,2019,Other education and community budget,EDUCATION SERVICES
+190,2019,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2019,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+230,2019,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2019,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2019,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2019,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2019,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+252,2019,Traffic management and road safety: traffic management – bus lane enforcement,HIGHWAYS AND TRANSPORT SERVICES
+254,2019,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2019,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2019,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2019,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2019,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2019,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2019,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2019,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2019,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2019,Sure start children's centres/flying start and early years,CHILDREN'S SOCIAL CARE
+313,2019,Children looked after,CHILDREN'S SOCIAL CARE
+315,2019,Other children and family services,CHILDREN'S SOCIAL CARE
+322,2019,Family support services,CHILDREN'S SOCIAL CARE
+323,2019,Youth justice,CHILDREN'S SOCIAL CARE
+325,2019,Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2019,Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2019,Services for young people,CHILDREN'S SOCIAL CARE
+330,2019,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2019,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2019,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2019,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2019,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2019,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2019,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2019,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2019,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2019,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2019,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2019,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2019,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2019,Social support: Support for carer,ADULT SOCIAL CARE
+351,2019,Social support: Social Isolation,ADULT SOCIAL CARE
+353,2019,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2019,Social care activities,ADULT SOCIAL CARE
+355,2019,Information and early intervention,ADULT SOCIAL CARE
+356,2019,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2019,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356) **,ADULT SOCIAL CARE
+361,2019,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2019,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2019,"Sexual health services - Promotion, prevention and advice (non-prescribed functions)",PUBLIC HEALTH
+365,2019,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2019,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2019,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2019,Public health advice to NHS commissioners (prescribed functions),PUBLIC HEALTH
+371,2019,Obesity - adults,PUBLIC HEALTH
+372,2019,Obesity - children,PUBLIC HEALTH
+373,2019,Physical activity - adults,PUBLIC HEALTH
+374,2019,Physical activity - children,PUBLIC HEALTH
+376,2019,Substance misuse - Treatment for drug misuse in adults,PUBLIC HEALTH
+377,2019,Substance misuse - Treatment for alcohol misuse in adults,PUBLIC HEALTH
+378,2019,Substance misuse - Preventing and reducing harm from drug misuse in adults,PUBLIC HEALTH
+379,2019,Substance misuse - Preventing and reducing harm from alcohol misuse in adults,PUBLIC HEALTH
+380,2019,Substance misuse - Specialist drug and alcohol misuse services for children and young people,PUBLIC HEALTH
+381,2019,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+382,2019,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2019,Children 5–19 public health programmes,PUBLIC HEALTH
+384,2019,Mandated 0-5 children’s services (prescribed functions),PUBLIC HEALTH
+385,2019,All Other 0-5 children’s services (non-prescribed functions),PUBLIC HEALTH
+386,2019,Health at work,PUBLIC HEALTH
+387,2019,Public mental health,PUBLIC HEALTH
+389,2019,Miscellaneous public health services - other,PUBLIC HEALTH
+390,2019,TOTAL PUBLIC HEALTH (total of lines 361 to 386),PUBLIC HEALTH
+409,2019,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2019,Homelessness,HOUSING SERVICES (GFRA only)
+456,2019,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2019,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2019,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2019,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2019,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2019,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2019,Archives,CULTURAL AND RELATED SERVICES
+501,2019,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2019,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2019,Open spaces,CULTURAL AND RELATED SERVICES
+504,2019,Tourism,CULTURAL AND RELATED SERVICES
+505,2019,Library service,CULTURAL AND RELATED SERVICES
+509,2019,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2019,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2019,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2019,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2019,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2019,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2019,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2019,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2019,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2019,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2019,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2019,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2019,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2019,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2019,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2019,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2019,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2019,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2019,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2019,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2019,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2019,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2019,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2019,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2019,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2019,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2019,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2019,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2019,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2019,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2019,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2019,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2019,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2019,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2019,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2019,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2019,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2019,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2019,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2019,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2019,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2019,Coroners' court services,CENTRAL SERVICES
+605,2019,Other court services,CENTRAL SERVICES
+610,2019,Corporate and democratic core,CENTRAL SERVICES
+623,2019,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2019,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2019,Local tax collection: other,CENTRAL SERVICES
+650,2019,Emergency planning,CENTRAL SERVICES
+675,2019,Central services to the public: other,CENTRAL SERVICES
+681,2019,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2019,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+684,2019,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2019,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2019,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2019,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2019,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2019,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2019,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2019,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2019,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2019,Parish Precepts,Precepts and levies
+822,2019,Integrated Transport Authority levy,Precepts and levies
+824,2019,Waste Disposal Authority levy,Precepts and levies
+827,2019,London Pensions Fund Authority levy,Precepts and levies
+828,2019,Other levies,Precepts and levies
+831,2019,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2019,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2019,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2019,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2019,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2019,Adjustments to net current expenditure,Precepts and levies
+849,2019,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2018,Early years,EDUCATION SERVICES
+120,2018,Primary schools,EDUCATION SERVICES
+130,2018,Secondary schools,EDUCATION SERVICES
+140,2018,Special schools and alternative provision,EDUCATION SERVICES
+145,2018,Post-16 provision,EDUCATION SERVICES
+165,2018,Other education and community budget,EDUCATION SERVICES
+190,2018,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2018,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+230,2018,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2018,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2018,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2018,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2018,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+252,2018,Traffic management and road safety: traffic management – bus lane enforcement,HIGHWAYS AND TRANSPORT SERVICES
+254,2018,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2018,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2018,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2018,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2018,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2018,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2018,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2018,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2018,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2018,Sure start children's centres/flying start and early years,CHILDREN'S SOCIAL CARE
+313,2018,Children looked after,CHILDREN'S SOCIAL CARE
+315,2018,Other children and family services,CHILDREN'S SOCIAL CARE
+322,2018,Family support services,CHILDREN'S SOCIAL CARE
+323,2018,Youth justice,CHILDREN'S SOCIAL CARE
+325,2018,Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2018,Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2018,Services for young people,CHILDREN'S SOCIAL CARE
+330,2018,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2018,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2018,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2018,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2018,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2018,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2018,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2018,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2018,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2018,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2018,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2018,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2018,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2018,Social support: Support for carer,ADULT SOCIAL CARE
+351,2018,Social support: Social Isolation,ADULT SOCIAL CARE
+353,2018,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2018,Social care activities,ADULT SOCIAL CARE
+355,2018,Information and early intervention,ADULT SOCIAL CARE
+356,2018,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2018,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356),ADULT SOCIAL CARE
+361,2018,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2018,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2018,"Sexual health services - Promotion, prevention and advice (non-prescribed functions)",PUBLIC HEALTH
+365,2018,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2018,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2018,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2018,Public health advice to NHS commissioners (prescribed functions),PUBLIC HEALTH
+371,2018,Obesity - adults,PUBLIC HEALTH
+372,2018,Obesity - children,PUBLIC HEALTH
+373,2018,Physical activity - adults,PUBLIC HEALTH
+374,2018,Physical activity - children,PUBLIC HEALTH
+376,2018,Substance misuse - Treatment for drug misuse in adults,PUBLIC HEALTH
+377,2018,Substance misuse - Treatment for alcohol misuse in adults,PUBLIC HEALTH
+378,2018,Substance misuse - Preventing and reducing harm from drug misuse in adults,PUBLIC HEALTH
+379,2018,Substance misuse - Preventing and reducing harm from alcohol misuse in adults,PUBLIC HEALTH
+380,2018,Substance misuse - Specialist drug and alcohol misuse services for children and young people,PUBLIC HEALTH
+381,2018,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+382,2018,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2018,Children 5–19 public health programmes,PUBLIC HEALTH
+384,2018,Mandated 0-5 children’s services (prescribed functions),PUBLIC HEALTH
+385,2018,All Other 0-5 children’s services (non-prescribed functions),PUBLIC HEALTH
+386,2018,Health at work,PUBLIC HEALTH
+387,2018,Public mental health,PUBLIC HEALTH
+389,2018,Miscellaneous public health services - other,PUBLIC HEALTH
+390,2018,TOTAL PUBLIC HEALTH (total of lines 361 to 386),PUBLIC HEALTH
+409,2018,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2018,Homelessness,HOUSING SERVICES (GFRA only)
+456,2018,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2018,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2018,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2018,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2018,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2018,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2018,Archives,CULTURAL AND RELATED SERVICES
+501,2018,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2018,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2018,Open spaces,CULTURAL AND RELATED SERVICES
+504,2018,Tourism,CULTURAL AND RELATED SERVICES
+505,2018,Library service,CULTURAL AND RELATED SERVICES
+509,2018,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2018,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2018,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2018,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2018,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2018,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2018,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2018,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2018,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2018,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2018,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2018,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2018,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2018,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2018,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2018,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2018,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2018,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2018,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2018,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2018,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2018,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2018,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2018,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2018,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2018,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2018,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2018,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2018,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2018,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2018,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2018,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2018,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2018,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2018,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2018,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2018,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2018,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2018,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2018,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2018,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2018,Coroners' court services,CENTRAL SERVICES
+605,2018,Other court services,CENTRAL SERVICES
+610,2018,Corporate and democratic core,CENTRAL SERVICES
+623,2018,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2018,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2018,Local tax collection: other,CENTRAL SERVICES
+650,2018,Emergency planning,CENTRAL SERVICES
+675,2018,Central services to the public: other,CENTRAL SERVICES
+681,2018,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2018,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+684,2018,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2018,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2018,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2018,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2018,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2018,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2018,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2018,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2018,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2018,Parish Precepts,Precepts and levies
+822,2018,Integrated Transport Authority levy,Precepts and levies
+824,2018,Waste Disposal Authority levy,Precepts and levies
+827,2018,London Pensions Fund Authority levy,Precepts and levies
+828,2018,Other levies,Precepts and levies
+831,2018,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2018,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2018,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2018,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2018,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2018,Adjustments to net current expenditure,Precepts and levies
+849,2018,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2017,Early years,EDUCATION SERVICES
+120,2017,Primary schools,EDUCATION SERVICES
+130,2017,Secondary schools,EDUCATION SERVICES
+140,2017,Special schools and alternative provision,EDUCATION SERVICES
+145,2017,Post-16 provision,EDUCATION SERVICES
+165,2017,Other education and community budget,EDUCATION SERVICES
+190,2017,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2017,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+230,2017,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2017,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2017,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2017,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2017,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+252,2017,Traffic management and road safety: traffic management – bus lane enforcement,HIGHWAYS AND TRANSPORT SERVICES
+254,2017,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2017,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2017,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2017,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2017,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2017,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2017,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2017,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2017,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2017,Children's social care: Sure start children's centres/flying start and early years,CHILDREN'S SOCIAL CARE
+313,2017,Children's social care: Children looked after,CHILDREN'S SOCIAL CARE
+315,2017,Children's social care: Other children and family services,CHILDREN'S SOCIAL CARE
+322,2017,Children's social care: Family support services,CHILDREN'S SOCIAL CARE
+323,2017,Children's social care: Youth justice,CHILDREN'S SOCIAL CARE
+325,2017,Children's social care: Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2017,Children's social care: Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2017,Children's social care: Services for young people,CHILDREN'S SOCIAL CARE
+330,2017,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2017,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2017,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2017,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2017,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2017,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2017,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2017,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2017,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2017,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2017,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2017,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2017,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2017,Social support: Support for carer,ADULT SOCIAL CARE
+351,2017,Social support: Social Isolation,ADULT SOCIAL CARE
+353,2017,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2017,Social care activities,ADULT SOCIAL CARE
+355,2017,Information and early intervention,ADULT SOCIAL CARE
+356,2017,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2017,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356),ADULT SOCIAL CARE
+361,2017,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2017,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2017,"Sexual health services - Promotion, prevention and advice (non-prescribed functions)",PUBLIC HEALTH
+365,2017,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2017,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2017,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2017,Public health advice to NHS commissioners (prescribed functions),PUBLIC HEALTH
+371,2017,Obesity - adults,PUBLIC HEALTH
+372,2017,Obesity - children,PUBLIC HEALTH
+373,2017,Physical activity - adults,PUBLIC HEALTH
+374,2017,Physical activity - children,PUBLIC HEALTH
+376,2017,Substance misuse - Treatment for drug misuse in adults,PUBLIC HEALTH
+377,2017,Substance misuse - Treatment for alcohol misuse in adults,PUBLIC HEALTH
+378,2017,Substance misuse - Preventing and reducing harm from drug misuse in adults,PUBLIC HEALTH
+379,2017,Substance misuse - Preventing and reducing harm from alcohol misuse in adults,PUBLIC HEALTH
+380,2017,Substance misuse - Specialist drug and alcohol misuse services for children and young people,PUBLIC HEALTH
+381,2017,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+382,2017,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2017,Children 5–19 public health programmes,PUBLIC HEALTH
+384,2017,Mandated 0-5 children’s services (prescribed functions),PUBLIC HEALTH
+385,2017,All Other 0-5 children’s services (non-prescribed functions),PUBLIC HEALTH
+386,2017,Health at work,PUBLIC HEALTH
+387,2017,Public mental health,PUBLIC HEALTH
+389,2017,Miscellaneous public health services - other,PUBLIC HEALTH
+390,2017,TOTAL PUBLIC HEALTH (total of lines 361 to 386),PUBLIC HEALTH
+409,2017,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2017,Homelessness,HOUSING SERVICES (GFRA only)
+456,2017,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2017,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2017,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2017,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2017,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2017,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2017,Archives,CULTURAL AND RELATED SERVICES
+501,2017,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2017,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2017,Open spaces,CULTURAL AND RELATED SERVICES
+504,2017,Tourism,CULTURAL AND RELATED SERVICES
+505,2017,Library service,CULTURAL AND RELATED SERVICES
+509,2017,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2017,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2017,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2017,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2017,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2017,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2017,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2017,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2017,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2017,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2017,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2017,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2017,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2017,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2017,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2017,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2017,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2017,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2017,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2017,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2017,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2017,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2017,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2017,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2017,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2017,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2017,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2017,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2017,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2017,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2017,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2017,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2017,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2017,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2017,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2017,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2017,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2017,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2017,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2017,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2017,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2017,Coroners' court services,CENTRAL SERVICES
+605,2017,Other court services,CENTRAL SERVICES
+610,2017,Corporate and democratic core,CENTRAL SERVICES
+623,2017,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2017,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2017,Local tax collection: other,CENTRAL SERVICES
+650,2017,Emergency planning,CENTRAL SERVICES
+675,2017,Central services to the public: other,CENTRAL SERVICES
+681,2017,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2017,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+684,2017,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2017,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2017,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2017,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2017,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2017,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2017,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2017,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2017,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2017,Parish Precepts,Precepts and levies
+822,2017,Integrated Transport Authority levy,Precepts and levies
+824,2017,Waste Disposal Authority levy,Precepts and levies
+827,2017,London Pensions Fund Authority levy,Precepts and levies
+828,2017,Other levies,Precepts and levies
+831,2017,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2017,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2017,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2017,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2017,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2017,Adjustments to net current expenditure,Precepts and levies
+849,2017,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2016,Early years,EDUCATION SERVICES
+120,2016,Primary schools,EDUCATION SERVICES
+130,2016,Secondary schools,EDUCATION SERVICES
+140,2016,Special schools and alternative provision,EDUCATION SERVICES
+145,2016,Post-16 provision,EDUCATION SERVICES
+165,2016,Other education and community budget,EDUCATION SERVICES
+190,2016,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2016,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+230,2016,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2016,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2016,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2016,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2016,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+252,2016,Traffic management and road safety: traffic management – bus lane enforcement,HIGHWAYS AND TRANSPORT SERVICES
+254,2016,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2016,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2016,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2016,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2016,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2016,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2016,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2016,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2016,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2016,Children's social care: Sure start children's centres/flying start and early years,CHILDREN'S SOCIAL CARE
+313,2016,Children's social care: Children looked after,CHILDREN'S SOCIAL CARE
+315,2016,Children's social care: Other children and family services,CHILDREN'S SOCIAL CARE
+322,2016,Children's social care: Family support services,CHILDREN'S SOCIAL CARE
+323,2016,Children's social care: Youth justice,CHILDREN'S SOCIAL CARE
+325,2016,Children's social care: Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2016,Children's social care: Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2016,Children's social care: Services for young people,CHILDREN'S SOCIAL CARE
+330,2016,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2016,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2016,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2016,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2016,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2016,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2016,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2016,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2016,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2016,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2016,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2016,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2016,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2016,Social support: Support for carer,ADULT SOCIAL CARE
+351,2016,Social support: Social Isolation,ADULT SOCIAL CARE
+353,2016,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2016,Social care activities,ADULT SOCIAL CARE
+355,2016,Information and early intervention,ADULT SOCIAL CARE
+356,2016,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2016,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356),ADULT SOCIAL CARE
+361,2016,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2016,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2016,"Sexual health services - Promotion, prevention and advice (non-prescribed functions)",PUBLIC HEALTH
+365,2016,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2016,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2016,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2016,Public health advice (prescribed functions),PUBLIC HEALTH
+371,2016,Obesity - adults,PUBLIC HEALTH
+372,2016,Obesity - children,PUBLIC HEALTH
+373,2016,Physical activity - adults,PUBLIC HEALTH
+374,2016,Physical activity - children,PUBLIC HEALTH
+376,2016,Substance misuse - Drug misuse - adults,PUBLIC HEALTH
+377,2016,Substance misuse - Alcohol misuse - adults,PUBLIC HEALTH
+378,2016,Substance misuse - (drugs and alcohol) - youth services,PUBLIC HEALTH
+380,2016,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+381,2016,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2016,Children 5–19 public health programmes,PUBLIC HEALTH
+384,2016,Miscellaneous public health services - Children's 0–5 services (prescribed functions),PUBLIC HEALTH
+385,2016,Miscellaneous public health services - Children’s 0-5 services - Other (non-prescribed functions),PUBLIC HEALTH
+386,2016,Miscellaneous public health services - other,PUBLIC HEALTH
+390,2016,TOTAL PUBLIC HEALTH (total of lines 361 to 386),PUBLIC HEALTH
+409,2016,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2016,Homelessness,HOUSING SERVICES (GFRA only)
+456,2016,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2016,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2016,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2016,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2016,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2016,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2016,Archives,CULTURAL AND RELATED SERVICES
+501,2016,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2016,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2016,Open spaces,CULTURAL AND RELATED SERVICES
+504,2016,Tourism,CULTURAL AND RELATED SERVICES
+505,2016,Library service,CULTURAL AND RELATED SERVICES
+509,2016,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2016,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2016,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2016,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2016,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2016,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2016,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2016,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2016,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2016,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2016,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2016,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2016,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2016,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2016,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2016,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2016,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2016,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2016,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2016,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2016,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2016,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2016,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2016,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2016,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2016,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2016,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2016,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2016,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2016,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2016,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2016,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2016,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2016,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2016,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2016,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2016,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2016,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2016,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2016,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2016,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2016,Coroners' court services,CENTRAL SERVICES
+605,2016,Other court services,CENTRAL SERVICES
+610,2016,Corporate and democratic core,CENTRAL SERVICES
+623,2016,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2016,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2016,Local tax collection: other,CENTRAL SERVICES
+650,2016,Emergency planning,CENTRAL SERVICES
+675,2016,Central services to the public: other,CENTRAL SERVICES
+681,2016,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2016,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+684,2016,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2016,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2016,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2016,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2016,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2016,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2016,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2016,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2016,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2016,Parish Precepts,Precepts and levies
+822,2016,Integrated Transport Authority levy,Precepts and levies
+824,2016,Waste Disposal Authority levy,Precepts and levies
+827,2016,London Pensions Fund Authority levy,Precepts and levies
+828,2016,Other levies,Precepts and levies
+831,2016,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2016,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2016,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2016,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2016,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2016,Adjustments to net current expenditure,Precepts and levies
+849,2016,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2015,Early years,EDUCATION SERVICES
+120,2015,Primary schools,EDUCATION SERVICES
+130,2015,Secondary schools,EDUCATION SERVICES
+140,2015,Special schools and alternative provision,EDUCATION SERVICES
+145,2015,Post-16 provision,EDUCATION SERVICES
+165,2015,Other education and community budget,EDUCATION SERVICES
+190,2015,TOTAL EDUCATION SERVICES (total of lines 110 to 165),EDUCATION SERVICES
+210,2015,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+220,2015,Capital items relating to construction projects,HIGHWAYS AND TRANSPORT SERVICES
+230,2015,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2015,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2015,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2015,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2015,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+254,2015,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2015,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2015,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2015,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2015,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2015,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2015,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2015,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2015,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+310,2015,Children's social care: Sure start children's centres/flying start and early years,CHILDREN'S SOCIAL CARE
+313,2015,Children's social care: Children looked after,CHILDREN'S SOCIAL CARE
+315,2015,Children's social care: Other children and family services,CHILDREN'S SOCIAL CARE
+322,2015,Children's social care: Family support services,CHILDREN'S SOCIAL CARE
+323,2015,Children's social care: Youth justice,CHILDREN'S SOCIAL CARE
+325,2015,Children's social care: Safeguarding children and young people’s services,CHILDREN'S SOCIAL CARE
+326,2015,Children's social care: Asylum seekers,CHILDREN'S SOCIAL CARE
+327,2015,Children's social care: Services for young people,CHILDREN'S SOCIAL CARE
+330,2015,TOTAL CHILDREN'S SOCIAL CARE (total of lines 310 to 327),CHILDREN'S SOCIAL CARE
+332,2015,Physical support - adults (18–64),ADULT SOCIAL CARE
+333,2015,Physical support - older people (65+),ADULT SOCIAL CARE
+334,2015,Sensory support - adults (18–64),ADULT SOCIAL CARE
+335,2015,Sensory support - older people (65+),ADULT SOCIAL CARE
+336,2015,Support with memory and cognition - adults (18–64),ADULT SOCIAL CARE
+337,2015,Support with memory and cognition - older people (65+),ADULT SOCIAL CARE
+340,2015,Learning disability support - adults (18–64),ADULT SOCIAL CARE
+341,2015,Learning disability support - older people (65+),ADULT SOCIAL CARE
+344,2015,Mental health support - adults (18–64),ADULT SOCIAL CARE
+345,2015,Mental health support - older people (65+),ADULT SOCIAL CARE
+348,2015,Social support: Substance misuse support,ADULT SOCIAL CARE
+349,2015,Social support: Asylum seeker support,ADULT SOCIAL CARE
+350,2015,Social support: Support for carer,ADULT SOCIAL CARE
+353,2015,Assistive equipment and technology,ADULT SOCIAL CARE
+354,2015,Social care activities,ADULT SOCIAL CARE
+355,2015,Information and early intervention,ADULT SOCIAL CARE
+356,2015,Commissioning and service delivery,ADULT SOCIAL CARE
+360,2015,TOTAL ADULT SOCIAL CARE (total of lines 332 to 356),ADULT SOCIAL CARE
+361,2015,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2015,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2015,"Sexual health services - Advice, prevention and promotion  (non-prescribed functions)",PUBLIC HEALTH
+365,2015,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2015,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2015,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2015,Public health advice (prescribed functions),PUBLIC HEALTH
+371,2015,Obesity - adults,PUBLIC HEALTH
+372,2015,Obesity - children,PUBLIC HEALTH
+373,2015,Physical activity - adults,PUBLIC HEALTH
+374,2015,Physical activity - children,PUBLIC HEALTH
+376,2015,Substance misuse - Drug misuse - adults,PUBLIC HEALTH
+377,2015,Substance misuse - Alcohol misuse - adults,PUBLIC HEALTH
+378,2015,Substance misuse - (drugs and alcohol) - youth services,PUBLIC HEALTH
+380,2015,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+381,2015,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2015,Children 5–19 public health programmes,PUBLIC HEALTH
+385,2015,Miscellaneous public health services,PUBLIC HEALTH
+390,2015,TOTAL PUBLIC HEALTH (total of lines 361 to 385),PUBLIC HEALTH
+409,2015,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2015,Homelessness,HOUSING SERVICES (GFRA only)
+456,2015,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2015,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2015,Other council property - travellers' sites and non-HRA council property,HOUSING SERVICES (GFRA only)
+475,2015,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2015,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2015,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2015,Archives,CULTURAL AND RELATED SERVICES
+501,2015,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2015,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2015,Open spaces,CULTURAL AND RELATED SERVICES
+504,2015,Tourism,CULTURAL AND RELATED SERVICES
+505,2015,Library service,CULTURAL AND RELATED SERVICES
+509,2015,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2015,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2015,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2015,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2015,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2015,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2015,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2015,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2015,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2015,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2015,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2015,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2015,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2015,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2015,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2015,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2015,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2015,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2015,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2015,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2015,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2015,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2015,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2015,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2015,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2015,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2015,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2015,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2015,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2015,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2015,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2015,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2015,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2015,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2015,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2015,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2015,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2015,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2015,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2015,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2015,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2015,Coroners' court services,CENTRAL SERVICES
+605,2015,Other court services,CENTRAL SERVICES
+610,2015,Corporate and democratic core,CENTRAL SERVICES
+623,2015,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2015,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2015,Local tax collection: other,CENTRAL SERVICES
+650,2015,Emergency planning,CENTRAL SERVICES
+675,2015,Central services to the public: other,CENTRAL SERVICES
+681,2015,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2015,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+683,2015,Non-distributed costs - depreciation / impairment of surplus costs etc,CENTRAL SERVICES
+684,2015,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2015,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2015,TOTAL OTHER SERVICES,CENTRAL SERVICES
+799,2015,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2015,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2015,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2015,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2015,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2015,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2015,Parish Precepts,Precepts and levies
+822,2015,Integrated Transport Authority levy,Precepts and levies
+824,2015,Waste Disposal Authority levy,Precepts and levies
+827,2015,London Pensions Fund Authority levy,Precepts and levies
+828,2015,Other levies,Precepts and levies
+831,2015,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2015,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2015,Capital items accounted for in External Trading Accounts,Precepts and levies
+842,2015,Capital items accounted for in Internal Trading Accounts,Precepts and levies
+847,2015,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2015,Adjustments to net current expenditure,Precepts and levies
+849,2015,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies
+110,2012,Early Years,EDUCATION SERVICES
+120,2012,Primary schools,EDUCATION SERVICES
+130,2012,Secondary schools,EDUCATION SERVICES
+140,2012,Special schools,EDUCATION SERVICES
+150,2012,Services to Young People,EDUCATION SERVICES
+160,2012,Other School related Education Functions,EDUCATION SERVICES
+190,2012,TOTAL EDUCATION SERVICES (total of lines 110 to 160),EDUCATION SERVICES
+210,2012,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+220,2012,Capital charges relating to construction projects,HIGHWAYS AND TRANSPORT SERVICES
+230,2012,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2012,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2012,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2012,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2012,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+254,2012,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2012,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2012,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2012,Public transport: concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2012,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2012,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2012,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2012,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+311,2012,Social care strategy - children,SOCIAL CARE
+324,2012,Children and Young Peoples Safety,SOCIAL CARE
+325,2012,Children's and families' services - asylum seekers,SOCIAL CARE
+329,2012,Children's and families' services - other,SOCIAL CARE
+330,2012,Social care strategy - adults,SOCIAL CARE
+340,2012,Older people (aged 65 or over) including older mentally ill,SOCIAL CARE
+351,2012,Adults aged under 65 with physical disability or sensory impairment,SOCIAL CARE
+352,2012,Adults aged under 65 with learning disabilities,SOCIAL CARE
+353,2012,Adults aged under 65 with mental health needs,SOCIAL CARE
+375,2012,Other adult social care - asylum seekers - lone adults,SOCIAL CARE
+379,2012,Other adult social care - other,SOCIAL CARE
+390,2012,TOTAL SOCIAL CARE (total of lines 311 to 379),SOCIAL CARE
+409,2012,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2012,Homelessness,HOUSING SERVICES (GFRA only)
+456,2012,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2012,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2012,Other council property - travellers' sites and non-HRA housing,HOUSING SERVICES (GFRA only)
+475,2012,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2012,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2012,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2012,Archives,CULTURAL AND RELATED SERVICES
+501,2012,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2012,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2012,Open spaces,CULTURAL AND RELATED SERVICES
+504,2012,Tourism,CULTURAL AND RELATED SERVICES
+505,2012,Library service,CULTURAL AND RELATED SERVICES
+509,2012,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2012,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2012,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2012,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2012,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2012,Regulatory services: Environmental protection,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2012,Regulatory services: Private rented housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2012,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2012,Regulatory services: Port health,ENVIRONMENTAL AND REGULATORY SERVICES
+526,2012,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2012,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2012,Regulatory services: Animal and public health; infectious disease control,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2012,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2012,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2012,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2012,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2012,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2012,Land drainage and related work,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2012,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2012,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2012,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2012,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2012,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2012,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2012,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2012,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2012,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2012,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2012,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2012,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2012,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2012,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2012,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2012,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2012,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2012,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2012,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2012,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2012,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2012,Coroners' court services,CENTRAL SERVICES
+605,2012,Other court services,CENTRAL SERVICES
+610,2012,Corporate and democratic core,CENTRAL SERVICES
+623,2012,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2012,Local tax collection: council tax benefits administration,CENTRAL SERVICES
+628,2012,Local tax collection: other,CENTRAL SERVICES
+650,2012,Emergency planning,CENTRAL SERVICES
+675,2012,Central services to the public: other,CENTRAL SERVICES
+681,2012,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2012,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+683,2012,Non-distributed costs - depreciation / impairment of surplus costs etc,CENTRAL SERVICES
+684,2012,Non-distributed costs - Carbon Reduction Commitment Transactions (expenditure) (+),CENTRAL SERVICES
+685,2012,Non-distributed costs - Carbon Reduction Commitment Transactions (income) (-),CENTRAL SERVICES
+690,2012,TOTAL CENTRAL SERVICES (total of lines 604 to 685),CENTRAL SERVICES
+698,2012,TOTAL OTHER SERVICES,CENTRAL SERVICES
+699,2012,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+711,2012,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+712,2012,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+713,2012,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+714,2012,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+718,2012,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+721,2012,Parish Precepts,Precepts and levies
+722,2012,Integrated Transport Authority levy,Precepts and levies
+724,2012,Waste Disposal Authority levy,Precepts and levies
+727,2012,London Pensions Fund Authority levy,Precepts and levies
+728,2012,Other levies,Precepts and levies
+731,2012,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+732,2012,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+761,2012,Capital charges accounted for in External Trading Accounts,Precepts and levies
+762,2012,Capital charges accounted for in Internal Trading Accounts,Precepts and levies
+748,2012,Adjustments to net current expenditure,Precepts and levies
+749,2012,NET CURRENT EXPENDITURE (total of lines 699 to 748),Precepts and levies
+110,2011,Nursery schools,EDUCATION SERVICES
+120,2011,Primary schools,EDUCATION SERVICES
+130,2011,Secondary schools,EDUCATION SERVICES
+140,2011,Special schools,EDUCATION SERVICES
+150,2011,Non-school funding,EDUCATION SERVICES
+190,2011,TOTAL EDUCATION SERVICES (total of lines 110 to 150),EDUCATION SERVICES
+210,2011,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+220,2011,Capital charges relating to construction projects,HIGHWAYS AND TRANSPORT SERVICES
+230,2011,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2011,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2011,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2011,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2011,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+254,2011,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2011,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2011,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2011,Public transport: concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2011,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2011,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2011,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2011,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+311,2011,Social care strategy - children,SOCIAL CARE
+325,2011,Children's and families' services - asylum seekers,SOCIAL CARE
+329,2011,Children's and families' services - other,SOCIAL CARE
+330,2011,Social care strategy - adults,SOCIAL CARE
+340,2011,Older people (aged 65 or over) including older mentally ill,SOCIAL CARE
+351,2011,Adults aged under 65 with physical disability or sensory impairment,SOCIAL CARE
+352,2011,Adults aged under 65 with learning disabilities,SOCIAL CARE
+353,2011,Adults aged under 65 with mental health needs,SOCIAL CARE
+375,2011,Other adult social care - asylum seekers - lone adults,SOCIAL CARE
+379,2011,Other adult social care - other,SOCIAL CARE
+390,2011,TOTAL SOCIAL CARE (total of lines 311 to 380),SOCIAL CARE
+409,2011,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2011,Homelessness,HOUSING SERVICES (GFRA only)
+456,2011,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2011,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2011,Other council property - travellers' sites and non-HRA housing,HOUSING SERVICES (GFRA only)
+475,2011,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2011,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2011,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+501,2011,Culture and heritage,CULTURAL AND RELATED SERVICES
+502,2011,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2011,Open spaces,CULTURAL AND RELATED SERVICES
+504,2011,Tourism,CULTURAL AND RELATED SERVICES
+505,2011,Library service,CULTURAL AND RELATED SERVICES
+509,2011,TOTAL CULTURAL AND RELATED SERVICES (total of lines 501 to 505),CULTURAL AND RELATED SERVICES
+510,2011,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2011,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2011,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2011,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2011,Regulatory services: Environmental protection,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2011,Regulatory services: Private rented housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2011,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2011,Regulatory services: Port health,ENVIRONMENTAL AND REGULATORY SERVICES
+526,2011,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2011,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2011,Regulatory services: Animal and public health; infectious disease control,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2011,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2011,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2011,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2011,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2011,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2011,Land drainage and related work,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2011,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2011,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2011,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2011,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2011,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2011,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2011,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2011,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2011,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2011,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2011,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2011,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2011,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2011,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2011,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2011,Community development,PLANNING AND DEVELOPMENT SERVICES
+599,2011,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 596),PLANNING AND DEVELOPMENT SERVICES
+601,2011,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2011,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2011,Coroners' court services,CENTRAL SERVICES
+605,2011,Other court services,CENTRAL SERVICES
+610,2011,Corporate and democratic core,CENTRAL SERVICES
+623,2011,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2011,Local tax collection: council tax benefits administration,CENTRAL SERVICES
+628,2011,Local tax collection: other,CENTRAL SERVICES
+650,2011,Emergency planning,CENTRAL SERVICES
+675,2011,Central services to the public: other,CENTRAL SERVICES
+681,2011,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2011,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+683,2011,Non-distributed costs - depreciation / impairment of surplus costs etc,CENTRAL SERVICES
+690,2011,TOTAL CENTRAL SERVICES (total of lines 604 to 683),CENTRAL SERVICES
+698,2011,TOTAL OTHER SERVICES,CENTRAL SERVICES
+699,2011,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+701,2011,Education: student support - mandatory awards,CENTRAL SERVICES
+711,2011,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+712,2011,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+713,2011,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+714,2011,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+718,2011,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+721,2011,Parish Precepts,Precepts and levies
+722,2011,Integrated Transport Authority levy,Precepts and levies
+724,2011,Waste Disposal Authority levy,Precepts and levies
+727,2011,London Pensions Fund Authority levy,Precepts and levies
+728,2011,Other levies,Precepts and levies
+731,2011,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+732,2011,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+748,2011,Adjustments to net current expenditure,Precepts and levies
+749,2011,NET CURRENT EXPENDITURE (total of lines 699 to 748),Precepts and levies
+110,2013,Early years,EDUCATION SERVICES
+120,2013,Primary schools,EDUCATION SERVICES
+130,2013,Secondary schools,EDUCATION SERVICES
+140,2013,Special schools,EDUCATION SERVICES
+150,2013,Services to young people and other community learners,EDUCATION SERVICES
+160,2013,Other strategic functions,EDUCATION SERVICES
+190,2013,TOTAL EDUCATION SERVICES (total of lines 110 to 160),EDUCATION SERVICES
+210,2013,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+220,2013,Capital charges relating to construction projects,HIGHWAYS AND TRANSPORT SERVICES
+230,2013,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2013,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2013,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2013,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2013,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+254,2013,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2013,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2013,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2013,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2013,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2013,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2013,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2013,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2013,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+311,2013,Children's social care: Service strategy,CHILDREN'S SOCIAL CARE
+312,2013,Children's social care: Commissioning and social work,CHILDREN'S SOCIAL CARE
+321,2013,Children's social care: Children looked after,CHILDREN'S SOCIAL CARE
+322,2013,Children's social care: Family support services,CHILDREN'S SOCIAL CARE
+323,2013,Children's social care: Youth justice,CHILDREN'S SOCIAL CARE
+324,2013,Children's social care: Children's and young people's safety,CHILDREN'S SOCIAL CARE
+325,2013,Children's social care: Asylum seekers,CHILDREN'S SOCIAL CARE
+328,2013,Children's social care: Other children's and families' services,CHILDREN'S SOCIAL CARE
+329,2013,TOTAL CHILDREN'S SOCIAL CARE (total of lines 311 to 328),CHILDREN'S SOCIAL CARE
+330,2013,Social care strategy - adults,ADULT SOCIAL CARE
+340,2013,Older people (aged 65 or over) including older mentally ill,ADULT SOCIAL CARE
+351,2013,Adults aged under 65 with physical disability or sensory impairment,ADULT SOCIAL CARE
+352,2013,Adults aged under 65 with learning disabilities,ADULT SOCIAL CARE
+353,2013,Adults aged under 65 with mental health needs,ADULT SOCIAL CARE
+375,2013,Other adult social care - asylum seekers - lone adults,ADULT SOCIAL CARE
+379,2013,Other adult social care - other,ADULT SOCIAL CARE
+390,2013,TOTAL ADULT SOCIAL CARE (total of lines 330 to 379),ADULT SOCIAL CARE
+409,2013,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2013,Homelessness,HOUSING SERVICES (GFRA only)
+456,2013,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2013,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2013,Other council property - travellers' sites and non-HRA housing,HOUSING SERVICES (GFRA only)
+475,2013,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2013,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2013,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2013,Archives,CULTURAL AND RELATED SERVICES
+501,2013,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2013,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2013,Open spaces,CULTURAL AND RELATED SERVICES
+504,2013,Tourism,CULTURAL AND RELATED SERVICES
+505,2013,Library service,CULTURAL AND RELATED SERVICES
+509,2013,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2013,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2013,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2013,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2013,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2013,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2013,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2013,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2013,Regulatory services: Port health,ENVIRONMENTAL AND REGULATORY SERVICES
+526,2013,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2013,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2013,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2013,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2013,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2013,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2013,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2013,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2013,Land drainage and related work,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2013,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2013,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2013,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2013,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2013,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2013,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2013,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2013,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2013,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2013,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2013,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2013,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2013,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2013,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2013,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2013,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2013,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2013,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2013,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2013,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2013,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2013,Coroners' court services,CENTRAL SERVICES
+605,2013,Other court services,CENTRAL SERVICES
+610,2013,Corporate and democratic core,CENTRAL SERVICES
+623,2013,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2013,Local tax collection: council tax benefits administration,CENTRAL SERVICES
+628,2013,Local tax collection: other,CENTRAL SERVICES
+650,2013,Emergency planning,CENTRAL SERVICES
+675,2013,Central services to the public: other,CENTRAL SERVICES
+681,2013,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2013,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+683,2013,Non-distributed costs - depreciation / impairment of surplus costs etc,CENTRAL SERVICES
+690,2013,TOTAL CENTRAL SERVICES (total of lines 604 to 683),CENTRAL SERVICES
+698,2013,TOTAL OTHER SERVICES,CENTRAL SERVICES
+699,2013,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 329, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+711,2013,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+712,2013,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+713,2013,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+714,2013,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+718,2013,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+721,2013,Parish Precepts,Precepts and levies
+722,2013,Integrated Transport Authority levy,Precepts and levies
+724,2013,Waste Disposal Authority levy,Precepts and levies
+727,2013,London Pensions Fund Authority levy,Precepts and levies
+728,2013,Other levies,Precepts and levies
+731,2013,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+732,2013,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+741,2013,Capital charges accounted for in External Trading Accounts,Precepts and levies
+742,2013,Capital charges accounted for in Internal Trading Accounts,Precepts and levies
+748,2013,Adjustments to net current expenditure,Precepts and levies
+749,2013,NET CURRENT EXPENDITURE (total of lines 699 to 748),Precepts and levies
+110,2014,Early years,EDUCATION SERVICES
+120,2014,Primary schools,EDUCATION SERVICES
+130,2014,Secondary schools,EDUCATION SERVICES
+140,2014,Special schools,EDUCATION SERVICES
+150,2014,Services to young people and other community learners,EDUCATION SERVICES
+160,2014,Other strategic functions,EDUCATION SERVICES
+190,2014,TOTAL EDUCATION SERVICES (total of lines 110 to 160),EDUCATION SERVICES
+210,2014,"Transport planning, policy and strategy",HIGHWAYS AND TRANSPORT SERVICES
+220,2014,Capital charges relating to construction projects,HIGHWAYS AND TRANSPORT SERVICES
+230,2014,Structural maintenance,HIGHWAYS AND TRANSPORT SERVICES
+247,2014,"Environmental, safety and routine maintenance",HIGHWAYS AND TRANSPORT SERVICES
+248,2014,Winter service,HIGHWAYS AND TRANSPORT SERVICES
+249,2014,Street lighting (including energy costs),HIGHWAYS AND TRANSPORT SERVICES
+251,2014,Traffic management and road safety: congestion charging,HIGHWAYS AND TRANSPORT SERVICES
+254,2014,Traffic management and road safety: road safety education and safe routes (including school crossing patrols),HIGHWAYS AND TRANSPORT SERVICES
+258,2014,Traffic management and road safety: other,HIGHWAYS AND TRANSPORT SERVICES
+260,2014,Parking services,HIGHWAYS AND TRANSPORT SERVICES
+271,2014,Public transport: statutory concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+272,2014,Public transport: discretionary concessionary fares,HIGHWAYS AND TRANSPORT SERVICES
+275,2014,Public transport: support to operators,HIGHWAYS AND TRANSPORT SERVICES
+276,2014,Public transport: co-ordination,HIGHWAYS AND TRANSPORT SERVICES
+280,2014,"Airports, harbours and toll facilities",HIGHWAYS AND TRANSPORT SERVICES
+290,2014,TOTAL HIGHWAYS AND TRANSPORT SERVICES (total of lines 210 to 280),HIGHWAYS AND TRANSPORT SERVICES
+311,2014,Children's social care: Service strategy,CHILDREN'S SOCIAL CARE
+312,2014,Children's social care: Commissioning and social work,CHILDREN'S SOCIAL CARE
+321,2014,Children's social care: Children looked after,CHILDREN'S SOCIAL CARE
+322,2014,Children's social care: Family support services,CHILDREN'S SOCIAL CARE
+323,2014,Children's social care: Youth justice,CHILDREN'S SOCIAL CARE
+324,2014,Children's social care: Children's and young people's safety,CHILDREN'S SOCIAL CARE
+325,2014,Children's social care: Asylum seekers,CHILDREN'S SOCIAL CARE
+328,2014,Children's social care: Other children's and families' services,CHILDREN'S SOCIAL CARE
+330,2014,TOTAL CHILDREN'S SOCIAL CARE (total of lines 311 to 328),CHILDREN'S SOCIAL CARE
+331,2014,Social care strategy - adults,ADULT SOCIAL CARE
+335,2014,Older people (aged 65 or over) including older mentally ill,ADULT SOCIAL CARE
+341,2014,Adults aged under 65 with physical disability or sensory impairment,ADULT SOCIAL CARE
+342,2014,Adults aged under 65 with learning disabilities,ADULT SOCIAL CARE
+343,2014,Adults aged under 65 with mental health needs,ADULT SOCIAL CARE
+351,2014,Other adult social care - asylum seekers - lone adults,ADULT SOCIAL CARE
+352,2014,Other adult social care - other,ADULT SOCIAL CARE
+360,2014,TOTAL ADULT SOCIAL CARE (total of lines 331 to 352),ADULT SOCIAL CARE
+361,2014,Sexual health services - STI testing and treatment (prescribed functions),PUBLIC HEALTH
+362,2014,Sexual health services - Contraception (prescribed functions),PUBLIC HEALTH
+363,2014,"Sexual health services - Advice, prevention and promotion  (non-prescribed functions)",PUBLIC HEALTH
+365,2014,NHS health check programme  (prescribed functions),PUBLIC HEALTH
+366,2014,Health protection - Local authority role in health protection  (prescribed functions),PUBLIC HEALTH
+368,2014,National child measurement programme (prescribed functions),PUBLIC HEALTH
+370,2014,Public health advice (prescribed functions),PUBLIC HEALTH
+371,2014,Obesity - adults,PUBLIC HEALTH
+372,2014,Obesity - children,PUBLIC HEALTH
+373,2014,Physical activity - adults,PUBLIC HEALTH
+374,2014,Physical activity - children,PUBLIC HEALTH
+376,2014,Substance misuse - Drug misuse - adults,PUBLIC HEALTH
+377,2014,Substance misuse - Alcohol misuse - adults,PUBLIC HEALTH
+378,2014,Substance misuse - (drugs and alcohol) - youth services,PUBLIC HEALTH
+380,2014,Smoking and tobacco - Stop smoking services and interventions,PUBLIC HEALTH
+381,2014,Smoking and tobacco - Wider tobacco control,PUBLIC HEALTH
+383,2014,Children 5–19 public health programmes,PUBLIC HEALTH
+385,2014,Miscellaneous public health services,PUBLIC HEALTH
+390,2014,TOTAL PUBLIC HEALTH (total of lines 361 to 385),PUBLIC HEALTH
+409,2014,"Housing strategy, advice, advances, enabling, renewals and licensing",HOUSING SERVICES (GFRA only)
+440,2014,Homelessness,HOUSING SERVICES (GFRA only)
+456,2014,Housing benefits: rent allowances and rent rebates - discretionary payments,HOUSING SERVICES (GFRA only)
+457,2014,Housing benefits administration,HOUSING SERVICES (GFRA only)
+460,2014,Other council property - travellers' sites and non-HRA housing,HOUSING SERVICES (GFRA only)
+475,2014,Housing welfare: Supporting People,HOUSING SERVICES (GFRA only)
+478,2014,Other welfare services,HOUSING SERVICES (GFRA only)
+490,2014,TOTAL HOUSING SERVICES (GFRA only)  (total of lines 409 to 478),HOUSING SERVICES (GFRA only)
+500,2014,Archives,CULTURAL AND RELATED SERVICES
+501,2014,Culture and heritage (excluding Archives),CULTURAL AND RELATED SERVICES
+502,2014,Recreation and sport,CULTURAL AND RELATED SERVICES
+503,2014,Open spaces,CULTURAL AND RELATED SERVICES
+504,2014,Tourism,CULTURAL AND RELATED SERVICES
+505,2014,Library service,CULTURAL AND RELATED SERVICES
+509,2014,TOTAL CULTURAL AND RELATED SERVICES (total of lines 500 to 505),CULTURAL AND RELATED SERVICES
+510,2014,"Cemetery, cremation and mortuary services",ENVIRONMENTAL AND REGULATORY SERVICES
+519,2014,Regulatory services: Trading standards,ENVIRONMENTAL AND REGULATORY SERVICES
+520,2014,Regulatory services: Water safety,ENVIRONMENTAL AND REGULATORY SERVICES
+521,2014,Regulatory services: Food safety,ENVIRONMENTAL AND REGULATORY SERVICES
+522,2014,Regulatory services: Environmental protection; noise and nuisance,ENVIRONMENTAL AND REGULATORY SERVICES
+523,2014,Regulatory services: Housing standards,ENVIRONMENTAL AND REGULATORY SERVICES
+524,2014,Regulatory services: Health and safety,ENVIRONMENTAL AND REGULATORY SERVICES
+525,2014,Regulatory services: Port health (excluding levies),ENVIRONMENTAL AND REGULATORY SERVICES
+526,2014,Regulatory services: Port health levies,ENVIRONMENTAL AND REGULATORY SERVICES
+527,2014,Regulatory services: Pest control,ENVIRONMENTAL AND REGULATORY SERVICES
+528,2014,Regulatory services: Public conveniences,ENVIRONMENTAL AND REGULATORY SERVICES
+529,2014,Regulatory services: Animal and public health; infectious disease,ENVIRONMENTAL AND REGULATORY SERVICES
+530,2014,Regulatory services: Licensing - Alcohol and entertainment licensing; taxi licensing,ENVIRONMENTAL AND REGULATORY SERVICES
+531,2014,Community safety (Crime reduction),ENVIRONMENTAL AND REGULATORY SERVICES
+532,2014,Community safety (Safety services),ENVIRONMENTAL AND REGULATORY SERVICES
+533,2014,Community safety (CCTV),ENVIRONMENTAL AND REGULATORY SERVICES
+541,2014,Defences against flooding,ENVIRONMENTAL AND REGULATORY SERVICES
+543,2014,Land drainage and related work (excluding levy / Special levies),ENVIRONMENTAL AND REGULATORY SERVICES
+544,2014,Land drainage and related work - Levy / Special levies,ENVIRONMENTAL AND REGULATORY SERVICES
+547,2014,Coast protection,ENVIRONMENTAL AND REGULATORY SERVICES
+550,2014,Agriculture and fisheries services,ENVIRONMENTAL AND REGULATORY SERVICES
+570,2014,Street cleansing (not chargeable to Highways),ENVIRONMENTAL AND REGULATORY SERVICES
+581,2014,Waste collection,ENVIRONMENTAL AND REGULATORY SERVICES
+582,2014,Waste disposal,ENVIRONMENTAL AND REGULATORY SERVICES
+583,2014,Trade waste,ENVIRONMENTAL AND REGULATORY SERVICES
+584,2014,Recycling,ENVIRONMENTAL AND REGULATORY SERVICES
+585,2014,Waste minimisation,ENVIRONMENTAL AND REGULATORY SERVICES
+586,2014,Climate change costs,ENVIRONMENTAL AND REGULATORY SERVICES
+590,2014,TOTAL ENVIRONMENTAL AND REGULATORY SERVICES (total of lines 510 to 586),ENVIRONMENTAL AND REGULATORY SERVICES
+591,2014,Building control,PLANNING AND DEVELOPMENT SERVICES
+592,2014,Development control,PLANNING AND DEVELOPMENT SERVICES
+593,2014,Planning policy,PLANNING AND DEVELOPMENT SERVICES
+594,2014,Environmental initiatives,PLANNING AND DEVELOPMENT SERVICES
+595,2014,Economic development,PLANNING AND DEVELOPMENT SERVICES
+596,2014,Community development,PLANNING AND DEVELOPMENT SERVICES
+597,2014,Economic research,PLANNING AND DEVELOPMENT SERVICES
+598,2014,Business Support,PLANNING AND DEVELOPMENT SERVICES
+599,2014,TOTAL PLANNING AND DEVELOPMENT SERVICES (total of lines 591 to 598),PLANNING AND DEVELOPMENT SERVICES
+601,2014,TOTAL POLICE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+602,2014,TOTAL FIRE AND RESCUE SERVICES,PLANNING AND DEVELOPMENT SERVICES
+604,2014,Coroners' court services,CENTRAL SERVICES
+605,2014,Other court services,CENTRAL SERVICES
+610,2014,Corporate and democratic core,CENTRAL SERVICES
+623,2014,Local tax collection: council tax discounts - locally funded,CENTRAL SERVICES
+625,2014,Local tax collection: council tax support administration,CENTRAL SERVICES
+628,2014,Local tax collection: other,CENTRAL SERVICES
+650,2014,Emergency planning,CENTRAL SERVICES
+675,2014,Central services to the public: other,CENTRAL SERVICES
+681,2014,Non-distributed costs - retirement benefits,CENTRAL SERVICES
+682,2014,Non-distributed costs - costs of unused shares of IT facilities and other assets,CENTRAL SERVICES
+683,2014,Non-distributed costs - depreciation / impairment of surplus costs etc,CENTRAL SERVICES
+684,2014,Non-distributed costs - revenue expenditure on surplus assets,CENTRAL SERVICES
+690,2014,TOTAL CENTRAL SERVICES (total of lines 604 to 684),CENTRAL SERVICES
+698,2014,TOTAL OTHER SERVICES (exclude Public Health),CENTRAL SERVICES
+799,2014,"TOTAL SERVICE EXPENDITURE (total of lines 190, 290, 330, 360, 390, 490, 509, 590, 599, 601, 602, 690 and 698)",CENTRAL SERVICES
+811,2014,Housing benefits: rent allowances - mandatory payments,CENTRAL SERVICES
+812,2014,Housing benefits: non-HRA rent rebates - mandatory payments,CENTRAL SERVICES
+813,2014,Housing benefits: rent rebates to HRA tenants - mandatory payments,CENTRAL SERVICES
+814,2014,Housing benefits: subsidy limitation transfers from HRA,CENTRAL SERVICES
+818,2014,Contribution to the HRA re items shared by the whole community,CENTRAL SERVICES
+821,2014,Parish Precepts,Precepts and levies
+822,2014,Integrated Transport Authority levy,Precepts and levies
+824,2014,Waste Disposal Authority levy,Precepts and levies
+827,2014,London Pensions Fund Authority levy,Precepts and levies
+828,2014,Other levies,Precepts and levies
+831,2014,External Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+832,2014,Internal Trading Accounts net surplus(-)/ deficit(+),Precepts and levies
+841,2014,Capital charges accounted for in External Trading Accounts,Precepts and levies
+842,2014,Capital charges accounted for in Internal Trading Accounts,Precepts and levies
+847,2014,Appropriations to(+) / from(-) Accumulated Absences Account,Precepts and levies
+848,2014,Adjustments to net current expenditure,Precepts and levies
+849,2014,NET CURRENT EXPENDITURE (total of lines 799 to 848),Precepts and levies

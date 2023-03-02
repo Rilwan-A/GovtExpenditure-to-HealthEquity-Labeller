@@ -1,0 +1,11 @@
+dataset_name: england
+logprobs: null
+max_tokens: 3
+openai_model: text-davinci-002
+prompt_code: short2
+prompt_template: !!python/object:__main__.PromptTemplate
+  bool_budget_group_name: true
+  bool_health_indicator_group_name: false
+  template_text: 'Give me a yes or no answer to whether #budget_name# (#budget_group_name#)
+    affects #health_indicator_name#?'
+temperature: 0.7

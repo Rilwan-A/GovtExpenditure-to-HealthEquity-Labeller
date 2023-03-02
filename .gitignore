@@ -1,0 +1,11 @@
+.vscode/
+
+**/__pycache
+
+research_papers
+
+**/**.txt
+**/**.csv
+**/**.pkl
+
+**/**.api_keys.yaml
