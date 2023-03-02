@@ -5,9 +5,8 @@ from argparse import ArgumentParser
 from typing import List
 import logging
 from tqdm import tqdm
-api_keys = yaml.safe_load(open( os.path.join('methods','api_keys.yaml'), 'r'))
 
-openai.api_key = api_keys["openai"]
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
 import time
 
