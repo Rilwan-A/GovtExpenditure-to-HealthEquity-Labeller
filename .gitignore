@@ -8,4 +8,4 @@ research_papers
 **/**.csv
 **/**.pkl
 
-**/**.api_keys.yaml
+**/**api_keys.yaml
