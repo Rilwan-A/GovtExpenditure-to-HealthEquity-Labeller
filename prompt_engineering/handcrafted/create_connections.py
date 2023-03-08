@@ -9,7 +9,7 @@ from typing import List, Iterable, Dict
 import itertools
 import pandas as pd
 
-from methods.gpt import OpenAICompletion
+from prompt_engineering.gpt import OpenAICompletion
 from datamodels.healthindicators import HealthIndicator
 from datamodels.governmentbudget import BudgetItem, GovernmentBudget
 from datasets.utils_datasets import load_budget_dataset, load_health_indicators_dset

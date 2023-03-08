@@ -10,3 +10,6 @@ research_papers
 **/**.png
 **/**.html
 **/**.pdf
+**/**.ipynb
+
+**/**.arrow
