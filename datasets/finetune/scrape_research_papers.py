@@ -15,6 +15,8 @@ import itertools
 import random
 
 import aiohttp
+from aiohttp import ClientConnectorError, ClientConnectorSSLError, TCPConnector
+
 import asyncio
 
 import logging
@@ -31,6 +33,11 @@ import gzip as gz
 from fake_headers import Headers
 from requests_html import HTMLSession, AsyncHTMLSession
 
+import ssl
+import certifi
+
+
+
 """
     This script scrapes research papers from Google Scholar.
     Then converts the research papers to a .txt document format.
@@ -44,7 +51,6 @@ def main(
     downloads_per_search_term:int,
     min_citations:int,
     source:str,
-    debugging:bool=False,
     mp_count=4):
 
     #TODO: add tqdm to the multiproc maps
@@ -53,41 +59,48 @@ def main(
 
     # scrape pdfs
     logging.info("Scraping pdfs")
-    # li_li_title_pdfs = scrape_pdfs( search_terms, downloads_per_search_term, min_citations ) 
-    li_li_title_pdfs = asyncio.run(scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
-
+    # li_li_pdf_title_authors = scrape_pdfs( search_terms, downloads_per_search_term, min_citations ) 
+    li_li_pdf_title_authors = asyncio.run(scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
     logging.info("Finished Scraping pdfs")
 
     # save pdfs to file
+    logging.info("Saving pdfs to file")
     with mp.Pool(mp_count) as p:
-        p.starmap(save_pdfs,  list(zip(search_terms, itertools.count(), li_li_title_pdfs))  )
-
+        res = p.starmap(save_pdfs,  list(zip(search_terms, itertools.count(), li_li_pdf_title_authors))  )
+    
     # extract texts
-    li_pdfs = [pdf for title,pdf in sum(li_li_title_pdfs,[]) ] # all pdfs flattened
+    logging.info("Covnerting pdf to txt")
+    li_pdfs = [pdf for pdf, title, author in sum(li_li_pdf_title_authors, []) ] # all pdfs flattened
     with mp.Pool(mp_count) as p:
-        res = p.imap(extract_text, li_pdfs, chunksize= max(1, (len(li_pdfs)/mp_count) // 3)  )
-        gen_texts = res
+        gen_texts = p.imap(extract_text, li_pdfs, chunksize=1  )
 
-        #TODO akanni.ade : add some preprocessing
+        # Replacing pdfs in li_li_pdf_title_authors with processed text
+        li_li_txt_title_author = li_li_pdf_title_authors
 
-        # Replacing pdfs in li_li_title_pdfs with processed text
-        li_li_title_texts = li_li_title_pdfs
+        for idx_searchterm in range(len(li_li_pdf_title_authors)):
+            
+            for idx_rsearchpaper in range(len(li_li_pdf_title_authors[idx_searchterm])):
+                
+                new_vals = ( next( gen_texts ), 
+                             *li_li_txt_title_author[idx_searchterm][idx_rsearchpaper][1:]
+                             )
 
-        for idx_pdf_group in range(len(li_li_title_pdfs)):
-            for idx_pdf in range(len(li_li_title_pdfs[idx_pdf_group])):
-                li_li_title_texts[idx_pdf_group][idx_pdf] =  next( gen_texts )
+                li_li_txt_title_author[idx_searchterm][idx_rsearchpaper] =  new_vals
             
     
     # Saving Texts to file
+    logging.info("Saving txt to file")
     with mp.Pool(mp_count) as p:
-        p.starmap(save_text, ( zip(search_terms, itertools.count(), li_li_title_texts) ) )
+        res = p.starmap(save_text, list(zip(search_terms, itertools.count(), li_li_txt_title_author)) )
     
+    logging.info("Script Finished")
     return None
 
     
 async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source:str ) -> List[ List[tuple[str,bytes]]  ]:
     
     async with aiohttp.ClientSession(headers={'User-Agent':'Mozilla/5.0' } ) as session:
+    # ,connector=TCPConnector(ssl=False) ) as session:
     # async with aiohttp.ClientSession() as session:
         logging.info("Started aiohttp Session")
         
@@ -104,9 +117,9 @@ async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, s
             
             li_tasks[idx] = scrape_func(session, search_term, downloads_per_search_term, min_citations)
                     
-        li_title_pdf = await asyncio.gather(*li_tasks)
+        li_pdf_title_author = await asyncio.gather(*li_tasks)
 
-    return li_title_pdf
+    return li_pdf_title_author
 
 async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> List[tuple[str, bytes]]:
     
@@ -125,7 +138,6 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
     
         url = f"https://scholar.google.com/scholar?start={docs_per_url*idx}&q={search_term.replace(' ','+')}&hl=en"
 
-        
         async with session.get(url, headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'}) ) as resp:
             # if no more pages then break
             if resp.status != 200:
@@ -166,10 +178,32 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
         urls = [ tag.find(href= lambda txt: (txt is not None) and txt[-4:]=='.pdf' ).attrs['href'] for tag in tags_research_papers ]
         
         # extracting pdf document
+        # ca_certs = certifi.where()
+        # ssl_context = ssl.create_default_context(cafile=ca_certs)
+        # ssl_context.set_ciphers("DEFAULT")
+
         
-        pdfs = [ await (await session.get(url, cookies=resp.cookies,
-                         headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})  )).content.read()
-                    for url in urls]
+
+        # pdfs = [ await (await session.get(url, cookies=resp.cookies,
+        #                  headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'}),
+        #                 #  verify_ssl=False,
+        #                 #  ssl=False,
+        #                     ssl_context = ssl_context
+        #                  )).content.read()
+        #             for url in urls]
+        pdfs = []
+        for url in urls:
+            try:
+                pdf = await (await session.get(url, cookies=resp.cookies,
+                            headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'}),
+                            #  verify_ssl=False,
+                            #  ssl=False,
+                                # ssl_context = ssl_context
+                            )).content.read()
+            except (ClientConnectorSSLError, ClientConnectorError) as e:
+                pdf = "NAN"
+            pdfs.append(pdf)
+
 
         # Note: Cloudfare blocking disables all pdfs linked via ResearchGate, remove downloads that were content blocked
         _ =[(pdf,title) for pdf,title in zip(pdfs,titles) if pdf[:4]==b'%PDF']
@@ -182,20 +216,16 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
         li_pdf.extend(pdfs)
         
         # break pdf urls collected exceeds min citations
+        await asyncio.sleep(5.5)
         if len(li_pdf)>=downloads_per_search_term:
             break
-        else:
-            await asyncio.sleep(1.5)
-
+            
     # filter urls on existence of download link, and min citations, link containing text [PDF]
     li_pdf = li_pdf[:downloads_per_search_term]
     li_title = li_title[:downloads_per_search_term]
-    li_author = ['']*downloads_per_search_term
+    li_author = ['']*len(li_pdf)
 
-    s = requests.session()
-    res = s.get('https://discovery.ucl.ac.uk/10106434/3/Bockenhauer_BMJ%20Ten%20years%20essay2pg3.pdf', headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'}))
-
-    outp = [ (author, pdf, title) for pdf, title, author in zip(li_pdf, li_title, li_author) ]
+    outp = [ (pdf, title, author) for pdf, title, author in zip(li_pdf, li_title, li_author) ]
     return outp
 
 
@@ -274,27 +304,31 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
     # s = requests.session()
     # res = s.get('https://discovery.ucl.ac.uk/10106434/3/Bockenhauer_BMJ%20Ten%20years%20essay2pg3.pdf', headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'}))
 
-    outp = [ (author, pdf, title) for pdf, title, author in zip(li_pdf, li_title, li_author) ]
+    outp = [ (pdf, title, author) for pdf, title, author in zip(li_pdf, li_title, li_author) ]
     return outp
 
-def save_pdfs(search_term, search_term_idx, li_title_pdf):
+def save_pdfs(search_term, search_term_idx, li_pdf_title_author):
     
     # making directory
     dir_ = f'./datasets/finetune/pdf_format/{search_term_idx:02}'
     os.makedirs(dir_, exist_ok=True)
 
+    with open( os.path.join(dir_,'search_term.txt'), 'w') as f:
+        f.write(search_term)
+
     # Saving index mapping file_numbers to paper titles
     fp_index = os.path.join(dir_, 'index.csv')
     with open(fp_index, 'w') as f:
         writer = csv.writer(f, delimiter=',')
-        writer.writerow([search_term])
-        writer.writerows( zip(itertools.count(), [ title for title,_ in li_title_pdf] ) )
+        writer.writerows(  [ (idx, title, author) for idx, (pdf, title, author) in enumerate(li_pdf_title_author) ] ) 
 
     # Saving documents
-    for idx, (title, pdf) in enumerate(li_title_pdf):
+    for idx, (pdf, title, author) in enumerate(li_pdf_title_author):
         fp_file = os.path.join(dir_, f"{idx:03}.pdf")
         with open(fp_file, "wb") as f:
             f.write( pdf )
+    
+    return None
 
 def extract_text(pdf:bytes) -> str:
     
@@ -313,26 +347,26 @@ def extract_text(pdf:bytes) -> str:
 
     return text
 
-def save_text(search_term:str, search_term_idx:int, li_title_text: List[List[str,str]]):
-
-    dict_title_text = [ {'title':title, 'text':text } for title,text in li_title_text ]
+def save_text(search_term:str, search_term_idx:int, li_txt_title_author: List[List[str,str,str]]):
 
     # making directory
-    dir_ = f'.datasets/finetune/processed/{search_term_idx:02}'
+    dir_ = f'./datasets/finetune/text_format/{search_term_idx:02}'
     os.makedirs(dir_, exist_ok=True)
 
+    with open( os.path.join(dir_,'search_term.txt'), 'w') as f:
+        f.write(search_term)
+
     # Saving index mapping file_numbers to paper titles
-    fp_index = os.path.join(dir_, 'index')
+    fp_index = os.path.join(dir_, 'index.csv')
     with open(fp_index, 'w') as f:
         writer = csv.writer(f, delimiter=',')
-        writer.writerow([search_term])
-        writer.writerows( zip(itertools.count(), [ title for title,_ in li_title_text] ) )
+        writer.writerows(  [ (idx, title, author) for idx, (txt, title, author) in enumerate(li_txt_title_author) ] ) 
 
 
-    for idx, (title, text) in enumerate(li_title_text):
+    for idx, (txt, title, author) in enumerate(li_txt_title_author):
         fp_file = os.path.join(dir_, f"{idx:03}.txt.gz")
         with gz.open(fp_file, "wb") as f:
-            f.write( gz.compress(text) )
+            f.write( txt.encode('utf-8') )
               
 
 def parse_args(parent_parser):
@@ -341,11 +375,10 @@ def parse_args(parent_parser):
     else:
         parser = ArgumentParser()
 
-    parser.add_argument('--downloads_per_search_term', default=2, type=int, help='Number of documents to download per search term')
-    parser.add_argument('--min_citations', type=int, default=5, help='Minimum number of citations for a paper to have to be included in download')
-    parser.add_argument('--mp_count', type=int, default=2, help='')
+    parser.add_argument('--downloads_per_search_term', default=5, type=int, help='Number of documents to download per search term')
+    parser.add_argument('--min_citations', type=int, default=0, help='Minimum number of citations for a paper to have to be included in download')
+    parser.add_argument('--mp_count', type=int, default=1, help='')
     parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers',choices=['google_scholar','semantic_scholar'])
-    parser.add_argument('--debugging', action='store_true')
     args = parser.parse_known_args()[0]
 
     return args
