@@ -5,7 +5,7 @@
 
 # Methods to Test Out
 GPTJ-6 
-- majority vote over 5 handcrafted prompts with yes/No output (extend prompt_handcrafted_code)
+- majority vote over 5 handcrafted prompts with yes/No output 
 - majority vote over 5 handcrafted prompts with context and yes/No output
 - majority vote over 5 open-ended questions and parsing out of output to Yes/No
 - majority vote over 5 open-ended questions with context and parsing of output to Yes/No output
