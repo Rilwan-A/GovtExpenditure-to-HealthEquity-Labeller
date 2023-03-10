@@ -403,7 +403,7 @@ def parse_args(parent_parser):
     parser.add_argument('--downloads_per_search_term', default=5, type=int, help='Number of documents to download per search term')
     parser.add_argument('--min_citations', type=int, default=0, help='Minimum number of citations for a paper to have to be included in download')
     parser.add_argument('--mp_count', type=int, default=1, help='')
-    parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers',choices=['google_scholar','semantic_scholar'])
+    parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers', choices=['google_scholar','semantic_scholar'])
     args = parser.parse_known_args()[0]
 
     return args
