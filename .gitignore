@@ -1,6 +1,7 @@
 .vscode/
 
 **/__pycache
+**/__pycache__
 
 research_papers
 
@@ -11,5 +12,8 @@ research_papers
 **/**.html
 **/**.pdf
 **/**.ipynb
+**/**.yml
 
 **/**.arrow
+
+**/**workspace
