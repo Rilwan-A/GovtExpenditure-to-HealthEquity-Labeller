@@ -19,6 +19,7 @@ import operator
 from collections import Counter
 import ujson as json
 import yaml
+import numpy as np
 
 def main(
         nn_name:str,
@@ -29,26 +30,26 @@ def main(
         finetuned:bool=False,
         batch_size:int=1,
         aggregation_method='majority_vote',
-        parse_output_method='rule_based'):
+        parse_output_method='rule_based',
+        debugging:bool=False):
     
     
     # Load Model and Tokenizer
     if not finetuned:
-        # model = transformers.AutoModel.from_pretrained( nn_name, load_in_8bit=True, device_map="auto")
         model = transformers.AutoModelForCausalLM.from_pretrained( nn_name, load_in_8bit=True, device_map="auto")
         tokenizer = transformers.AutoTokenizer.from_pretrained(nn_name)
         tokenizer.pad_token = tokenizer.eos_token
     else:
         path = './finetune/finetuned_models/' + nn_name + '/checkpoints/'
-        # model = transformers.AutoModel.from_pretrained( path, load_in_8bit=True, device_map="auto")
         model = transformers.AutoModelForCausalLM.from_pretrained( path, load_in_8bit=True, device_map="auto")
         tokenizer = transformers.AutoTokenizer.from_pretrained(nn_name)
         tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = model.config.eos_token_id
     
     # Load Dataset
     train_dset, test_dset = load_dataset(dset_name)
 
-    test_dset = test_dset[:21]
+    test_dset = test_dset if not debugging else test_dset[:5]
 
     train_dset_records = train_dset.to_dict('records')
     test_dset_records = test_dset.to_dict('records')
@@ -318,7 +319,7 @@ class PromptBuilder():
                 examples_sample, examples_open_ended_answer = zip(*li_examples)
 
                 # Creating the format dict for all examples
-                format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} )
+                format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} ) # type: ignore
 
                 ## filling context examples in template
                 prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'], **format_dict)
@@ -412,27 +413,29 @@ class PredictionGenerator():
     def predict(self, li_li_prompts:list[list[str]])->list[list[str]]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
         # Tokenize prompts
-        li_batch_encoding = [self.tokenizer(li_prompt, return_tensors='pt', truncation=True, padding=True, truncation_strategy='do_no_truncate') for li_prompt in li_li_prompts]
+        li_batch_encoding = [self.tokenizer(li_prompt, return_tensors='pt', padding=True, truncation_strategy='do_not_truncate') for li_prompt in li_li_prompts]
         
         # Generate predictions
         li_outputs = []
         for batch_encoding in li_batch_encoding:
 
             # Move to device
-            batch_encoding = {k:v.to(self.model.device) for k,v in batch_encoding.items()}    
+            batch_encoding = batch_encoding.to(self.model.device)    
 
             # Generate prediction
             outputs = self.model.generate(
                 **batch_encoding,
                 max_new_tokens = min( self.gen_config.max_new_tokens, self.model_max_tokens - batch_encoding['input_ids'].shape[1]   ), #type: ignore
-                generation_config=self.gen_config
+                generation_config=self.gen_config,
+                pad_token_id = self.tokenizer.pad_token_id,
+                eos_token_id = self.tokenizer.eos_token_id
                 )
 
             li_outputs.append(outputs)
 
         li_li_predictions = [ self.tokenizer.batch_decode(output, skip_special_tokens=True) for output in li_outputs]
 
-        # Extract just the answer from the fully decoded text
+        # Extract just the answers from the decoded texts, removing the prompts
         li_li_predictions = [ [ pred.lstrip(prompt) for pred, prompt in zip(li_prediction, li_prompt) ] for li_prediction, li_prompt in zip(li_li_predictions, li_li_prompts) ]
         
         if self.parse_output_method == 'rule_based':
@@ -441,11 +444,11 @@ class PredictionGenerator():
                 li_li_predictions = [ self.parse_yesno_from_falsetrue(li_predictions) for li_predictions in li_li_predictions]
 
             if self.prompt_style in ['open','pilegithub_open']:
-                li_li_predictions = [ self.parse_yesno_from_falsetrue(li_predictions) for li_predictions in li_li_predictions]
+                li_li_predictions = [ self.parse_yesno_from_open(li_predictions) for li_predictions in li_li_predictions]
+            
+            else:
+                raise ValueError(f"Prompt style {self.prompt_style} not recognized")
 
-            if self.prompt_style in ['open','pilegithub_open']:
-                li_li_predictions = [ self.parse_yesno_from_falsetrue(li_predictions) for li_predictions in li_li_predictions]
-        
         elif self.parse_output_method == 'language_model':
             li_li_predictions = [ self.parse_yesno_with_lm(li_predictions) for li_predictions in li_li_predictions]
         
@@ -477,43 +480,40 @@ class PredictionGenerator():
         return li_predictions
         
     def parse_yesno_from_open(self, li_predictions:list[str])->list[str]:
-        
-        for idx in range(len(li_predictions)):
-            
-            prediction = li_predictions[idx]
 
-            if 'yes' not in prediction.lower() and 'no' not in prediction.lower():
-                
-                if any( (neg_phrase in prediction.lower() for neg_phrase in ['not true','false','is not','not correct', 'does not','can not', 'not'] )) :
-                    prediction = 'No'
-
-                else:
-                    prediction = 'Yes'
-                
-            li_predictions[idx] = prediction
+        li_predictions = self.parse_yesno_from_open(li_predictions)
                    
         return li_predictions         
 
     def parse_yesno_with_lm(self, li_predictions:list[str])->list[str]:
         
         # Template to prompt language model to simplify the answer to a Yes/No output
-        template = copy.deepcopy( utils_prompteng.li_prompts_yes_no_template[0] )
+        template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions]
 
-        # Tokenize texts
-        batch_encoding = self.tokenizer(li_filledtemplate, return_tensors='pt', truncation=True, padding=True, truncation_strategy='do_no_truncate')
+        # For each fill template, create 3 filled versions with each of the possible answers
+        answer = ['Agreement.', 'Disagreement.', 'Unclear.']
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answer ] for filledtemplate in li_filledtemplate ]
+        li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
-        # Move to device
-        batch_encoding = {k:v.to(self.model.device) for k,v in batch_encoding.items()}
+        # Get the perplexity of each of the filled templates
+        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.model, self.tokenizer, batch_size=1 ) 
 
-        # Generate prediction
-        outputs = self.model.generate(**batch_encoding, max_new_tokens=5)
+        # For each set of filltemplates get the index of the answer with the lowest perplexity
+        li_idx = [ np.argmin(li_perplexity[idx:idx+3]) for idx in range(0,len(li_perplexity),3) ]
 
-        # Decode predictions
-        li_predictions = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                   
-        return li_predictions         
+        # Map the indexes to the answers
+        li_predictions = [ filledtemplates[idx] for idx,filledtemplates in zip(li_idx, li_li_filledtemplates_with_answers) ]
+
+        # remove the templates from the outputs
+        li_predictions = [ pred.lstrip(template) for pred, template in zip(li_predictions, li_filledtemplate) ]
+
+        # Map the answers to Yes/No/Na
+        li_predictions = [ 'Yes' if 'Agreement' in pred else 'No' if 'Disagreement' in pred else 'NA' for pred in li_predictions ]
+                
+        return li_predictions
+         
 
     def aggregate_predictions(self, li_li_predictions:list[list[str]])->list[str]:
         "Given a list of predictions, returns a single prediction"
@@ -537,17 +537,15 @@ def parse_args():
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilegithub_yes_no', 'pilegithub_open'], help='Style of prompt' )
-
     parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model'], help='How to convert the output of the model to a Yes/No Output' )
-
     parser.add_argument('--k_shot', type=int, default=1, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
 
     parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote'] )
-    
     parser.add_argument('--dset_name',type=str, default='spot', choices=['spot','england'] )
-
     parser.add_argument('--batch_size', type=int, default=1 )
+
+    parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
 
 
     args = parser.parse_known_args()[0]
