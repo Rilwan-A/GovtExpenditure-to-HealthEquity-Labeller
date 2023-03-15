@@ -45,6 +45,7 @@ def main(
         tokenizer = transformers.AutoTokenizer.from_pretrained(nn_name)
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = model.config.eos_token_id
+    tokenizer.padding_side = 'left'
     
     # Load Dataset
     train_dset, test_dset = load_dataset(dset_name)
@@ -64,6 +65,7 @@ def main(
 
     li_prompt_ensemble = []
     li_pred_ensemble = []
+    li_pred_ensemble_parsed = []
     preds_agg = []
 
     for idx, batch in enumerate(test_dset_records):
@@ -71,28 +73,33 @@ def main(
         batch_prompt_ensembles = prompt_builder(batch)
         
         # Generate predictions
-        batch_pred_ensembles = prediction_generator.predict(batch_prompt_ensembles)
+        batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
 
         # Aggregate ensembles into predictions
-        batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles)
+        batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
 
         # Extract predictions from the generated text
         li_prompt_ensemble.append(batch_prompt_ensembles)  # type: ignore
         li_pred_ensemble.append( batch_pred_ensembles ) # type: ignore
+        li_pred_ensemble_parsed.append( batch_pred_ensembles_parsed ) # type: ignore
         preds_agg.append(batch_pred_agg) # type: ignore
                   
     # Align the outputs with the original test set
     test_dset['preds_aggregate'] = sum( preds_agg, [] )
-    test_dset['preds_prompts'] = [ json.encode(prompt_ensemble) for prompt_ensemble in  sum(li_prompt_ensemble, []) ]
+    test_dset['preds_ensemble_parsed'] = [ json.encode(pred_ensemble) for pred_ensemble in sum(li_pred_ensemble_parsed, []) ]
     test_dset['preds_ensemble'] = [ json.encode(pred_ensemble) for pred_ensemble in sum(li_pred_ensemble, []) ]
+    test_dset['preds_prompts'] = [ json.encode(prompt_ensemble) for prompt_ensemble in  sum(li_prompt_ensemble, []) ]
     
+    
+
     # Save CSV with predictions
     parent_dir = "./prompt_engineering/predictions/"
-    exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, dset_name)
+    exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, dset_name, aggregation_method, parse_output_method)
     os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
     test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
     
-    experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name}
+    experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
+                            'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method }
     # Save experiment config as a yaml file
     yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
 
@@ -137,11 +144,17 @@ def experiment_name(
         prompt_style:str,
         k_shot:int,
         ensemble_size:int,
-        dset_name:str
+        dset_name:str,
+        aggregation_method:str,
+        parse_output_method:str
 ):
     name = f"{dset_name}_{nn_name.replace('/','_')}"
     name += f"_ft" if finetuned else ""
-    name += f"_ps{prompt_style}_k{k_shot}_es{ensemble_size}"
+    name += f"_ps{''.join([s[0] for s in prompt_style.split('_')])}"
+    name += f"_k{k_shot}" if k_shot > 0 else ""
+    name += f"_es{ensemble_size}" if ensemble_size > 1 else ""
+    name += f"_ag{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
+    name += f"_po{''.join( [s[0] for s in parse_output_method.split('_')]) }"
     return name
 
 class PromptBuilder():
@@ -162,18 +175,18 @@ class PromptBuilder():
             templates = self._open_template()
         elif self.prompt_style == 'ama':
             templates = self._ama_template()
-        elif self.prompt_style == 'pilegithub_yes_no':
-            templates = self._pilegithub_yes_no_template()
-        elif self.prompt_style == 'pilegithub_open':
-            templates = self._pilegithub_open_template()
+        elif self.prompt_style == 'pilestackoverflow_yes_no':
+            templates = self._pilestackoverflow_yes_no_template()
+        elif self.prompt_style == 'pilestackoverflow_open':
+            templates = self._pilestackoverflow_open_template()
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
 
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
-        if self.prompt_style in ['yes_no', 'pilegithub_yes_no']:
+        if self.prompt_style in ['yes_no', 'pilestackoverflow_yes_no']:
             li_li_prompts = self.fill_template_yesno(templates, batch)
         
-        elif self.prompt_style in ['open', 'pilegithub_open']:
+        elif self.prompt_style in ['open', 'pilestackoverflow_open']:
             li_li_prompts = self.fill_template_open(templates, batch)
         
         else:
@@ -190,13 +203,11 @@ class PromptBuilder():
         for ens_idx in range(self.ensemble_size):
             
             # part of prompt to be filled with information about target
-            prompt = templates[ens_idx].format( budget_item='{target_budget_item}' ,  indicator='{target_indicator}' )
-            prompt = prompt + "\nAnswer: " #{target_answer}."
-
+            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}' ,  indicator='{target_indicator}' ) +"\nAnswer:"
+            
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' )
-                context_k = context_k + f"\nAnswer: {{answer_{k}}}."
+                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}' ) + f"\nAnswer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -207,17 +218,11 @@ class PromptBuilder():
         templates = copy.deepcopy( utils_prompteng.li_prompts_openend_template[:self.ensemble_size] )
         
         for ens_idx in range(self.ensemble_size):
-            
-            prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}' )
-            prompt = prompt + "\nAnswer: "
+            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}' ) + "\nAnswer:"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' )
-                context_k_response = f"\nAnswer: {{answer_{k}}}."
-                                
-                context_k = context_k + context_k_response
-
+                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' ) + f"\nAnswer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -225,33 +230,33 @@ class PromptBuilder():
         return templates
 
     def _ama_template(self) -> list[str]:
-        raise NotImplementedError
+        raise NotImplementedError("AMA prompt style not implemented yet. (TODO: Implement AMA prompt style)")
 
-    def _pilegithub_yes_no_template(self) -> list[str]:
+    def _pilestackoverflow_yes_no_template(self) -> list[str]:
         templates = copy.deepcopy( utils_prompteng.li_prompts_yes_no_template[:self.ensemble_size] )
         for ens_idx in range(self.ensemble_size):
             
             # part of prompt to be filled with information about target
             prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}' )
-            prompt = prompt + "\nAnswer:\n\n "
+            prompt = prompt + "\nA:\n\n"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
                 context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' )
-                context_k = context_k + f"\nA:\n\n {{answer_{k}}}."
+                context_k = context_k + f"\nA:\n\n{{answer_{k}}}."
                 prompt = context_k + "\n\n\n\n"+prompt
             
             templates[ens_idx] = prompt
         
         return templates
 
-    def _pilegithub_open_template(self) -> list[str]:
+    def _pilestackoverflow_open_template(self) -> list[str]:
         templates = copy.deepcopy( utils_prompteng.li_prompts_openend_template[:self.ensemble_size] )
         
         for ens_idx in range(self.ensemble_size):
             
             prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}' )
-            prompt = prompt + "\nAnswer:\n\n "
+            prompt = prompt + "\nA:\n\n"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
@@ -303,29 +308,30 @@ class PromptBuilder():
             
             li_prompts = []
             for ens_idx in range(self.ensemble_size):
-                # Fill in the k_shot context with random extracts from dataset
-                
-                # Sample math.ceil(k/2) positive and math.floor(k/2) negative examples
-                pos_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='Yes'], math.ceil(self.k_shot/2) )
-                neg_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='No'], math.floor(self.k_shot/2) )
-                
-                # Creating the open ended answer version of the examples
-                pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator']) for  d in pos_examples_sample ]
-                neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator']) for d in neg_examples_sample ]
+                if self.k_shot > 0:
+                    # Fill in the k_shot context with random extracts from dataset
+                    
+                    # Sample math.ceil(k/2) positive and math.floor(k/2) negative examples
+                    pos_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='Yes'], math.ceil(self.k_shot/2) )
+                    neg_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='No'], math.floor(self.k_shot/2) )
+                    
+                    # Creating the open ended answer version of the examples
+                    pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator']) for  d in pos_examples_sample ]
+                    neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator']) for d in neg_examples_sample ]
 
-                # python shuffle two lists in the same order 
-                li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
-                random.shuffle(li_examples)
-                examples_sample, examples_open_ended_answer = zip(*li_examples)
+                    # python shuffle two lists in the same order 
+                    li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
+                    random.shuffle(li_examples)
 
-                # Creating the format dict for all examples
-                format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} ) # type: ignore
+                    examples_sample, examples_open_ended_answer = zip(*li_examples)
+
+                    # Creating the format dict for all examples
+                    format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} ) # type: ignore
+                else:
+                    format_dict = {}
 
                 ## filling context examples in template
                 prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'], **format_dict)
-
-                # Fill in the target info
-                prompt = prompt.format( )
                 
                 li_prompts.append(prompt)
 
@@ -354,7 +360,6 @@ class PredictionGenerator():
         self.setup_generation_config()
         self.aggregation_method = aggregation_method
 
-
     def setup_generation_config(self):
         
         model_max_tokens = self.model.config.max_position_embeddings
@@ -374,43 +379,36 @@ class PredictionGenerator():
 
         #TODO: optimize the GenerationConfigs settings
         if 'yes_no' in self.prompt_style:
+            eos_token_ids =  [self.tokenizer.eos_token_id] + [ self.tokenizer(text)['input_ids'][-1] for text in ["""\n"""]]
+            supress_tokens = [self.tokenizer(text)['input_ids'][-1] for text in ['\n']]
             gen_config = GenerationConfig(
-                max_new_tokens = 6,
-                min_new_tokens = 3,
-                early_stopping = True,
-                temperature=0.7,
+                max_new_tokens = 10, min_new_tokens = 2,
+                early_stopping = True, temperature=0.9,
                 do_sample = False,
-                num_beams = 1,
-                # top_k = 60,
-                # top_p = 0.95,   
-                # repetition_penalty = 1.0,
+                eos_token_id=eos_token_ids,
+                supress_tokens=supress_tokens,
+                pad_token_id = self.tokenizer.pad_token_id
             )
-        
+                    
         elif 'open' in self.prompt_style:
-            try:
-                gen_config = GenerationConfig.from_pretrained(self.model.name_or_path, 
-                    max_new_tokens = 100, min_new_tokens = 5)
-            except:
-                gen_config = GenerationConfig(max_new_tokens = 100, min_new_tokens = 5)
+            supress_tokens = [ self.tokenizer(text)['input_ids'][-1] for text in ['\n','\n\n'] ]
+
+            gen_config = GenerationConfig(max_new_tokens = 40,
+                                           min_new_tokens = 5,
+                                           early_stopping=True,
+                                           temperature=0.9,
+                                           supress_tokens=supress_tokens,
+                                           no_repeat_ngram_size=3)
         
         elif 'ama' == self.prompt_style:
-            try:
-                gen_config = GenerationConfig.from_pretrained(self.model.name_or_path, 
-                    max_new_tokens = 100, min_new_tokens = 4)
-            except:
-                gen_config = GenerationConfig(max_new_tokens = 100, min_new_tokens = 4)
+            gen_config = GenerationConfig(max_new_tokens = 100, min_new_tokens = 4 , early_stopping=True)
         else:
-            logging.info(f"Prompt style {self.prompt_style} not recognized, using default generation config")
-            try:
-                gen_config = GenerationConfig.from_pretrained(self.model.name_or_path,
-                    max_new_tokens = 100, min_new_tokens = 3)
-            except:
-                gen_config = GenerationConfig(max_new_tokens = 100, min_new_tokens = 3)
+            logging.info(f"Prompt style {self.prompt_style} not recognized")
 
         self.gen_config = gen_config
         return None
 
-    def predict(self, li_li_prompts:list[list[str]])->list[list[str]]:
+    def predict(self, li_li_prompts:list[list[str]])->tuple[list[list[str]], list[list[str]]]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
         # Tokenize prompts
         li_batch_encoding = [self.tokenizer(li_prompt, return_tensors='pt', padding=True, truncation_strategy='do_not_truncate') for li_prompt in li_li_prompts]
@@ -436,28 +434,24 @@ class PredictionGenerator():
         li_li_predictions = [ self.tokenizer.batch_decode(output, skip_special_tokens=True) for output in li_outputs]
 
         # Extract just the answers from the decoded texts, removing the prompts
-        li_li_predictions = [ [ pred.lstrip(prompt) for pred, prompt in zip(li_prediction, li_prompt) ] for li_prediction, li_prompt in zip(li_li_predictions, li_li_prompts) ]
+        li_li_predictions = [ [ pred.replace(prompt,'') for pred, prompt in zip(li_prediction, li_prompt) ] for li_prediction, li_prompt in zip(li_li_predictions, li_li_prompts) ]
         
+        # Parse Yes/No/Nan from the predictions
         if self.parse_output_method == 'rule_based':
-            # Parse label Yes or No from the answer
-            if self.prompt_style in ['yes_no','pilegithub_yes_no']:
-                li_li_predictions = [ self.parse_yesno_from_falsetrue(li_predictions) for li_predictions in li_li_predictions]
+            li_li_predictions_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_predictions]
 
-            if self.prompt_style in ['open','pilegithub_open']:
-                li_li_predictions = [ self.parse_yesno_from_open(li_predictions) for li_predictions in li_li_predictions]
-            
-            else:
-                raise ValueError(f"Prompt style {self.prompt_style} not recognized")
-
-        elif self.parse_output_method == 'language_model':
-            li_li_predictions = [ self.parse_yesno_with_lm(li_predictions) for li_predictions in li_li_predictions]
+        elif self.parse_output_method == 'language_model_perplexity':
+            li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
+        
+        elif self.parse_output_method == 'language_model_generation':
+            li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
         
         else:
             raise ValueError(f"parse_output_method {self.parse_output_method} not recognized")
 
-        return li_li_predictions
+        return li_li_predictions, li_li_predictions_parsed
 
-    def parse_yesno_from_falsetrue(self, li_predictions:list[str])->list[str]:
+    def parse_yesno_with_rules(self, li_predictions:list[str])->list[str]:
         # Parse yes/no from falsetrue
         for idx in range(len(li_predictions)):
             
@@ -478,14 +472,44 @@ class PredictionGenerator():
             li_predictions[idx] = prediction
                    
         return li_predictions
+               
+    def parse_yesno_with_lm_generation(self, li_predictions:list[str])->list[str]:
         
-    def parse_yesno_from_open(self, li_predictions:list[str])->list[str]:
+        # Template to prompt language model to simplify the answer to a Yes/No output
+        template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
 
-        li_predictions = self.parse_yesno_from_open(li_predictions)
-                   
-        return li_predictions         
+        # Create filled versions of the template with each of the predictions
+        li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions]
 
-    def parse_yesno_with_lm(self, li_predictions:list[str])->list[str]:
+        # Create batch encoding
+        batch_encoding = self.tokenizer(li_filledtemplate, return_tensors='pt', padding=True, truncation_strategy='do_not_truncate')
+
+        # Move to device
+        batch_encoding = batch_encoding.to(self.model.device)
+
+
+        # setup generation config for parsing yesno
+        eos_token_ids = [self.tokenizer.eos_token_id] + [ self.tokenizer(text)['input_ids'][-1] for text in ['"Negation".', '"Affirmation".', 'Negation.', 'Affirmation.','\n' ] ]
+        gen_config = transformers.GenerationConfig(max_new_tokens = 20, min_new_tokens = 2, early_stopping=True, 
+                                            temperature=0.9, no_repeat_ngram_size=3,
+                                            eos_token_id=eos_token_ids, do_sample=False,
+                                            pad_token_id = self.tokenizer.pad_token_id   )
+        
+        # Generate prediction
+        output = self.model.generate(**batch_encoding, generation_config=gen_config )
+
+        # Decode output
+        predictions_w_prompt = self.tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        # Extract just the answers from the decoded texts, removing the prompts
+        li_predictions = [ pred.replace(template,'') for pred,template in zip(predictions_w_prompt, li_filledtemplate) ]
+
+        # Parse Yes/No/Na from the prediction
+        li_predictions = [ 'Yes' if 'affirm' in pred.lower() else 'No' if 'negat' in pred.lower() else 'NA' for pred in li_predictions]
+
+        return li_predictions
+    
+    def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->list[str]:
         
         # Template to prompt language model to simplify the answer to a Yes/No output
         template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
@@ -493,25 +517,27 @@ class PredictionGenerator():
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions]
 
         # For each fill template, create 3 filled versions with each of the possible answers
-        answer = ['Agreement.', 'Disagreement.', 'Unclear.']
-        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answer ] for filledtemplate in li_filledtemplate ]
+        answers = ['"Negation".', '"Affirmation".']
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
         # Get the perplexity of each of the filled templates
-        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.model, self.tokenizer, batch_size=1 ) 
+        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.model, self.tokenizer, batch_size=6 ) 
 
         # For each set of filltemplates get the index of the answer with the lowest perplexity
-        li_idx = [ np.argmin(li_perplexity[idx:idx+3]) for idx in range(0,len(li_perplexity),3) ]
+        li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
 
-        # Map the indexes to the answers
-        li_predictions = [ filledtemplates[idx] for idx,filledtemplates in zip(li_idx, li_li_filledtemplates_with_answers) ]
+        # # Map the indexes to the answers
+        # li_predictions = [ filledtemplates[idx] for idx,filledtemplates in zip(li_idx, li_li_filledtemplates_with_answers) ]
 
-        # remove the templates from the outputs
-        li_predictions = [ pred.lstrip(template) for pred, template in zip(li_predictions, li_filledtemplate) ]
+        # # remove the templates from the outputs
+        # li_predictions = [ pred.replace(template,'') for pred, template in zip(li_predictions, li_filledtemplate) ]
 
-        # Map the answers to Yes/No/Na
-        li_predictions = [ 'Yes' if 'Agreement' in pred else 'No' if 'Disagreement' in pred else 'NA' for pred in li_predictions ]
-                
+        # # Map the answers to Yes/No/Na
+        # li_predictions = [ 'Yes' if 'Agreement' in pred else 'No' if 'Disagreement' in pred else 'NA' for pred in li_predictions ]
+
+        li_predictions = [ 'No' if idx==0 else 'Yes' for idx in li_idx ]
+        
         return li_predictions
          
 
@@ -536,8 +562,8 @@ def parse_args():
     parser.add_argument('--nn_name', type=str, default='EleutherAI/gpt-j-6B' )
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
-    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilegithub_yes_no', 'pilegithub_open'], help='Style of prompt' )
-    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model'], help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilestackoverflow_yes_no', 'pilestackoverflow_open'], help='Style of prompt' )
+    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model_perplexity', 'language_model_generation' ], help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--k_shot', type=int, default=1, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
 

@@ -42,7 +42,7 @@ li_prompts_openend_template_open_response =[
 ]
 
 li_prompts_parse_yesno_from_answer = [
-    "Select the category that best describes the statement.\n\"Categories\": Disagreement, Agreement, Unsure\nStatement: {statement}\nCategory: ",
+    """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {}\nThis statement belongs to the category"""
 ]
 
 def create_negative_examples(dset:pd.DataFrame) -> pd.DataFrame:
