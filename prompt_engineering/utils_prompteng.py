@@ -34,7 +34,7 @@ li_prompts_openend_template_open_response =[
 
     {'Yes':'Local government spending on \"{budget_item}\" does affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not affect \"{indicator}\".'},
 
-    {'Yes':'\"{indicator}\" is related to local government spending on {budget_itme}.', 'No':'\"{indicator}\" is not related to local government spending on {budget_itme}.'},
+    {'Yes':'\"{indicator}\" is related to local government spending on \"{budget_item}\".', 'No':'\"{indicator}\" is not related to local government spending on \"{budget_item}\".'},
 
     {'Yes':'Local government spending on \"{budget_item}\" does improve \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not improve \"{indicator}\".'},
 
@@ -42,10 +42,10 @@ li_prompts_openend_template_open_response =[
 ]
 
 li_prompts_parse_yesno_from_answer = [
-    """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {}\nThis statement belongs to the category"""
+    """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category"""
 ]
 
-def create_negative_examples(dset:pd.DataFrame) -> pd.DataFrame:
+def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFrame:
     # Create negative examples by randomly selecting a budget item and indicator
     # from the dataset and then swapping them
     # 
@@ -61,11 +61,11 @@ def create_negative_examples(dset:pd.DataFrame) -> pd.DataFrame:
     # Each budget_item has n records
     # For each budget_item we sample min(n,l-n) false examples
     # These false examples are created by filtering on other budget_items and then sampling
-
+    
     for budget_item in dset['budget_item'].unique():
         dset_budget_item = dset[dset['budget_item']==budget_item]
         n = len(dset_budget_item)
-        dset_budget_item_neg = dset[dset['budget_item']!=budget_item].sample(min(n,l-n), replace=False)
+        dset_budget_item_neg = dset[dset['budget_item']!=budget_item].sample(min(n,l-n), replace=False, random_state=random_state) 
         
         dset_budget_item_neg['budget_item'] = budget_item
         dset_budget_item_neg['label'] = 'No'

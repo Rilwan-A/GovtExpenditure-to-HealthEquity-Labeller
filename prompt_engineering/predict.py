@@ -1,3 +1,4 @@
+import os,sys
 # This experiment produces predictions for a given test set
 import torch
 import os, sys
@@ -12,7 +13,9 @@ from sklearn.model_selection import train_test_split
 import logging
 import random
 
-import utils_prompteng
+# import utils_prompteng
+from prompt_engineering import utils_prompteng
+# import utils_prompteng
 import copy 
 from functools import reduce
 import operator
@@ -20,6 +23,8 @@ from collections import Counter
 import ujson as json
 import yaml
 import numpy as np
+
+
 
 def main(
         nn_name:str,
@@ -31,6 +36,11 @@ def main(
         batch_size:int=1,
         aggregation_method='majority_vote',
         parse_output_method='rule_based',
+        
+        model=None,
+        tokenizer=None,
+        
+        save_output:bool=True,
         debugging:bool=False):
     
     
@@ -41,27 +51,30 @@ def main(
         tokenizer.pad_token = tokenizer.eos_token
     else:
         path = './finetune/finetuned_models/' + nn_name + '/checkpoints/'
-        model = transformers.AutoModelForCausalLM.from_pretrained( path, load_in_8bit=True, device_map="auto")
-        tokenizer = transformers.AutoTokenizer.from_pretrained(nn_name)
+        model = model if (model is not None) else transformers.AutoModelForCausalLM.from_pretrained( path, load_in_8bit=True, device_map="auto")
+        tokenizer = copy.deepcopy(tokenizer) if (tokenizer is not None) else transformers.AutoTokenizer.from_pretrained(nn_name)
+        
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = model.config.eos_token_id
+
     tokenizer.padding_side = 'left'
     
     # Load Dataset
     train_dset, test_dset = load_dataset(dset_name)
-
     test_dset = test_dset if not debugging else test_dset[:5]
 
     train_dset_records = train_dset.to_dict('records')
     test_dset_records = test_dset.to_dict('records')
-    
+    ## Convert pandas dictionary to list of dictionaries batched together
+    test_dset_records = [test_dset_records[i:i+batch_size] for i in range(0, len(test_dset), batch_size)]
+
+
     # Create Prompt Builder
     prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, tokenizer )
     prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method)
 
     # Creating Predictions for each row in the test set
-    ## Convert pandas dictionary to list of dictionaries batched together
-    test_dset_records = [test_dset_records[i:i+batch_size] for i in range(0, len(test_dset), batch_size)]
+
 
     li_prompt_ensemble = []
     li_pred_ensemble = []
@@ -69,14 +82,16 @@ def main(
     preds_agg = []
 
     for idx, batch in enumerate(test_dset_records):
-        # Create prompts
-        batch_prompt_ensembles = prompt_builder(batch)
+        # # Create prompts
+        # batch_prompt_ensembles = prompt_builder(batch)
         
-        # Generate predictions
-        batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+        # # Generate predictions
+        # batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
 
-        # Aggregate ensembles into predictions
-        batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
+        # # Aggregate ensembles into predictions
+        # batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
+
+        batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg = prediction_generator.aggregate_predictions(batch, prompt_builder, prediction_generator)
 
         # Extract predictions from the generated text
         li_prompt_ensemble.append(batch_prompt_ensembles)  # type: ignore
@@ -90,72 +105,19 @@ def main(
     test_dset['preds_ensemble'] = [ json.encode(pred_ensemble) for pred_ensemble in sum(li_pred_ensemble, []) ]
     test_dset['preds_prompts'] = [ json.encode(prompt_ensemble) for prompt_ensemble in  sum(li_prompt_ensemble, []) ]
     
-    
-
-    # Save CSV with predictions
-    parent_dir = "./prompt_engineering/predictions/"
-    exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, dset_name, aggregation_method, parse_output_method)
-    os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
-    test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
-    
-    experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
-                            'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method }
-    # Save experiment config as a yaml file
-    yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
-
-    logging.info("Done")
-    return None
-
-def load_dataset(dset_name:str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    
-    if dset_name == 'spot':
-        # Load spot dataset as pandas dataframe
-        dset = pd.read_csv('./datasets/spot/spot_indicator_mapping_table.csv')
+    if save_output:
+        # Save CSV with predictions
+        parent_dir = "./prompt_engineering/predictions/"
+        exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, dset_name, aggregation_method, parse_output_method)
+        os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
+        test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
         
-        # Remove all rows where 'type' is not 'Outcome'
-        dset = dset[dset['type'] == 'Outcome']
-
-        # Creating target field
-        dset['label'] = 'Yes'
-
-        # Rename columns to match the format of the other datasets
-        dset = dset.rename( columns={'category': 'budget_item', 'name':'indicator' } )
-
-        # Create negative examples
-        dset = utils_prompteng.create_negative_examples(dset)
-
-        # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
-        dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
+        experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
+                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method }
+        # Save experiment config as a yaml file
+        yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
     
-        # perform stratified split of a dataframe into train and test subsets
-        train_dset, test_dset = train_test_split(dset, test_size=0.8, random_state=42, stratify=dset[['budget_item','label']])
-
-    elif dset_name == 'england':
-        raise NotImplementedError
-    
-    else:
-        raise ValueError('Invalid dset_name: ' + dset_name)
-
-    return train_dset, test_dset
-
-def experiment_name(
-        nn_name:str,
-        finetuned:bool,
-        prompt_style:str,
-        k_shot:int,
-        ensemble_size:int,
-        dset_name:str,
-        aggregation_method:str,
-        parse_output_method:str
-):
-    name = f"{dset_name}_{nn_name.replace('/','_')}"
-    name += f"_ft" if finetuned else ""
-    name += f"_ps{''.join([s[0] for s in prompt_style.split('_')])}"
-    name += f"_k{k_shot}" if k_shot > 0 else ""
-    name += f"_es{ensemble_size}" if ensemble_size > 1 else ""
-    name += f"_ag{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
-    name += f"_po{''.join( [s[0] for s in parse_output_method.split('_')]) }"
-    return name
+    return test_dset
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, train_dset:list[dict], tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast ) -> None:
@@ -321,7 +283,7 @@ class PromptBuilder():
 
                     # python shuffle two lists in the same order 
                     li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
-                    random.shuffle(li_examples)
+                    random.Random(48).shuffle(li_examples)
 
                     examples_sample, examples_open_ended_answer = zip(*li_examples)
 
@@ -379,30 +341,37 @@ class PredictionGenerator():
 
         #TODO: optimize the GenerationConfigs settings
         if 'yes_no' in self.prompt_style:
-            eos_token_ids =  [self.tokenizer.eos_token_id] + [ self.tokenizer(text)['input_ids'][-1] for text in ["""\n"""]]
-            supress_tokens = [self.tokenizer(text)['input_ids'][-1] for text in ['\n']]
+            eos_token_ids =  [self.tokenizer.eos_token_id] + [ self.tokenizer(text).input_ids[-1] for text in ['.',' .']]
+            suppress_tokens = [self.tokenizer(text).input_ids[-1] for text in ['\n','\n\n','Question','Answer']]
             gen_config = GenerationConfig(
-                max_new_tokens = 10, min_new_tokens = 2,
-                early_stopping = True, temperature=0.9,
+                max_new_tokens = 10, min_new_tokens = 1,
+                early_stopping = True, temperature=0.7,
                 do_sample = False,
                 eos_token_id=eos_token_ids,
-                supress_tokens=supress_tokens,
+                suppress_tokens=suppress_tokens,
                 pad_token_id = self.tokenizer.pad_token_id
             )
                     
         elif 'open' in self.prompt_style:
-            supress_tokens = [ self.tokenizer(text)['input_ids'][-1] for text in ['\n','\n\n'] ]
+            eos_token_ids =  [self.tokenizer.eos_token_id] + [ self.tokenizer(text).input_ids[-1] for text in ['.',' .']]
+            suppress_tokens = [ self.tokenizer(text).input_ids[-1] for text in ['\n','\n\n','Question','Answer'] ]
 
-            gen_config = GenerationConfig(max_new_tokens = 40,
-                                           min_new_tokens = 5,
+            gen_config = GenerationConfig(max_new_tokens = 30,
+                                           min_new_tokens = 1,
                                            early_stopping=True,
-                                           temperature=0.9,
-                                           supress_tokens=supress_tokens,
+                                           temperature=0.7,
+                                           eos_token_id=eos_token_ids,
+                                           suppress_tokens=suppress_tokens,
+                                           beam_size=2,
+                                           length_penalty=-0.5,
                                            no_repeat_ngram_size=3)
         
         elif 'ama' == self.prompt_style:
-            gen_config = GenerationConfig(max_new_tokens = 100, min_new_tokens = 4 , early_stopping=True)
+            gen_config = GenerationConfig(max_new_tokens = 100, min_new_tokens = 4 , early_stopping=True, 
+                                          eos_token_id=self.tokenizer.eos_token_id, temperature=0.7, 
+                                          do_sample = False, pad_token_id = self.tokenizer.pad_token_id)
         else:
+            gen_config = None
             logging.info(f"Prompt style {self.prompt_style} not recognized")
 
         self.gen_config = gen_config
@@ -425,8 +394,7 @@ class PredictionGenerator():
                 **batch_encoding,
                 max_new_tokens = min( self.gen_config.max_new_tokens, self.model_max_tokens - batch_encoding['input_ids'].shape[1]   ), #type: ignore
                 generation_config=self.gen_config,
-                pad_token_id = self.tokenizer.pad_token_id,
-                eos_token_id = self.tokenizer.eos_token_id
+                pad_token_id = self.tokenizer.pad_token_id
                 )
 
             li_outputs.append(outputs)
@@ -444,7 +412,7 @@ class PredictionGenerator():
             li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
         
         elif self.parse_output_method == 'language_model_generation':
-            li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
+            li_li_predictions_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_predictions]
         
         else:
             raise ValueError(f"parse_output_method {self.parse_output_method} not recognized")
@@ -490,9 +458,11 @@ class PredictionGenerator():
 
         # setup generation config for parsing yesno
         eos_token_ids = [self.tokenizer.eos_token_id] + [ self.tokenizer(text)['input_ids'][-1] for text in ['"Negation".', '"Affirmation".', 'Negation.', 'Affirmation.','\n' ] ]
+        
         gen_config = transformers.GenerationConfig(max_new_tokens = 20, min_new_tokens = 2, early_stopping=True, 
-                                            temperature=0.9, no_repeat_ngram_size=3,
-                                            eos_token_id=eos_token_ids, do_sample=False,
+                                            temperature=0.7, no_repeat_ngram_size=3,
+                                            eos_token_id=eos_token_ids,
+                                            do_sample=False,
                                             pad_token_id = self.tokenizer.pad_token_id   )
         
         # Generate prediction
@@ -505,19 +475,23 @@ class PredictionGenerator():
         li_predictions = [ pred.replace(template,'') for pred,template in zip(predictions_w_prompt, li_filledtemplate) ]
 
         # Parse Yes/No/Na from the prediction
-        li_predictions = [ 'Yes' if 'affirm' in pred.lower() else 'No' if 'negat' in pred.lower() else 'NA' for pred in li_predictions]
+        li_predictions_parsed = [ 'Yes' if 'affirm' in pred.lower() else 'No' if 'negat' in pred.lower() else 'NA' for pred in li_predictions]
 
-        return li_predictions
+        return li_predictions_parsed
     
     def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->list[str]:
-        
+        # Get average perplexity of text when sentence is labelled Negation vs when it is labelled Affirmation.
+        # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
+        #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
+
         # Template to prompt language model to simplify the answer to a Yes/No output
         template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions]
 
         # For each fill template, create 3 filled versions with each of the possible answers
-        answers = ['"Negation".', '"Affirmation".']
+        # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
+        answers = ['Negation', 'Affirmation']
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
@@ -556,15 +530,81 @@ class PredictionGenerator():
         return li_predictions
 
 
+def load_dataset(dset_name:str, random_state_seed:int=10) -> tuple[pd.DataFrame, pd.DataFrame]:
+    
+    if dset_name == 'spot':
+        # Load spot dataset as pandas dataframe
+        dset = pd.read_csv('./datasets/spot/spot_indicator_mapping_table.csv')
+        
+        # Remove all rows where 'type' is not 'Outcome'
+        dset = dset[dset['type'] == 'Outcome']
+
+        # Creating target field
+        dset['label'] = 'Yes'
+
+        # Rename columns to match the format of the other datasets
+        dset = dset.rename( columns={'category': 'budget_item', 'name':'indicator' } )
+
+        # Create negative examples
+        random_state = np.random.RandomState(random_state_seed)
+
+        dset = utils_prompteng.create_negative_examples(dset, random_state=random_state )
+
+        # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
+        dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
+    
+        # perform stratified split of a dataframe into train and test subsets
+        train_dset, test_dset = train_test_split(dset, test_size=0.8, random_state=random_state, stratify=dset[['budget_item','label']])
+
+    elif dset_name == 'england':
+        raise NotImplementedError
+    
+    else:
+        raise ValueError('Invalid dset_name: ' + dset_name)
+
+    return train_dset, test_dset
+
+def experiment_name(
+        nn_name:str,
+        finetuned:bool,
+        prompt_style:str,
+        k_shot:int,
+        ensemble_size:int,
+        dset_name:str,
+        aggregation_method:str,
+        parse_output_method:str
+):
+    name = f"{dset_name}_{nn_name.replace('/','_')}"
+    name += f"_FT" if finetuned else ""
+    name += f"_PS{''.join([s[0] for s in prompt_style.split('_')])}"
+    name += f"_K{k_shot}" if k_shot > 0 else ""
+    name += f"_ES{ensemble_size}" if ensemble_size > 1 else ""
+    name += f"_AG{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
+    name += f"_PO{''.join( [s[0] for s in parse_output_method.split('_')]) }"
+    return name
+
+def step(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+
+    # Create prompts
+    batch_prompt_ensembles = prompt_builder(batch)
+    
+    # Generate predictions
+    batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+
+    # Aggregate ensembles into predictions
+    batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
+
+    return batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg
+
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--nn_name', type=str, default='EleutherAI/gpt-j-6B' )
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
-    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilestackoverflow_yes_no', 'pilestackoverflow_open'], help='Style of prompt' )
-    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model_perplexity', 'language_model_generation' ], help='How to convert the output of the model to a Yes/No Output' )
-    parser.add_argument('--k_shot', type=int, default=1, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
+    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilestackoverflow_yes_no', 'pilestackoverflow_open'], default='open', help='Style of prompt' )
+    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model_perplexity', 'language_model_generation' ], default='language_model_perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--k_shot', type=int, default=0, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
 
     parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote'] )
@@ -572,7 +612,6 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=1 )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
-
 
     args = parser.parse_known_args()[0]
 
