@@ -12,7 +12,7 @@ import pandas as pd
 from prompt_engineering.openai import OpenAICompletion
 from datamodels.healthindicators import HealthIndicator
 from datamodels.governmentbudget import BudgetItem, GovernmentBudget
-from datasets.utils_datasets import load_budget_dataset, load_health_indicators_dset
+from data.utils_datasets import load_budget_dataset, load_health_indicators_dset
 import yaml
 import random
 import math
