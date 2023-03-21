@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import os
 import sys
 sys.path.append(os.getcwd())
@@ -13,9 +12,10 @@ import multiprocessing as mp
 import itertools
 
 import random
+import time
 
 import aiohttp
-from aiohttp import ClientConnectorError, ClientConnectorSSLError, ClientPayloadError, TCPConnector
+from aiohttp import ClientConnectorError, ClientConnectorSSLError, ClientError, ClientResponseError
 
 import asyncio
 
@@ -36,6 +36,8 @@ from requests_html import HTMLSession, AsyncHTMLSession
 import json
 
 from pdfminer.high_level import extract_pages, extract_text
+import pdftotext
+
 
 """
     This script scrapes research papers from Google Scholar.
@@ -50,17 +52,19 @@ def main(
     downloads_per_search_term:int,
     min_citations:int,
     source:str,
-    mp_count=4):
+    mp_count=4,
+    pdf_parser:str='pdfminer'):
 
-    #TODO: add tqdm to the multiproc maps
-
-    search_terms = yaml.safe_load(open('./datasets/finetune/search_terms.yaml','r'))
+    search_terms = yaml.safe_load(open('./data/finetune/search_terms.yaml','r'))
 
     # scrape pdfs
     logging.info("Scraping pdfs")
     # li_li_pdf_title_authors = scrape_pdfs( search_terms, downloads_per_search_term, min_citations ) 
     li_li_pdf_title_authors = asyncio.run(scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
     logging.info("Finished Scraping pdfs")
+
+    # remove duplicates from li_li_pdf_title_authors by checking for duplicated titles
+    li_li_pdf_title_authors = remove_duplicates(li_li_pdf_title_authors)
 
     # save pdfs to file
     logging.info("Saving pdfs to file")
@@ -71,7 +75,13 @@ def main(
     logging.info("Covnerting pdf to txt")
     li_pdfs = [pdf for pdf, title, author in sum(li_li_pdf_title_authors, []) ] # all pdfs flattened
     with mp.Pool(mp_count) as p:
-        gen_texts = p.imap(extract_text_pdfminer, li_pdfs, chunksize=1  )
+
+        if pdf_parser=='pdfminer':
+            gen_texts = p.imap(extract_text_pdfminer, li_pdfs, chunksize=1  )
+        elif pdf_parser=='pdftotext':
+            gen_texts = p.imap(extract_text_pdftotext, li_pdfs, chunksize=1  )
+        elif pdf_parser=='fitz':
+            gen_texts = p.imap(extract_text_fitz, li_pdfs, chunksize=1  )
 
         # Replacing pdfs in li_li_pdf_title_authors with processed text
         li_li_txt_title_author = li_li_pdf_title_authors
@@ -96,7 +106,7 @@ def main(
     return None
 
     
-async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source:str ) -> List[ List[tuple[str,bytes]]  ]:
+async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source:str ) -> List[ List[tuple[bytes,str,str]]  ]:
     
     async with aiohttp.ClientSession(headers={'User-Agent':'Mozilla/5.0' } ) as session:
     # ,connector=TCPConnector(ssl=False) ) as session:
@@ -110,10 +120,11 @@ async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, s
             scrape_func =  scrape_pdfs_google_scholar
         elif source == 'semantic_scholar':
             scrape_func = get_pdfs_semantic_scholar_api
+        else:
+            raise ValueError(f"source: {source} not supported")
 
         for idx, search_term in enumerate(search_terms):
-            # li_tasks[idx] = asyncio.create_task(scrape_pdfs_google_scholar(session, search_term, downloads_per_search_term, min_citations))
-            
+            # li_tasks[idx] = asyncio.create_task(scrape_pdfs_google_scholar(session, search_term, downloads_per_search_term, min_citations))            
             li_tasks[idx] = scrape_func(session, search_term, downloads_per_search_term, min_citations)
                     
         li_pdf_title_author = await asyncio.gather(*li_tasks)
@@ -141,7 +152,7 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
         url = f"https://scholar.google.com/scholar?start={docs_per_url*idx}&q={search_term.replace(' ','+')}&hl=en"
 
         async with session.get(url, headers=headers1 ) as resp:
-            await asyncio.sleep(5.5)
+            time.sleep(5.5)
 
             # if no more pages then break
             if resp.status != 200:
@@ -185,14 +196,14 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
         pdfs = []
         for url in urls:
             try:
-                await asyncio.sleep(5.0)
+                time.sleep(5.0)
                 pdf = await (await session.get(url, cookies=resp.cookies,
                             headers=headers2,
                             #  verify_ssl=False,
                             #  ssl=False,
-                                # ssl_context = ssl_context
+                            # ssl_context = ssl_context
                             )).content.read()
-            except (ClientConnectorSSLError, ClientConnectorError, ClientPayloadError) as e:
+            except (ClientError) as e:
                 pdf = "NAN"
             pdfs.append(pdf)
 
@@ -220,9 +231,9 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
     outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
-
 async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> List[tuple[str, bytes]]:
-    
+    # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
+
     # Helper class to generate headers for requests
     # NOTE: TO avoid brotli encoded responses, ".update({'accept-encoding': 'gzip, deflate, utf-8'})":" is appended to the generate output
     headers = Headers(os='win', headers=True)
@@ -233,6 +244,9 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
 
     papers_per_query = 100
     # open webpage
+
+    start_time = time.time()
+
     for idx in itertools.count(start=0):
             
         url_base = "https://api.semanticscholar.org/graph/v1/paper/search?"
@@ -240,26 +254,33 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
         url_filters = "openAccessPdf"
         url_fields = "fields=title,authors,citationCount,openAccessPdf"
         url_paper_count = f"offset={str(idx*papers_per_query)}&limit={str(papers_per_query)}"
+        url_lang = "lang=en"
         
-        url = url_base+'&'.join([url_query, url_filters, url_fields, url_paper_count])
+        url = url_base+'&'.join([url_query, url_filters, url_fields, url_paper_count, url_lang])
 
         headers1 = {
             "Accept": "*/*",
             "Content-Type": "application/json" 
             }
         headers2 = headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})
-        async with session.get(url, headers=headers1, timeout=120 ) as resp:
-            await asyncio.sleep(3.0)
+        
+        # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
+        time.sleep( min(idx*3 - (time.time()-start_time), 0.0) +0.15 )
 
+        async with session.get(url, headers=headers1, timeout=120 ) as resp:
+            
             if resp.status != 200:
                 break
+            else:
+                pass
 
             resp_dict = await resp.content.read()
             resp_dict = json.loads(resp_dict.decode())
-            # if no more pages then break
-            if resp_dict['total'] < idx*papers_per_query:
+            
+            # break when no more pages left on website for query,
+            # semantic scholar api returns a total number of papers that match the query as ['total']
+            if resp_dict['total'] < (idx+1)*papers_per_query:
                 break
-
 
         li_dict_papers = resp_dict['data']
 
@@ -281,12 +302,12 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
             dict_ = li_dict_papers[idx]
             
             try:
-                await asyncio.sleep(2.0)
+                time.sleep(3.0)
                 pdf = await (await session.get(dict_['openAccessPdf']['url'], cookies=resp.cookies,
                          headers=headers2
                            )).content.read()
 
-            except (ClientConnectorSSLError, ClientConnectorError, ClientPayloadError) as e:
+            except (ClientError) as e:
                 pdf = "NAN"
 
             pdfs.append(pdf)
@@ -306,16 +327,40 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
             li_author = li_author[:downloads_per_search_term]
             break
 
-    # s = requests.session()
-    # res = s.get('https://discovery.ucl.ac.uk/10106434/3/Bockenhauer_BMJ%20Ten%20years%20essay2pg3.pdf', headers=headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'}))
 
     outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
+def remove_duplicates(li_li_pdf_title_author: list[list[tuple[bytes,str,str]]]) -> list[list[tuple[bytes,str,str]]] :
+    """Remove duplicate papers from the list of lists of papers.
+
+    Args:
+        li_li_pdf_title_author (list[list[tuple[int,str,str]]]): List of lists of papers.
+
+    Returns:
+        list[list[tuple[int,str,str]]]: List of lists of papers without duplicates.
+    """
+    
+    unique_titles_author = set()
+    
+    for idx1 in range(len(li_li_pdf_title_author)):
+        for idx2 in reversed(range(len(li_li_pdf_title_author[idx1]))):
+
+            title = li_li_pdf_title_author[idx1][idx2][1]
+            author = li_li_pdf_title_author[idx1][idx2][2]
+
+            if (title,author) not in unique_titles_author:
+                unique_titles_author.add( (title,author) )
+            else:
+                li_li_pdf_title_author[idx1].pop(idx2)
+    
+    return li_li_pdf_title_author
+
+
 def save_pdfs(search_term, search_term_idx, li_pdf_title_author):
     
     # making directory
-    dir_ = f'./datasets/finetune/pdf_format/{search_term_idx:02}'
+    dir_ = f'./data/finetune/pdf_format/{search_term_idx:02}'
     os.makedirs(dir_, exist_ok=True)
 
     with open( os.path.join(dir_,'search_term.txt'), 'w') as f:
@@ -337,14 +382,6 @@ def save_pdfs(search_term, search_term_idx, li_pdf_title_author):
 
 def extract_text_fitz(pdf:bytes) -> str:
     
-    #TODO akanni.ade : ignore first page
-    #TODO akanni.ade : ignore contents page if it exists
-    #TODO akanni.ade : ensure that text on images is ignored
-    #TODO akanni.ade : ensure reference section is ignored
-    #TODO akanni.ade : pages that couldn't be parsed
-    #TODO akanni.ade : ensure text is sectioned by pages that couldn't be parsed
-    #TODO akanni.ade : ensure appendix section is dropped
-
     doc = fitz.Document( stream=pdf )
     text = ''
     for page in doc:
@@ -353,26 +390,40 @@ def extract_text_fitz(pdf:bytes) -> str:
     return text
 
 def extract_text_pdfminer(pdf:bytes) -> str:
-    
-    #TODO akanni.ade : ignore first page
-    #TODO akanni.ade : ignore contents page if it exists
-    #TODO akanni.ade : ensure that text on images is ignored
-    #TODO akanni.ade : ensure reference section is ignored
-    #TODO akanni.ade : pages that couldn't be parsed
-    #TODO akanni.ade : ensure text is sectioned by pages that couldn't be parsed
-    #TODO akanni.ade : ensure appendix section is dropped
 
-    #NOTE: pdfminer is better than fitz at pdf parsing. Specifically, it is able to differentiate between a new line and a new paragraph
-    #      fitz is not able to do this.
-    
     text = extract_text( BytesIO(pdf), caching=False )
 
     return text
 
+def extract_text_pdftotext(pdf:bytes) -> str:
+
+    pdf = pdftotext.PDF( BytesIO(pdf) )
+
+    # Dropping pages after 'References' header, this usually includes appendix
+    final_page = next((idx for idx, page in reversed(list(enumerate(pdf))) if 'References' in page))
+    pages_filtered = [page for idx, page in enumerate(pdf) if idx<final_page]
+
+    l = len(pages_filtered)
+
+    # end of page is indicated by \x0c
+    # To discern whether text is continuing or new paragraph, we check if the first character is a capital letter in next page
+    for page_idx, next_page_idx in zip( range(l), range(1,l) ):
+        curr_page = pages_filtered[page_idx]
+        next_page = pages_filtered[next_page_idx]
+
+        # check next page is lower case and current page ends with \x0c and ends with end of line punctuation
+        if next_page[0].islower() and (curr_page[-8:] == '\n\n\x0c') and (curr_page[-9] not in ['.', '!', '?']):
+            curr_page[-8:] = ' '
+            pages_filtered[page_idx] = curr_page
+            
+    txt = "".join( pages_filtered )
+
+    return txt
+
 def save_text(search_term:str, search_term_idx:int, li_txt_title_author: List[List[str,str,str]]):
 
     # making directory
-    dir_ = f'./datasets/finetune/text_format/{search_term_idx:02}'
+    dir_ = f'./data/finetune/text_format/{search_term_idx:02}'
     os.makedirs(dir_, exist_ok=True)
 
     with open( os.path.join(dir_,'search_term.txt'), 'w') as f:
@@ -400,10 +451,13 @@ def parse_args(parent_parser):
     else:
         parser = ArgumentParser()
 
-    parser.add_argument('--downloads_per_search_term', default=5, type=int, help='Number of documents to download per search term')
-    parser.add_argument('--min_citations', type=int, default=0, help='Minimum number of citations for a paper to have to be included in download')
-    parser.add_argument('--mp_count', type=int, default=1, help='')
+    parser.add_argument('--downloads_per_search_term', default=100, type=int, help='Number of documents to download per search term')
+    parser.add_argument('--min_citations', type=int, default=1, help='Minimum number of citations for a paper to have to be included in download')
+    parser.add_argument('--mp_count', type=int, default=4, help='')
     parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers', choices=['google_scholar','semantic_scholar'])
+
+    parser.add_argument('--pdf_parser', type=str, default='pdfminer6', help='Which pdf parser to use', choices=['pdfminer6','pdftotext','fitz'])
+
     args = parser.parse_known_args()[0]
 
     return args
