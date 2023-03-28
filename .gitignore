@@ -1,20 +1,29 @@
-.vscode/
+# Folders
+research_papers
+ckpt
 
-**/__pycache
-**/__pycache__
+#Python files
+__pycache*
 **.pytest_cache
 
-research_papers
 
+# Temporary Files
+**/**.temp
+temp*
+
+# Dataset Files
+**/**.arrow
+**/**.pkl
+
+
+# Document files
 **/**.txt
 **/**.csv
-**/**.pkl
-**/**.png
 **/**.html
 **/**.pdf
-**/**.ipynb
 **/**.yml
+**/**.png
 
-**/**.arrow
-
+# VSCode settings
 **/**workspace
+.vscode/

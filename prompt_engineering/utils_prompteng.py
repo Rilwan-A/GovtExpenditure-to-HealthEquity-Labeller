@@ -4,41 +4,39 @@ from torch.nn import CrossEntropyLoss
 import numpy as np
 
 li_prompts_yes_no_template = [    
-    "Give me a Yes or No answer to the following question, is local government spending on \"\"{budget_item}\"\" related to \"{indicator}\"?",
+    "Give me a Yes or No answer to the following question, is local government spending on \"{budget_item}\" {directly_or_indirectly} related to \"{indicator}\"?",
     
-    'Does local government spending on \"{budget_item}\" affect \"{indicator}\"?, True or False',
+    'Does local government spending on \"{budget_item}\" {directly_or_indirectly} affects \"{indicator}\"?, True or False',
     
-    'Is it true that \"{indicator}\" related to local government spending on \"{budget_item}\"?',
+    'Is it true that \"{indicator}\" {directly_or_indirectly} related to local government spending on \"{budget_item}\"?',
     
-    'Does \"{budget_item}\" affect \"{indicator}\"?, Yes or No',
+    'Does \"{budget_item}\" {directly_or_indirectly} affects \"{indicator}\"?, Yes or No',
     
-    'Answer the following question with True or False: Does local government spending on \"{budget_item}\" affect \"{indicator}\"?',
-    
+    'Answer the following question with True or False: Does local government spending on \"{budget_item}\" {directly_or_indirectly} affects \"{indicator}\"?'
 ]
 
 li_prompts_openend_template = [    
-    'Is local government spending on \"{budget_item}\" related to \"{indicator}\"?',
+    'Is local government spending on \"{budget_item}\" {directly_or_indirectly} related to \"{indicator}\"?',
     
-    'Does local government spending on \"{budget_item}\" affect \"{indicator}\"?',
+    'Does local government spending on \"{budget_item}\" {directly_or_indirectly} affects \"{indicator}\"?',
     
-    'Is \"{indicator}\" related to local government spending on \"{budget_item}\"?',
+    'Is \"{indicator}\" {directly_or_indirectly} related to local government spending on \"{budget_item}\"?',
     
-    'local goernment spending on \"{budget_item}\" improves \"{indicator}\"?',
+    'Local government spending on \"{budget_item}\" {directly_or_indirectly} improves \"{indicator}\"?',
     
-    'Does local government spending on \"{budget_item}\" affect \"{indicator}\"?',
-    
+    'Does local government spending on \"{budget_item}\" {directly_or_indirectly} affects \"{indicator}\"?'
 ]
 
 li_prompts_openend_template_open_response =[
-    {'Yes':'Local government spending on \"{budget_item}\" is related to \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not related to \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" is {directly_or_indirectly} related to \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {directly_or_indirectly} related to \"{indicator}\".'},
 
-    {'Yes':'Local government spending on \"{budget_item}\" does affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not affect \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" does {directly_or_indirectly} affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {directly_or_indirectly} affect \"{indicator}\".'},
 
-    {'Yes':'\"{indicator}\" is related to local government spending on \"{budget_item}\".', 'No':'\"{indicator}\" is not related to local government spending on \"{budget_item}\".'},
+    {'Yes':'\"{indicator}\" is {directly_or_indirectly} related to local government spending on \"{budget_item}\".', 'No':'\"{indicator}\" is not {directly_or_indirectly} related to local government spending on \"{budget_item}\".'},
 
-    {'Yes':'Local government spending on \"{budget_item}\" does improve \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not improve \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" does {directly_or_indirectly} improve \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {directly_or_indirectly} improve \"{indicator}\".'},
 
-    {'Yes':'A local government can effect \"{indicator}\" by spending on \"{budget_item}\".', 'No':'A local government can not effect \"{indicator}\" by spending on \"{budget_item}\".'},
+    {'Yes':'A local government can {directly_or_indirectly} affect \"{indicator}\" by spending on \"{budget_item}\".', 'No':'A local government can not {directly_or_indirectly} affect \"{indicator}\" by spending on \"{budget_item}\".'}
 ]
 
 li_prompts_parse_yesno_from_answer = [

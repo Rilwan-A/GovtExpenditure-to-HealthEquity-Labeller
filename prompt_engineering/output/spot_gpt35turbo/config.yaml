@@ -1,0 +1,4 @@
+directly_or_indirectly: none
+dset_name: spot
+k_shot: 0
+nn_name: gpt-3.5-turbo

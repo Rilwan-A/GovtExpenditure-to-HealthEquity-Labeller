@@ -34,8 +34,10 @@ def main(
         ensemble_size:int=1,
         finetuned:bool=False,
         batch_size:int=1,
+
         aggregation_method='majority_vote',
         parse_output_method='rule_based',
+        directly_or_indirectly='directly',
         
         model=None,
         tokenizer=None,
@@ -70,7 +72,7 @@ def main(
 
 
     # Create Prompt Builder
-    prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, tokenizer )
+    prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, directly_or_indirectly,  tokenizer )
     prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method)
 
     # Creating Predictions for each row in the test set
@@ -82,16 +84,8 @@ def main(
     preds_agg = []
 
     for idx, batch in enumerate(test_dset_records):
-        # # Create prompts
-        # batch_prompt_ensembles = prompt_builder(batch)
-        
-        # # Generate predictions
-        # batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
-
-        # # Aggregate ensembles into predictions
-        # batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
-
-        batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg = prediction_generator.aggregate_predictions(batch, prompt_builder, prediction_generator)
+        # Create prompts
+        batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg = step(batch, prompt_builder, prediction_generator)
 
         # Extract predictions from the generated text
         li_prompt_ensemble.append(batch_prompt_ensembles)  # type: ignore
@@ -107,25 +101,32 @@ def main(
     
     if save_output:
         # Save CSV with predictions
-        parent_dir = "./prompt_engineering/predictions/"
-        exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, dset_name, aggregation_method, parse_output_method)
+        parent_dir = "./prompt_engineering/output/"
+        exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, 
+                                   dset_name, aggregation_method, parse_output_method, directly_or_indirectly)
         os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
         test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
         
         experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
-                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method }
+                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'directly_or_indirectly':directly_or_indirectly }
         # Save experiment config as a yaml file
         yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
     
     return test_dset
 
 class PromptBuilder():
-    def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, train_dset:list[dict], tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast ) -> None:
+    def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
+                 train_dset:list[dict], directly_or_indirectly:str,
+                 tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast ) -> None:
+        
+        assert directly_or_indirectly in ['directly', 'indirectly']
+
         self.prompt_style = prompt_style
         self.k_shot = k_shot
         self.ensemble_size = ensemble_size
         self.train_dset = train_dset
         self.tokenizer = tokenizer
+        self.directly_or_indirectly = directly_or_indirectly
 
     def __call__(self, batch:list[dict]) -> list[list[str]]:
         
@@ -165,11 +166,11 @@ class PromptBuilder():
         for ens_idx in range(self.ensemble_size):
             
             # part of prompt to be filled with information about target
-            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}' ,  indicator='{target_indicator}' ) +"\nAnswer:"
+            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}' ,  indicator='{target_indicator}', directly_or_indirectly=self.directly_or_indirectly ) +"\nAnswer:"
             
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}' ) + f"\nAnswer: {{answer_{k}}}."
+                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly ) + f"\nAnswer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -180,11 +181,11 @@ class PromptBuilder():
         templates = copy.deepcopy( utils_prompteng.li_prompts_openend_template[:self.ensemble_size] )
         
         for ens_idx in range(self.ensemble_size):
-            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}' ) + "\nAnswer:"
+            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', directly_or_indirectly=self.directly_or_indirectly ) + "\nAnswer:"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' ) + f"\nAnswer: {{answer_{k}}}."
+                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly ) + f"\nAnswer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -199,12 +200,12 @@ class PromptBuilder():
         for ens_idx in range(self.ensemble_size):
             
             # part of prompt to be filled with information about target
-            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}' )
+            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', directly_or_indirectly=self.directly_or_indirectly )
             prompt = prompt + "\nA:\n\n"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
-                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' )
+                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly )
                 context_k = context_k + f"\nA:\n\n{{answer_{k}}}."
                 prompt = context_k + "\n\n\n\n"+prompt
             
@@ -217,12 +218,12 @@ class PromptBuilder():
         
         for ens_idx in range(self.ensemble_size):
             
-            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}' )
+            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', directly_or_indirectly=self.directly_or_indirectly )
             prompt = prompt + "\nA:\n\n"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
-                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}' )
+                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly )
                 context_k_response = f"\nA:\n\n{{answer_{k}}}."
 
                 context_k = context_k + context_k_response
@@ -293,7 +294,8 @@ class PromptBuilder():
                     format_dict = {}
 
                 ## filling context examples in template
-                prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'], **format_dict)
+                prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                                                    **format_dict)
                 
                 li_prompts.append(prompt)
 
@@ -304,17 +306,18 @@ class PromptBuilder():
 
 class PredictionGenerator():
     def __init__(self, model, tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast, prompt_style:str, ensemble_size:int,
-                  aggregation_method:str='majority_vote', parse_output_method:str='rule_based' ):
+                  aggregation_method:str='majority_vote', parse_output_method:str='rule_based',
+                    device=None ):
         
         self.prompt_style = prompt_style
         self.ensemble_size = ensemble_size
         self.parse_output_method = parse_output_method
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
         self.model = model
-        if getattr(model, "is_loaded_in_8bit", False) is False:
+        
+        if (device is not None) and getattr(model, "is_loaded_in_8bit", False) is False:
             self.model = self.model.to(device)
+
         self.model.eval()
 
         self.tokenizer = tokenizer
@@ -392,10 +395,9 @@ class PredictionGenerator():
             # Generate prediction
             outputs = self.model.generate(
                 **batch_encoding,
-                max_new_tokens = min( self.gen_config.max_new_tokens, self.model_max_tokens - batch_encoding['input_ids'].shape[1]   ), #type: ignore
+                max_new_tokens = min( self.gen_config.max_new_tokens, self.model_max_tokens - batch_encoding['input_ids'].shape[1]), #type: ignore
                 generation_config=self.gen_config,
-                pad_token_id = self.tokenizer.pad_token_id
-                )
+                pad_token_id = self.tokenizer.pad_token_id)
 
             li_outputs.append(outputs)
 
@@ -420,6 +422,9 @@ class PredictionGenerator():
         return li_li_predictions, li_li_predictions_parsed
 
     def parse_yesno_with_rules(self, li_predictions:list[str])->list[str]:
+        
+        li_preds_parsed = ['NA']*len(li_predictions)
+
         # Parse yes/no from falsetrue
         for idx in range(len(li_predictions)):
             
@@ -437,7 +442,7 @@ class PredictionGenerator():
             else:
                 prediction = 'NA'
         
-            li_predictions[idx] = prediction
+            li_preds_parsed[idx] = prediction
                    
         return li_predictions
                
@@ -501,15 +506,6 @@ class PredictionGenerator():
         # For each set of filltemplates get the index of the answer with the lowest perplexity
         li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
 
-        # # Map the indexes to the answers
-        # li_predictions = [ filledtemplates[idx] for idx,filledtemplates in zip(li_idx, li_li_filledtemplates_with_answers) ]
-
-        # # remove the templates from the outputs
-        # li_predictions = [ pred.replace(template,'') for pred, template in zip(li_predictions, li_filledtemplate) ]
-
-        # # Map the answers to Yes/No/Na
-        # li_predictions = [ 'Yes' if 'Agreement' in pred else 'No' if 'Disagreement' in pred else 'NA' for pred in li_predictions ]
-
         li_predictions = [ 'No' if idx==0 else 'Yes' for idx in li_idx ]
         
         return li_predictions
@@ -572,7 +568,8 @@ def experiment_name(
         ensemble_size:int,
         dset_name:str,
         aggregation_method:str,
-        parse_output_method:str
+        parse_output_method:str,
+        directly_or_indirectly:str
 ):
     name = f"{dset_name}_{nn_name.replace('/','_')}"
     name += f"_FT" if finetuned else ""
@@ -580,7 +577,8 @@ def experiment_name(
     name += f"_K{k_shot}" if k_shot > 0 else ""
     name += f"_ES{ensemble_size}" if ensemble_size > 1 else ""
     name += f"_AG{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
-    name += f"_PO{''.join( [s[0] for s in parse_output_method.split('_')]) }"
+    name += f"_PO{ ''.join( [s[0] for s in parse_output_method.split('_')]) }"
+    name += f"_DI{directly_or_indirectly[0]}"
     return name
 
 def step(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
@@ -606,7 +604,8 @@ def parse_args():
     parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model_perplexity', 'language_model_generation' ], default='language_model_perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--k_shot', type=int, default=0, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
-
+    parser.add_argument('--directly_or_indirectly', type=str, default='directly', choices=['directly','indirectly'] )
+    
     parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote'] )
     parser.add_argument('--dset_name',type=str, default='spot', choices=['spot','england'] )
     parser.add_argument('--batch_size', type=int, default=1 )
