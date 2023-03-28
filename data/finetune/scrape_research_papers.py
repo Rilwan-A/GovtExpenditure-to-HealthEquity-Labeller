@@ -11,15 +11,17 @@ import yaml
 import multiprocessing as mp
 import itertools
 
-import random
 import time
 
 import aiohttp
-from aiohttp import ClientConnectorError, ClientConnectorSSLError, ClientError, ClientResponseError
+from aiohttp import  ClientError
 
 import asyncio
 
 import logging
+logger = logging.getLogger('logger')
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 from typing import List, Sequence
 from bs4 import BeautifulSoup
@@ -53,26 +55,31 @@ def main(
     min_citations:int,
     source:str,
     mp_count=4,
-    pdf_parser:str='pdfminer'):
+    pdf_parser:str='pdfminer',
+    pdfs_downloaded:bool=False):
 
     search_terms = yaml.safe_load(open('./data/finetune/search_terms.yaml','r'))
 
-    # scrape pdfs
-    logging.info("Scraping pdfs")
-    # li_li_pdf_title_authors = scrape_pdfs( search_terms, downloads_per_search_term, min_citations ) 
-    li_li_pdf_title_authors = asyncio.run(scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
-    logging.info("Finished Scraping pdfs")
+    if not pdfs_downloaded:
+        # scrape pdfs
+        logger.info("Scraping pdfs")
+        li_li_pdf_title_authors = asyncio.run(scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
+        logger.info("Finished Scraping pdfs")
 
-    # remove duplicates from li_li_pdf_title_authors by checking for duplicated titles
-    li_li_pdf_title_authors = remove_duplicates(li_li_pdf_title_authors)
+        # remove duplicates from li_li_pdf_title_authors by checking for duplicated titles
+        li_li_pdf_title_authors = remove_duplicates(li_li_pdf_title_authors)
 
-    # save pdfs to file
-    logging.info("Saving pdfs to file")
-    with mp.Pool(mp_count) as p:
-        res = p.starmap(save_pdfs,  list(zip(search_terms, itertools.count(), li_li_pdf_title_authors))  )
+        # save pdfs to file
+        logger.info("Saving pdfs to file")
+        with mp.Pool(mp_count) as p:
+            res = p.starmap(save_pdfs,  list(zip(search_terms, itertools.count(), li_li_pdf_title_authors))  )
+    else:
+        # load pdfs from file
+        logger.info("Loading pdfs from file")
+        li_li_pdf_title_authors = load_pdfs(search_terms)
     
     # extract texts
-    logging.info("Covnerting pdf to txt")
+    logger.info("Covnerting pdf to txt")
     li_pdfs = [pdf for pdf, title, author in sum(li_li_pdf_title_authors, []) ] # all pdfs flattened
     with mp.Pool(mp_count) as p:
 
@@ -82,6 +89,8 @@ def main(
             gen_texts = p.imap(extract_text_pdftotext, li_pdfs, chunksize=1  )
         elif pdf_parser=='fitz':
             gen_texts = p.imap(extract_text_fitz, li_pdfs, chunksize=1  )
+        else:
+            raise ValueError(f"pdf_parser: {pdf_parser} not supported")
 
         # Replacing pdfs in li_li_pdf_title_authors with processed text
         li_li_txt_title_author = li_li_pdf_title_authors
@@ -98,20 +107,20 @@ def main(
             
     
     # Saving Texts to file
-    logging.info("Saving txt to file")
+    logger.info("Saving txt to file")
     with mp.Pool(mp_count) as p:
         res = p.starmap(save_text, list(zip(search_terms, itertools.count(), li_li_txt_title_author)) )
     
-    logging.info("Script Finished")
+    logger.info("Script Finished")
     return None
 
     
-async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source:str ) -> List[ List[tuple[bytes,str,str]]  ]:
+async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source:str ) -> list[ list[tuple[bytes|int,str,str]]  ]:
     
     async with aiohttp.ClientSession(headers={'User-Agent':'Mozilla/5.0' } ) as session:
     # ,connector=TCPConnector(ssl=False) ) as session:
     # async with aiohttp.ClientSession() as session:
-        logging.info("Started aiohttp Session")
+        logger.info("Started aiohttp Session")
         
 
         li_tasks = [None]*len(search_terms)
@@ -131,7 +140,7 @@ async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, s
 
     return li_pdf_title_author
 
-async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> List[tuple[str, bytes]]:
+async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> list[tuple[str, bytes]]:
     
     # Helper class to generate headers for requests
     # NOTE: TO avoid brotli encoded responses, ".update({'accept-encoding': 'gzip, deflate, utf-8'})":" is appended to the generate output
@@ -231,7 +240,7 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
     outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
-async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> List[tuple[str, bytes]]:
+async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> list[tuple[str, bytes]]:
     # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
 
     # Helper class to generate headers for requests
@@ -266,7 +275,7 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
         headers2 = headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})
         
         # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
-        time.sleep( min(idx*3 - (time.time()-start_time), 0.0) +0.15 )
+        time.sleep( max(idx*3 - (time.time()-start_time), 0.0) +1.0 )
 
         async with session.get(url, headers=headers1, timeout=120 ) as resp:
             
@@ -310,6 +319,7 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
 
             except (ClientError):
                 pdf = "NAN"
+                time.sleep(10.0)
 
             pdfs.append(pdf)
 
@@ -381,6 +391,36 @@ def save_pdfs(search_term, search_term_idx, li_pdf_title_author):
     
     return None
 
+def load_pdfs(search_terms) -> list[ list[tuple[bytes,str,str]]  ]:
+    """Load papers from saved pdf files."""
+
+    # Loading the pdf, title and authors
+    li_li_pdf_title_author = []
+
+    for idx, search_term in enumerate(search_terms):
+        dir_ = f'./data/finetune/pdf_format/{idx:02}'
+        fp_index = os.path.join(dir_, 'index.csv')
+
+        # Loading title and author
+        with open(fp_index, 'r') as f:
+            reader = csv.reader(f, delimiter=',')
+            li_title_author = [ (title, author) for idx, title, author in reader ]
+        
+        # Loading pdf docs
+        li_pdf = []
+        for file in sorted(os.listdir(dir_)):
+            if file.endswith(".pdf"):
+                with open(os.path.join(dir_, file), "rb") as f:
+                    pdf = f.read()
+                    li_pdf.append(pdf)
+
+        # Combining pdf, title and author
+        li_pdf_title_author = [ (pdf, title, author) for pdf, (title, author) in zip(li_pdf, li_title_author) ]
+
+        li_li_pdf_title_author.append(li_pdf_title_author)
+    
+    return li_li_pdf_title_author
+
 def extract_text_fitz(pdf:bytes) -> str:
     
     doc = fitz.Document( stream=pdf )
@@ -401,7 +441,11 @@ def extract_text_pdftotext(pdf:bytes) -> str:
     pdf = pdftotext.PDF( BytesIO(pdf) )
 
     # Dropping pages after 'References' header, this usually includes appendix
-    final_page = next((idx for idx, page in reversed(list(enumerate(pdf))) if 'References' in page))
+    try:
+        final_page = next((idx for idx, page in reversed(list(enumerate(pdf))) if 'References' in page))
+    except StopIteration:
+        final_page = len(pdf)+1
+
     pages_filtered = [page for idx, page in enumerate(pdf) if idx<final_page]
 
     l = len(pages_filtered)
@@ -421,7 +465,7 @@ def extract_text_pdftotext(pdf:bytes) -> str:
 
     return txt
 
-def save_text(search_term:str, search_term_idx:int, li_txt_title_author: List[List[str,str,str]]):
+def save_text(search_term:str, search_term_idx:int, li_txt_title_author: list[list[str]]):
 
     # making directory
     dir_ = f'./data/finetune/text_format/{search_term_idx:02}'
@@ -446,19 +490,23 @@ def save_text(search_term:str, search_term_idx:int, li_txt_title_author: List[Li
             f.write( txt )
               
 
+
 def parse_args(parent_parser):
     if parent_parser != None:
         parser = ArgumentParser(parents=[parent_parser], add_help=True, allow_abbrev=False)
     else:
         parser = ArgumentParser()
 
+    
     parser.add_argument('--downloads_per_search_term', default=100, type=int, help='Number of documents to download per search term')
-    parser.add_argument('--min_citations', type=int, default=1, help='Minimum number of citations for a paper to have to be included in download')
+    parser.add_argument('--min_citations', type=int, default=0, help='Minimum number of citations for a paper to have to be included in download')
     parser.add_argument('--mp_count', type=int, default=4, help='')
     parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers', choices=['google_scholar','semantic_scholar'])
+    parser.add_argument('--pdf_parser', type=str, default='pdftotext', help='Which pdf parser to use', choices=['pdfminer','pdftotext','fitz'])
 
-    parser.add_argument('--pdf_parser', type=str, default='pdfminer6', help='Which pdf parser to use', choices=['pdfminer6','pdftotext','fitz'])
-
+    parser.add_argument('--pdfs_downloaded', action='store_true',
+                         default=False, help='Whether the pdfs for the documents have already been downloaded')
+    
     args = parser.parse_known_args()[0]
 
     return args
