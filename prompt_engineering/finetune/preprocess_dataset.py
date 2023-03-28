@@ -14,6 +14,9 @@ from datasets import Dataset
 from typing import Dict
 
 import logging
+logger = logging.getLogger('logger')
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 
@@ -39,18 +42,10 @@ def main(
     # Breaking Large Texts into sub-texts Loop over dataset applying tokenizer to each 
     text_chunk_len = int( token_chunk_len * 0.5 ) # rough approximation of number of words per token
     
-    # dataset_train = dataset_train.map( lambda batch: break_up_text(batch, text_chunk_len, min_word_per_chunk), batched=False )
-    # dataset_train = dataset_train.map( lambda batch: {'text': batch['text'][0] }, batched=True  )
-
-    # dataset_val = dataset_val.map( lambda batch: break_up_text(batch, text_chunk_len, min_word_per_chunk), batched=False )
-    # dataset_val = dataset_val.map( lambda batch: {'text': batch['text'][0] }, batched=True  )
-
     dataset_dict = dataset_dict.map( lambda batch: break_up_text(batch, text_chunk_len, min_word_per_chunk), batched=False )
     dataset_dict = dataset_dict.map( lambda batch: {'text': batch['text'][0] }, batched=True  )
 
     # Loop over dataset applying tokenizer to each row
-    # dataset_train = dataset_train.map( lambda batch: map_tokenize(batch, tokenizer, max_len=token_chunk_len), batched=True  )
-    # dataset_val = dataset_val.map( lambda batch: map_tokenize(batch, tokenizer, max_len=token_chunk_len), batched=True  )
     dataset_dict = dataset_dict.map( lambda batch: map_tokenize(batch, tokenizer, max_len=token_chunk_len), batched=True  )
 
     # Save Dataset in torch format
@@ -62,7 +57,7 @@ def main(
     
 
     # Saving to disk
-    dir_ = f'./datasets/finetune/preprocessed/{nn_name.replace("/","_")}'
+    dir_ = f'./data/finetune/preprocessed/{nn_name.replace("/","_")}'
     os.makedirs(dir_)
 
     dataset_train.save_to_disk( os.path.join(dir_,'train.arrow') )
