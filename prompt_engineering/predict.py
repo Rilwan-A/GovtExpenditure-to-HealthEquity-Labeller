@@ -306,17 +306,18 @@ class PromptBuilder():
 
 class PredictionGenerator():
     def __init__(self, model, tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast, prompt_style:str, ensemble_size:int,
-                  aggregation_method:str='majority_vote', parse_output_method:str='rule_based' ):
+                  aggregation_method:str='majority_vote', parse_output_method:str='rule_based',
+                    device=None ):
         
         self.prompt_style = prompt_style
         self.ensemble_size = ensemble_size
         self.parse_output_method = parse_output_method
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
         self.model = model
-        if getattr(model, "is_loaded_in_8bit", False) is False:
+        
+        if (device is not None) and getattr(model, "is_loaded_in_8bit", False) is False:
             self.model = self.model.to(device)
+
         self.model.eval()
 
         self.tokenizer = tokenizer

@@ -35,7 +35,11 @@ class OpenAICompletion():
         start_time = time.time()
 
         for idx in tqdm(range(0, len(li_prompts), batch_size )):
-            time.sleep(  max( 0, idx * (60/requests_limit_per_minute_adj) - (time.time() - start_time) ) )
+            
+            if idx % 150 == 0:
+                time.sleep( 20 )
+            else:
+                time.sleep(  2.3 )
             
             batch_responses = self.get_completions( li_prompts[idx:idx+batch_size] )
             

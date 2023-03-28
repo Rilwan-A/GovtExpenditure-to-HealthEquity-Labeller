@@ -297,7 +297,7 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
             
         # extracting pdf documents        
         pdfs = []
-        for idx in range(len(li_dict_papers)):
+        for idx, dict_ in enumerate(li_dict_papers):
             
             dict_ = li_dict_papers[idx]
             
@@ -307,7 +307,7 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
                          headers=headers2
                            )).content.read()
 
-            except (ClientError) as e:
+            except (ClientError):
                 pdf = "NAN"
 
             pdfs.append(pdf)
@@ -331,7 +331,7 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
     outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
-def remove_duplicates(li_li_pdf_title_author: list[list[tuple[bytes,str,str]]]) -> list[list[tuple[bytes,str,str]]] :
+def remove_duplicates(li_li_pdf_title_author: list[list[tuple[bytes|int,str,str]]]) -> list[list[tuple[bytes,str,str]]] :
     """Remove duplicate papers from the list of lists of papers.
 
     Args:
