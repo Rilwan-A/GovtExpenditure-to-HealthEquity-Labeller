@@ -255,8 +255,9 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
         url_fields = "fields=title,authors,citationCount,openAccessPdf"
         url_paper_count = f"offset={str(idx*papers_per_query)}&limit={str(papers_per_query)}"
         url_lang = "lang=en"
+        url_fieldsofstudy = 'fieldsOfStudy='+','.join(['Sociology','Political Science','Economics','Law','Education'])
         
-        url = url_base+'&'.join([url_query, url_filters, url_fields, url_paper_count, url_lang])
+        url = url_base+'&'.join([url_query, url_filters, url_fields, url_paper_count, url_lang, url_fieldsofstudy])
 
         headers1 = {
             "Accept": "*/*",
