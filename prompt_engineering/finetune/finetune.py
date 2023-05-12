@@ -5,15 +5,12 @@ os.environ['TOKENIZERS_PARALLELISM'] = "false"
 
 import deepspeed
 import bitsandbytes as bnb
-from prompt_engineering.predict import parse_args as parse_args_spot_alignment
-from prompt_engineering.predict import load_dataset as load_dataset_spot_alignment
-from prompt_engineering.predict import PromptBuilder, PredictionGenerator
-from prompt_engineering.predict import step as val_step_spot_alignment_inner
+
 from sklearn.metrics import accuracy_score
 from argparse import Namespace
-from pytorch_lightning.strategies import DeepSpeedStrategy
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
+from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import glob
 from torch.utils.data import DataLoader, Dataset as TorchDataset
 import yaml
@@ -21,13 +18,17 @@ import ujson as json
 from datasets import Dataset  # type: ignore
 import torch
 from argparse import ArgumentParser
-from pytorch_lightning import loggers as pl_loggers
-import pytorch_lightning as pl
+from lightning.pytorch import loggers as pl_loggers
+import lightning.pytorch as pl
 import transformers
 from sklearn.metrics import precision_recall_fscore_support
-from pytorch_lightning.strategies import DeepSpeedStrategy
 
-# from pytorch_lightning.plugins.training_type import DeepSpeedPlugin
+from prompt_engineering.predict import parse_args as parse_args_spot_alignment
+from prompt_engineering.predict import load_dataset as load_dataset_spot_alignment
+from prompt_engineering.predict import PromptBuilder, PredictionGenerator
+from prompt_engineering.predict import step as val_step_spot_alignment_inner
+
+# from lightning.pytorch.plugins.training_type import DeepSpeedPlugin
 class PromptEngineeringLM(pl.LightningModule):
     """LightningModule for prompt engineering LM training and evaluation."""
     def __init__(self,
@@ -46,6 +47,11 @@ class PromptEngineeringLM(pl.LightningModule):
 
         self.val_task = val_task
         self.optimizer = kwargs.get('optimizer', 'auto')
+        self.lr = kwargs.get('lr', 1e-6)
+        self.freeze_layers = kwargs.get('freeze_layers', 0)
+
+        # Freeze the first 21 layers
+        self.freeze_layers_fn()
 
         if self.val_task == 'spot_alignment':
 
@@ -67,7 +73,13 @@ class PromptEngineeringLM(pl.LightningModule):
             self.prompt_builder = PromptBuilder(
                 prompt_style, k_shot, ensemble_size, train_dset_records, 'indirectly', self.tokenizer)
             self.prediction_generator = PredictionGenerator(
-                self.model, self.tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method)
+                self.model, self.tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=True)
+
+    def freeze_layers_fn(self):
+        for idx, layer in enumerate(self.model.transformer.h):
+            if idx < self.freeze_layers:
+                for param in layer.parameters():
+                    param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, **kwargs):
         return self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
@@ -102,8 +114,7 @@ class PromptEngineeringLM(pl.LightningModule):
             self.validation_step_outputs.clear()
         else:
             pass
-        
-
+    
     def validation_step_next_token(self, batch, batch_idx):
 
         input_ids = batch['input_ids']
@@ -113,7 +124,6 @@ class PromptEngineeringLM(pl.LightningModule):
             outputs = self(input_ids, attention_mask, labels=input_ids,
                            output_hidden_states=False, output_attentions=False)
         loss = outputs.loss
-
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
 
         return loss
@@ -130,7 +140,8 @@ class PromptEngineeringLM(pl.LightningModule):
 
         return None
 
-    def validation_epoch_end_spot_alignment(self):
+    def validation_epoch_end_spot_alignment(self):          
+        
         outputs = self.validation_step_outputs
 
         preds_agg = sum([d['pred_agg'] for d in outputs], [])
@@ -141,32 +152,32 @@ class PromptEngineeringLM(pl.LightningModule):
         
         acc = accuracy_score(labels, preds_agg)
 
+        self.log('val_loss', acc, on_step=False, on_epoch=True,
+                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+        
+        self.log('val_acc', acc, on_step=False, on_epoch=True,
+                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+        
         self.log('val_f1/pos', f1_yes, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
+                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
         self.log('val_prec/pos', prec_yes, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
+                prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
         self.log('val_rec/pos', recall_yes, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
+                prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
 
         self.log('val_f1/neg', f1_no, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
+                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
         self.log('val_prec/neg', prec_no, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
+                prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
         self.log('val_rec/neg', recall_no, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
-
-        self.log('val_acc', acc, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
-        
-        self.log('val_loss', acc, on_step=False, on_epoch=True,
-                 prog_bar=True, logger=True, sync_dist=True)
+                prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
 
     def configure_optimizers(self):
         # optimal params for Adafactor https://github.com/huggingface/transformers/pull/10526#issuecomment-804652154
 
         if self.optimizer == 'Adafactor':
             optimizer = transformers.Adafactor(self.trainer.model.model.parameters(), scale_parameter=False,
-                                               relative_step=False, warmup_init=False, lr=1e-6,
+                                               relative_step=False, warmup_init=False, lr=self.lr,
                                                weight_decay=0.01)  # works better for bigger models
             lr_scheduler = transformers.get_linear_schedule_with_warmup(optimizer, num_warmup_steps=200,
                                                                         num_training_steps=1000)
@@ -174,17 +185,23 @@ class PromptEngineeringLM(pl.LightningModule):
 
         elif self.optimizer == 'Adam8bit':
             optimizer = bnb.optim.Adam8bit(
-                self.trainer.model.model.parameters(), lr=1e-6, betas=(0.9, 0.995))
+                    self.trainer.model.model.parameters(), 
+                    lr=self.lr, betas=(0.9, 0.995)
+                    )
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
         elif self.optimizer == 'DeepSpeedCPUAdam':
             # crate a Adam optimizer from deepspeed library 
-            optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(self.trainer.model.model.parameters(), lr=1e-6, betas=(0.9, 0.995), fp32_optimizer_states=False)
+            optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(self.trainer.model.model.parameters(),
+                                                             lr=self.lr, betas=(0.9, 0.995),
+                                                             fp32_optimizer_states=False)
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
         elif self.optimizer == 'Adam':
             # crate a Adam optimizer from deepspeed library 
-            optimizer = deepspeed.ops.adam.FusedAdam(self.trainer.model.model.parameters(), lr=1e-6, betas=(0.9, 0.995))
+            optimizer = deepspeed.ops.adam.FusedAdam(self.trainer.model.model.parameters(), 
+                                                     lr=self.lr,
+                                                     betas=(0.9, 0.995))
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
         else:
@@ -215,7 +232,7 @@ class PromptEngineeringLM(pl.LightningModule):
             auto_insert_metric_name=True,
             save_weights_only=True,
             save_top_k=1))
-        callbacks.append(EarlyStopping(monitor="val_loss", patience=10))
+        callbacks.append(EarlyStopping(monitor="val_loss", patience=8))
 
         # setting up strategy
         strategy = config_trainer.strategy
@@ -248,13 +265,6 @@ class PromptEngineeringLM(pl.LightningModule):
                             "device": "cpu",
                             "pin_memory": True
                         },
-                        # "allgather_partitions": True,
-                        # "reduce_bucket_size": 2e8,
-                        # "allgather_bucket_size": 2e8,
-                        # "overlap_comm":True,
-                        # "reduce_scatter": True,
-                        # "contiguous_gradients": True,
-                        # "stage3_gather_16bit_weights_on_model_save": False,
 
                         "overlap_comm": True,
                         "contiguous_gradients": True,
@@ -264,7 +274,7 @@ class PromptEngineeringLM(pl.LightningModule):
                         "stage3_param_persistence_threshold": "auto",
                         "stage3_max_live_parameters": 1e9,
                         "stage3_max_reuse_distance": 1e9,
-                        "stage3_gather_16bit_weights_on_model_save": True
+                        "stage3_gather_16bit_weights_on_model_save": False
                     }
                 }
         strategy = DeepSpeedStrategy(config=ds_config)
@@ -272,22 +282,7 @@ class PromptEngineeringLM(pl.LightningModule):
         # Create trainer
         trainer = pl.Trainer(
             strategy=strategy,
-            # plugins = DeepSpeedPlugin(
-            #                 # zero_optimization=True,
-            #                 stage=3,
-            #                 cpu_offload=True,
-            #                 cpu_offload_params=True,
-            #                 cpu_offload_use_pin_memory=False,
-            #                 stage3_gather_fp16_weights_on_model_save=false
 
-            #                 config={
-            #                     "deepspeed": {
-            #                         "checkpoint": {
-            #                             "save_optimizer_state": False
-            #                         }
-            #                     }
-            #                 }
-            #             ),
             accelerator=config_trainer.accelerator,
             devices=config_trainer.devices,
 
@@ -298,15 +293,16 @@ class PromptEngineeringLM(pl.LightningModule):
             logger=pl_loggers.TensorBoardLogger(
                 save_dir=config_trainer.dir_ckpt),
             
-            precision= '16-mixed',
+            # precision= '16-mixed',
+            precision= 'bf16',
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
             max_epochs=2 if config_trainer.debugging else config_trainer.max_epochs,
-            num_sanity_val_steps=2,
+            num_sanity_val_steps=4,
             
             limit_train_batches=2 if config_trainer.debugging else None,
-            limit_val_batches=2 if config_trainer.debugging else None,
-            log_every_n_steps=1 if config_trainer.debugging else 50,
+            limit_val_batches=1 if config_trainer.debugging else None,
+            log_every_n_steps=1 if config_trainer.debugging else 10,
             val_check_interval=config_trainer.val_check_interval
             )
 
@@ -316,6 +312,7 @@ class PromptEngineeringLM(pl.LightningModule):
         trainer.fit(lightning_module, data_module)
 
         # Saving configs relating to experiment
+        os.makedirs(trainer.checkpoint_callback.dirpath, exist_ok=True)
         yaml.dump(vars(config_trainer), open(os.path.join(
             trainer.checkpoint_callback.dirpath, 'config_trainer.yaml'), 'w'))  # type: ignore
         yaml.dump(vars(config_data), open(os.path.join(
@@ -337,9 +334,7 @@ class PromptEngineeringLM(pl.LightningModule):
 
             # Clear Trash Bin on linux computer
             os.system('rm -rf ~/.local/share/Trash/*')
-        
-
-
+    
     @staticmethod
     def test_model(config_trainer, config_data, config_model=None):
         """Test model on test set"""
@@ -420,8 +415,8 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--exp_name', type=str, default='debug')
         parser.add_argument('--nn_name', type=str,
                             default='EleutherAI/gpt-j-6B')
+        parser.add_argument('--freeze_layers',type=int, default=0)
 
-        # parser.add_argument('--dir_ckpt', type=str, required=True)
         parser.add_argument(
             '--dir_ckpt', type=str, default='prompt_engineering/finetune/ckpt', required=True)
 
@@ -430,12 +425,14 @@ class PromptEngineeringLM(pl.LightningModule):
                                      'deepspeed_stage_3', 'deepspeed_stage_3_offload'])
 
         parser.add_argument('--optimizer', type=str,
-                            choices=['Adafactor', 'OneBitAdam', 'DeepSpeedCPUAdam', 'Adam8bit', 'Adam', 'Adamw' ,'ZeroOneAdam'], default='Adafactor')
-        parser.add_argument('--accelerator', type=str, default='gpu')
+                            choices=['Adafactor', 'OneBitAdam', 'DeepSpeedCPUAdam', 'Adam8bit', 'Adam', 'Adamw' ,'ZeroOneAdam'], 
+                            default='Adafactor')
+        parser.add_argument('--lr', type=float, default=1e-5)
+        parser.add_argument('--accelerator', type=str, default='auto')
         parser.add_argument('--devices', type=int, default=1)
         parser.add_argument('--accumulate_grad_batches', type=int, default=1)
 
-        parser.add_argument('--max_epochs', type=int, default=50)
+        parser.add_argument('--max_epochs', type=int, default=100)
         parser.add_argument('--val_check_interval', type=int,  default=1.0)
 
         # let user pass in a multiple values for a argument called early_stopping_metrics
@@ -472,7 +469,7 @@ class DataModule(pl.LightningDataModule):
         # dataset = dataset.to_iterable_dataset(num_shards=self.num_workers*2)
         dataloader = DataLoader(dataset, batch_size=self.batch_size,
                                 shuffle=True, num_workers=self.num_workers, 
-                                pin_memory=False
+                                pin_memory=False, drop_last=False
                                 )
         return dataloader
 
@@ -512,20 +509,16 @@ class DataModule(pl.LightningDataModule):
     def parse_args(parent_parser=None):
         parser = ArgumentParser(parents=[parent_parser] if parent_parser else None, add_help=True, allow_abbrev=False)
 
-        # parser = subparsers.add_parser('data', add_help=True, allow_abbrev=False)
-
-        parser.add_argument('--nn_name', type=str,
-                            default='EleutherAI/gpt-j-6B')
-        parser.add_argument('--dir_data', type=str,
-                            default='./datasets/finetune/preprocessed/')
+        
+        parser.add_argument('--nn_name', type=str, default='EleutherAI/gpt-j-6B')
+        parser.add_argument('--dir_data', type=str, default='./data/finetune/preprocessed/')
 
         parser.add_argument('--num_workers', type=int, default=0)
 
         parser.add_argument('--batch_size', type=int, default=1)
         parser.add_argument('--batch_size_inf', type=int, default=2)
 
-        parser.add_argument(
-            '--val_task', type=str, choices=['next_token', 'spot_alignment'], default='next_token')
+        parser.add_argument('--val_task', type=str, choices=['next_token', 'spot_alignment'], default='next_token')
 
         args = parser.parse_known_args()[0]
         return args

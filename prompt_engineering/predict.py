@@ -38,6 +38,8 @@ def main(
         aggregation_method='majority_vote',
         parse_output_method='rule_based',
         directly_or_indirectly='directly',
+
+        remove_public_health:bool=False,
         
         model=None,
         tokenizer=None,
@@ -62,7 +64,7 @@ def main(
     tokenizer.padding_side = 'left'
     
     # Load Dataset
-    train_dset, test_dset = load_dataset(dset_name)
+    train_dset, test_dset = load_dataset(dset_name, remove_public_health=remove_public_health)
     test_dset = test_dset if not debugging else test_dset[:5]
 
     train_dset_records = train_dset.to_dict('records')
@@ -73,7 +75,7 @@ def main(
 
     # Create Prompt Builder
     prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, directly_or_indirectly,  tokenizer )
-    prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method)
+    prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=False)
 
     # Creating Predictions for each row in the test set
 
@@ -103,12 +105,14 @@ def main(
         # Save CSV with predictions
         parent_dir = "./prompt_engineering/output/"
         exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, 
-                                   dset_name, aggregation_method, parse_output_method, directly_or_indirectly)
+                                   dset_name, aggregation_method, parse_output_method, directly_or_indirectly,
+                                   remove_public_health)
         os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
         test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
         
         experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
-                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'directly_or_indirectly':directly_or_indirectly }
+                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'directly_or_indirectly':directly_or_indirectly,
+                                 'remove_public_health':remove_public_health }
         # Save experiment config as a yaml file
         yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
     
@@ -279,8 +283,8 @@ class PromptBuilder():
                     neg_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='No'], math.floor(self.k_shot/2) )
                     
                     # Creating the open ended answer version of the examples
-                    pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator']) for  d in pos_examples_sample ]
-                    neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator']) for d in neg_examples_sample ]
+                    pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], directly_or_indirectly=self.directly_or_indirectly) for  d in pos_examples_sample ]
+                    neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], directly_or_indirectly=self.directly_or_indirectly) for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
                     li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
@@ -307,18 +311,19 @@ class PromptBuilder():
 class PredictionGenerator():
     def __init__(self, model, tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast, prompt_style:str, ensemble_size:int,
                   aggregation_method:str='majority_vote', parse_output_method:str='rule_based',
-                    device=None ):
+                    device=None, deepspeed_compat:bool=False ):
         
         self.prompt_style = prompt_style
         self.ensemble_size = ensemble_size
         self.parse_output_method = parse_output_method
-
+        self.deepspeed_compat = deepspeed_compat
         self.model = model
         
         if (device is not None) and getattr(model, "is_loaded_in_8bit", False) is False:
             self.model = self.model.to(device)
 
-        self.model.eval()
+        if (device is not None):
+            self.model.eval()
 
         self.tokenizer = tokenizer
         
@@ -359,7 +364,7 @@ class PredictionGenerator():
             eos_token_ids =  [self.tokenizer.eos_token_id] + [ self.tokenizer(text).input_ids[-1] for text in ['.',' .']]
             suppress_tokens = [ self.tokenizer(text).input_ids[-1] for text in ['\n','\n\n','Question','Answer'] ]
 
-            gen_config = GenerationConfig(max_new_tokens = 30,
+            gen_config = GenerationConfig(max_new_tokens = 20,
                                            min_new_tokens = 1,
                                            early_stopping=True,
                                            temperature=0.7,
@@ -501,7 +506,7 @@ class PredictionGenerator():
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
         # Get the perplexity of each of the filled templates
-        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.model, self.tokenizer, batch_size=6 ) 
+        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.model, self.tokenizer, batch_size=6, deepspeed_compat = self.deepspeed_compat ) 
 
         # For each set of filltemplates get the index of the answer with the lowest perplexity
         li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
@@ -526,11 +531,11 @@ class PredictionGenerator():
         return li_predictions
 
 
-def load_dataset(dset_name:str, random_state_seed:int=10) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_dataset(dset_name:str, random_state_seed:int=10, **kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
     
     if dset_name == 'spot':
         # Load spot dataset as pandas dataframe
-        dset = pd.read_csv('./datasets/spot/spot_indicator_mapping_table.csv')
+        dset = pd.read_csv('./data/spot/spot_indicator_mapping_table.csv')
         
         # Remove all rows where 'type' is not 'Outcome'
         dset = dset[dset['type'] == 'Outcome']
@@ -544,6 +549,14 @@ def load_dataset(dset_name:str, random_state_seed:int=10) -> tuple[pd.DataFrame,
         # Create negative examples
         random_state = np.random.RandomState(random_state_seed)
 
+        # remove all rows from dset that have value 'Public Health' for budget_item
+        if kwargs.get('remove_public_health', False):
+            dset = dset[ dset['budget_item'] != 'Public Health' ]
+        
+        # To vauge a budget item and there are only 4 examples of it, we remove it
+        dset = dset[ dset['budget_item'] != 'Central' ]
+
+        # create negative examples
         dset = utils_prompteng.create_negative_examples(dset, random_state=random_state )
 
         # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
@@ -569,16 +582,18 @@ def experiment_name(
         dset_name:str,
         aggregation_method:str,
         parse_output_method:str,
-        directly_or_indirectly:str
+        directly_or_indirectly:str,
+        remove_public_health:bool
 ):
-    name = f"{dset_name}_{nn_name.replace('/','_')}"
-    name += f"_FT" if finetuned else ""
+    name = f"{dset_name}/{nn_name.replace('/','_')}/"
+    name += "_FT" if finetuned else ""
     name += f"_PS{''.join([s[0] for s in prompt_style.split('_')])}"
     name += f"_K{k_shot}" if k_shot > 0 else ""
     name += f"_ES{ensemble_size}" if ensemble_size > 1 else ""
     name += f"_AG{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
     name += f"_PO{ ''.join( [s[0] for s in parse_output_method.split('_')]) }"
     name += f"_DI{directly_or_indirectly[0]}"
+    name += "_RPH" if remove_public_health else ""
     return name
 
 def step(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
@@ -611,6 +626,9 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=1 )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
+
+    # Spot dataset specific arguments
+    parser.add_argument('--remove_public_health', action='store_true', default=False, help='Indicates whether the public health budget item should be removed from the dataset' )
 
     args = parser.parse_known_args()[0]
 

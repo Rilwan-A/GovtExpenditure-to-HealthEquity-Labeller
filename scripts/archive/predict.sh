@@ -23,7 +23,7 @@ export CUDA_VISIBLE_DEVICES=$1
 # python3 ./prompt_engineering/predict.py --nn_name EleutherAI/gpt-j-6B --dset_name 'spot' \
 #     --prompt_style 'yes_no' --parse_output_method 'rule_based' \
 #     --k_shot "3" --ensemble_size "3" --aggregation_method 'majority_vote' \
-#     --batch_size "1" &&
+#     --batch_size "1" && 
 
 # # Yes / No output variants with Language Model Output Parsing (perplexity style) to convert output to Yes/No/Nan
 # python3 ./prompt_engineering/predict.py --nn_name EleutherAI/gpt-j-6B --dset_name 'spot' \

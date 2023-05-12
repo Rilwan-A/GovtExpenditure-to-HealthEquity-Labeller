@@ -30,25 +30,26 @@ class OpenAICompletion():
         li_responses = []
 
         # batch_size = min( int(token_limit_per_minute / (self.max_tokens * 30) ), 20 )
-        batch_size = 1
-
+        
         start_time = time.time()
 
-        for idx in tqdm(range(0, len(li_prompts), batch_size )):
+        for idx in tqdm(range(0, len(li_prompts) )):
             
             if idx % 150 == 0:
                 time.sleep( 20 )
             else:
                 time.sleep(  2.3 )
             
-            batch_responses = self.get_completions( li_prompts[idx:idx+batch_size] )
+            batch_responses = self.get_completion( li_prompts[idx:idx+1] )
             
             li_responses.extend( batch_responses )
 
         return li_responses 
 
 
-    def get_completions( self, li_prompts:List[str]  ) -> List[str]:
+    def get_completion( self, li_prompts:List[str]  ) -> List[str]:
+        
+        assert len(li_prompts) == 1, "Only one prompt is supported at a time."
 
         suceeded = False
         while suceeded == False:
@@ -56,7 +57,8 @@ class OpenAICompletion():
             try:
                 response = openai.ChatCompletion.create(
                     model = self.openai_model,
-                    messages = [{'role':'system', 'content':self.system_start} ] + [ {'role':'user', 'content': prompt } for prompt in li_prompts] ,
+                    messages = [{'role':'system', 'content':self.system_start} ] + \
+                                 [ {'role':'user', 'content': prompt } for prompt in li_prompts] ,
                     max_tokens = self.max_tokens,
                     temperature = self.temperature
                 )
