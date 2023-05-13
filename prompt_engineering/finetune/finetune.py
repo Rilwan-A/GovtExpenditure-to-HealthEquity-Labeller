@@ -23,10 +23,10 @@ import lightning.pytorch as pl
 import transformers
 from sklearn.metrics import precision_recall_fscore_support
 
-from prompt_engineering.predict import parse_args as parse_args_spot_alignment
-from prompt_engineering.predict import load_dataset as load_dataset_spot_alignment
-from prompt_engineering.predict import PromptBuilder, PredictionGenerator
-from prompt_engineering.predict import step as val_step_spot_alignment_inner
+from prompt_engineering.huggingface.predict import parse_args as parse_args_spot_alignment
+from prompt_engineering.huggingface.predict import load_dataset as load_dataset_spot_alignment
+from prompt_engineering.huggingface.predict import PromptBuilder, PredictionGenerator
+from prompt_engineering.huggingface.predict import step as val_step_spot_alignment_inner
 
 # from lightning.pytorch.plugins.training_type import DeepSpeedPlugin
 class PromptEngineeringLM(pl.LightningModule):
