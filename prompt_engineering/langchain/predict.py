@@ -6,14 +6,12 @@
 
 import os,sys
 # This experiment produces predictions for a given test set
-import torch
-import os, sys
+
 ## Add path to parent directory to sys.path
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.getcwd())
 import math
-import transformers
-from transformers import GenerationConfig
+
 from argparse import ArgumentParser
 
 import pandas as pd
@@ -29,15 +27,40 @@ from functools import reduce
 import operator
 from collections import Counter
 import ujson as json
-import yaml
 import numpy as np
 
 import langchain
 from langchain import LLMChain, PromptTemplate
+from importlib.lazy import lazy_import
+from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS
 
-from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS, OPENAI_MODELS
+from prompt_engineering.langchain.utils import load_annotated_examples
+# TODO: convert to lazy loading later - check for
+
+# # Lazy imports of modules depending on the model to be used
+# #region chatOpenAI imports
+# ChatOpenAI = lazy_import("langchain.chat_models", "ChatOpenAI")
+# ChatPromptTemplate = lazy_import("langchain.prompts.chat", "ChatPromptTemplate")
+# SystemMessagePromptTemplate = lazy_import("langchain.prompts.chat", "SystemMessagePromptTemplate")
+# AIMessagePromptTemplate = lazy_import("langchain.prompts.chat", "AIMessagePromptTemplate")
+# HumanMessagePromptTemplate = lazy_import("langchain.prompts.chat", "HumanMessagePromptTemplate")
+# AIMessage = lazy_import("langchain.schema", "AIMessage")
+# HumanMessage = lazy_import("langchain.schema", "HumanMessage")
+# SystemMessage = lazy_import("langchain.schema", "SystemMessage")
+# #endregion
+
+#region HuggingFace imports
+# HuggingFaceHub = lazy_import("langchain.llms", "HuggingFaceHub")
+from  langchain.chat_models import ChatOpenAI
+from  langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, AIMessagePromptTemplate, HumanMessagePromptTemplate
+from  langchain.schema import AIMessage, HumanMessage, SystemMessage
+from  langchain.llms import HuggingFaceHub
+
+# endregion
+
+
 from prompt_engineering.utils_prompteng import PromptBuilder
-
+from .utils import PredictionGeneratorRemoteLM
 # NOTE: when edge value is 0/1 then use majority_vote, when edge_value is float use average for aggregation_method
 
 
@@ -46,6 +69,7 @@ def main(
         finetuned:bool,
         prompt_style:str,
         parse_style:str,
+
         ensemble_size:int,
         effect_order:str, 
 
@@ -57,110 +81,68 @@ def main(
         k_shot_example_dset_name_b2i:str = 'spot',
         k_shot_example_dset_name_i2i:str = None,
 
-        api_key:str = None,
-        ):
+        local_or_remote:str='remote',
+        api_key:str = None):
     
-
     # Load LLM
-    llm =  load_llm(lm_name, finetuned)
+    llm =  load_llm(lm_name, finetuned, local_or_remote, api_key)
 
     # Load Annotated Examples to use in K-Shot context for Prompt
     annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budget_item_to_indicator')
     annotated_examples_i2i = None if effect_order != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
 
     # Create Prompt Builder & Prediction Generator
-    
-    prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i, ensemble_size, annotated_examples_b2i,  effect_order )
-    
-    # when modelling second order effects we include indicator to indicator weights
-    prompt_builder_i2i = None if effect_order != '2nd' else PromptBuilder(prompt_style, k_shot_i2i, ensemble_size, annotated_examples_i2i,  effect_order )
+    # when modelling second order effects we include indicator to indicator weights    
+    prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
+                                        ensemble_size, annotated_examples_b2i, 
+                                        effect_order,
+                                        relationship='budget_item_to_indicator')
+    prompt_builder_i2i = None if effect_order != '2nd' else PromptBuilder(prompt_style, k_shot_i2i,
+                                                                           ensemble_size, annotated_examples_i2i, 
+                                                                           effect_order,
+                                                                           relationship='indicator_to_indicator')
 
-
-    # prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, directly_or_indirectly,  tokenizer )
-
-
-    # prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=False)
-
-
-    # Create prediction set
-
-def load_llm( lm_name:str, finetuned:bool):
-    
-
-    if finetuned:
-        assert lm_name in HUGGINGFACE_MODELS, f"Loading of a finetuned model is only available for models provided by HUGGINGFACE_MODELS, this includes {HUGGINGFACE_MODELS}"
-
-        from langchain import HuggingFacePipeline
-        llm = HuggingFacePipeline(lm_name, device='cuda')
-    
+    if local_or_remote == 'remote':
+        prediction_generator = PredictionGeneratorRemoteLM(llm, prompt_style, ensemble_size,
+                                                aggregation_method, parse_output_method, deepspeed_compat=False)
     else:
+        raise NotImplementedError("Local LMs not yet supported")
+
+    # run predictions
+    batch_prompt_ensembles_b2i, batch_pred_ensembles_b2i, batch_pred_ensembles_parsed_b2i, batch_pred_agg_b21 = predict_batches(llm, prompt_builder_b2i, prompt_builder_i2i, prediction_generator, input_csv, parse_style, api_key)
+    if effect_order == '2nd':
+        batch_prompt_ensembles_i2i, batch_pred_ensembles_i2i, batch_pred_ensembles_parsed_i2i, batch_pred_agg_i2i = predict_batches(llm, prompt_builder_b2i, prompt_builder_i2i, prediction_generator, input_csv, parse_style, api_key)
+    
+    # format predictions
+
+    # email to user
+       
+
+def load_llm( lm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str = None, prompt_style:str = 'yes_no'):
+    
+    assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
+    if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
+    
+    # TODO: All models used done on Huggingface Hub
+    # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
+    if local_or_remote == 'local':
+        raise NotImplementedError
+            
+    elif local_or_remote == 'remote':
+        #NOTE: max_tokens is currently dependent on prompt_style, it maybe should be depndent on parse_style
+
         if lm_name in OPENAI_MODELS:
-            from langchain import OpenAIPipeline
-            llm = OpenAIPipeline(lm_name, device='cuda')
-
-        elif lm_name in HUGGINGFACE_MODELS:
-            from langchain import HuggingFacePipeline
-            llm = HuggingFacePipeline(lm_name, device='cuda', load_in_8bit=True)
-    
-    return llm
-
-def load_annotated_examples(k_shot_example_dset_name) -> list[dict]:
-    # Load Annotated Examples to use in K-Shot context for Prompt
-    if k_shot_example_dset_name == 'spot':
-
-    elif k_shot_example_dset_name == 'england':
-        pass
-
-    elif k_shot_example_dset_name == None:
-        annotated_examples = None
-    
-    return annotated_examples
-
-def load_annotated_examples(k_shot_example_dset_name:str, random_state_seed:int=10, relationship_type:str='budget_item_to_indicator') -> list[dict]:
-    
-    if k_shot_example_dset_name == 'spot' and relationship_type == 'budget_item_to_indicator':
-        # Load spot dataset as pandas dataframe
-        dset = pd.read_csv('./data/spot/spot_indicator_mapping_table.csv')
+            
+            llm = ChatOpenAI(
+                model_name=lm_name if not finetuned else f"rilwanade/{lm_name}",
+                openai_api_key=api_key,
+                max_tokens = 5 if prompt_style == 'yes_no' else 100 )            
         
-        # Remove all rows where 'type' is not 'Outcome'
-        dset = dset[dset['type'] == 'Outcome']
-
-        # Creating target field
-        dset['label'] = 'Yes'
-
-        # Rename columns to match the format of the other datasets
-        dset = dset.rename( columns={'category': 'budget_item', 'name':'indicator' } )
-
-        # Create negative examples
-        random_state = np.random.RandomState(random_state_seed)
-
-        # Too vague a budget item and there are only 4 examples of it, we remove it
-        dset = dset[ dset['budget_item'] != 'Central' ]
-
-        # create negative examples
-        dset = utils_prompteng.create_negative_examples(dset, random_state=random_state )
-
-        # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
-        dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
-
-        li_records = dset.to_dict('records')
-    
-    elif k_shot_example_dset_name == 'spot' and relationship_type == 'indicator_to_indicator':
-        logging.log.warning('Currently, there does not exist any annotated examples for indicator to indicator relationships. Therefore we can not use K-Shot templates for indicator to indicator edge determination. This will be added in the future')        
-        li_records = None
-
-    elif k_shot_example_dset_name == 'england':
-        logging.log.warning('Currently, the relationshps for England dataset have not yet been distilled. This will be added in the future')        
-        li_records = None
-    
-    else:
-        raise ValueError('Invalid dset_name: ' + k_shot_example_dset_name)
-
-    return li_records
+        if lm_name in HUGGINGFACE_MODELS:
+            llm = HuggingFaceHub(repo_id=lm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } )
 
 
-def load_data():
-    pass
+    return llm 
 
 def prepare_data():
     pass
@@ -170,6 +152,44 @@ def prepare_prediction_set():
 
 def generate_predictions():
     pass
+
+def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+
+    # Creating Predictions for each row in the test set
+    li_prompt_ensemble = []
+    li_pred_ensemble = []
+    li_pred_ensemble_parsed = []
+    preds_agg = []
+
+    for idx, batch in enumerate(test_dset_records):
+
+        # Create prompts
+        batch_prompt_ensembles = prompt_builder(batch)
+        
+        # Generate predictions
+        batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+
+        # Aggregate ensembles into predictions
+        batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
+
+
+        # Extract predictions from the generated text
+        li_prompt_ensemble.append(batch_prompt_ensembles)  # type: ignore
+        li_pred_ensemble.append( batch_pred_ensembles ) # type: ignore
+        li_pred_ensemble_parsed.append( batch_pred_ensembles_parsed ) # type: ignore
+        preds_agg.append(batch_pred_agg) # type: ignore
+
+
+    # Create prompts
+    batch_prompt_ensembles = prompt_builder(batch)
+    
+    # Generate predictions
+    batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+
+    # Aggregate ensembles into predictions
+    batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
+
+    return batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg
 
 def parse_args():
     
