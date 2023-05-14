@@ -15,16 +15,17 @@ from sklearn.model_selection import train_test_split
 import logging
 import random
 
-# import utils_prompteng
+
 from prompt_engineering import utils_prompteng
-# import utils_prompteng
+from prompt_engineering.utils_prompteng import PromptBuilder
+
 import copy 
-from functools import reduce
-import operator
+
 from collections import Counter
 import ujson as json
 import yaml
 import numpy as np
+
 
 def main(
         nn_name:str,
@@ -37,7 +38,7 @@ def main(
 
         aggregation_method='majority_vote',
         parse_output_method='rule_based',
-        directly_or_indirectly='directly',
+        effect_order='directly',
 
         remove_public_health:bool=False,
         
@@ -72,9 +73,8 @@ def main(
     ## Convert pandas dictionary to list of dictionaries batched together
     test_dset_records = [test_dset_records[i:i+batch_size] for i in range(0, len(test_dset), batch_size)]
 
-
     # Create Prompt Builder
-    prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, directly_or_indirectly,  tokenizer )
+    prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, effect_order )
     prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=False)
 
     # Creating Predictions for each row in the test set
@@ -103,203 +103,18 @@ def main(
         # Save CSV with predictions
         parent_dir = "./prompt_engineering/output/"
         exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, 
-                                   dset_name, aggregation_method, parse_output_method, directly_or_indirectly,
+                                   dset_name, aggregation_method, parse_output_method, effect_order,
                                    remove_public_health)
         os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
         test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
         
         experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
-                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'directly_or_indirectly':directly_or_indirectly,
+                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'effect_order':effect_order,
                                  'remove_public_health':remove_public_health }
         # Save experiment config as a yaml file
         yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
     
     return test_dset
-
-class PromptBuilder():
-    def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
-                 train_dset:list[dict], directly_or_indirectly:str,
-                 tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast ) -> None:
-        
-        assert directly_or_indirectly in ['directly', 'indirectly']
-
-        self.prompt_style = prompt_style
-        self.k_shot = k_shot
-        self.ensemble_size = ensemble_size
-        self.train_dset = train_dset
-        self.tokenizer = tokenizer
-        self.directly_or_indirectly = directly_or_indirectly
-
-    def __call__(self, batch:list[dict]) -> list[list[str]]:
-        
-        # Each element in batch has the same template
-        # First we generate an ensemble of templates to be filled in for each element in the batch
-        if self.prompt_style == 'yes_no':
-            templates = self._yes_no_template()
-        elif self.prompt_style == 'open':
-            templates = self._open_template()
-        elif self.prompt_style == 'ama':
-            templates = self._ama_template()
-        elif self.prompt_style == 'pilestackoverflow_yes_no':
-            templates = self._pilestackoverflow_yes_no_template()
-        elif self.prompt_style == 'pilestackoverflow_open':
-            templates = self._pilestackoverflow_open_template()
-        else:
-            raise ValueError('Invalid prompt_style: ' + self.prompt_style)
-
-        # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
-        if self.prompt_style in ['yes_no', 'pilestackoverflow_yes_no']:
-            li_li_prompts = self.fill_template_yesno(templates, batch)
-        elif self.prompt_style in ['open', 'pilestackoverflow_open']:
-            li_li_prompts = self.fill_template_open(templates, batch)
-        else:
-            li_li_prompts = []
-    
-        return li_li_prompts
-    
-    def _yes_no_template(self) -> list[str]:
-        # We store 10 yes_no prommpts templates in order of quality of prompt
-        # When producing a prompt set with ensemble_size<10 we simply choose the first n prompts templates
-        # For each member of the ensemble we then extend the prompt to have self.k_shots context
-        
-        templates = copy.deepcopy( utils_prompteng.li_prompts_yes_no_template[:self.ensemble_size] )
-        for ens_idx in range(self.ensemble_size):
-            
-            # part of prompt to be filled with information about target
-            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}' ,  indicator='{target_indicator}', directly_or_indirectly=self.directly_or_indirectly ) +"\nAnswer:"
-            
-            # Add k_shot context to prompt
-            for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly ) + f"\nAnswer: {{answer_{k}}}."
-                prompt = context_k + "\n\n"+prompt
-            
-            templates[ens_idx] = prompt
-
-        return templates
-    
-    def _open_template(self) -> list[str]:
-        templates = copy.deepcopy( utils_prompteng.li_prompts_openend_template[:self.ensemble_size] )
-        
-        for ens_idx in range(self.ensemble_size):
-            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', directly_or_indirectly=self.directly_or_indirectly ) + "\nAnswer:"
-
-            # Add k_shot context
-            for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly ) + f"\nAnswer: {{answer_{k}}}."
-                prompt = context_k + "\n\n"+prompt
-            
-            templates[ens_idx] = prompt
-
-        return templates
-
-    def _ama_template(self) -> list[str]:
-        raise NotImplementedError("AMA prompt style not implemented yet. (TODO: Implement AMA prompt style)")
-
-    def _pilestackoverflow_yes_no_template(self) -> list[str]:
-        templates = copy.deepcopy( utils_prompteng.li_prompts_yes_no_template[:self.ensemble_size] )
-        for ens_idx in range(self.ensemble_size):
-            
-            # part of prompt to be filled with information about target
-            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', directly_or_indirectly=self.directly_or_indirectly )
-            prompt = prompt + "\nA:\n\n"
-
-            # Add k_shot context
-            for k in reversed(range(self.k_shot)):
-                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly )
-                context_k = context_k + f"\nA:\n\n{{answer_{k}}}."
-                prompt = context_k + "\n\n\n\n"+prompt
-            
-            templates[ens_idx] = prompt
-        
-        return templates
-
-    def _pilestackoverflow_open_template(self) -> list[str]:
-        templates = copy.deepcopy( utils_prompteng.li_prompts_openend_template[:self.ensemble_size] )
-        
-        for ens_idx in range(self.ensemble_size):
-            
-            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', directly_or_indirectly=self.directly_or_indirectly )
-            prompt = prompt + "\nA:\n\n"
-
-            # Add k_shot context
-            for k in reversed(range(self.k_shot)):
-                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}', directly_or_indirectly=self.directly_or_indirectly )
-                context_k_response = f"\nA:\n\n{{answer_{k}}}."
-
-                context_k = context_k + context_k_response
-                prompt = context_k + "\n\n\n\n"+prompt
-            
-            templates[ens_idx] = prompt
-
-        return templates
-    
-    def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> list[list[str]]:
-        
-        li_li_prompts = []
-        # for each row in batch
-        for row in batch:
-            
-            li_prompts = []
-            prompt = None
-            # for each member of the ensemble (note each ensemble member has a different prompt template)
-            for ens_idx in range(self.ensemble_size):
-                # Fill in the k_shot context with random extracts from dataset
-                ## sample k items from our train set into a format dict for the template
-                format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.train_dset, self.k_shot) ) ], {} ) 
-                    
-
-                ## filling context examples in template and target info
-                prompt = templates[ens_idx].format(
-                    target_budget_item= row['budget_item'], target_indicator=row['indicator'],
-                    **format_dict
-                )
-                li_prompts.append(prompt)
-
-            # Add prompt to list
-            li_li_prompts.append(li_prompts)
-        
-        return li_li_prompts
-
-    def fill_template_open(self, templates:list[str], batch:list[dict])->list[list[str]]:
-        
-        template_responses = copy.deepcopy( utils_prompteng.li_prompts_openend_template_open_response[:self.ensemble_size] )
-        li_li_prompts = []
-        for row in batch:
-            
-            li_prompts = []
-            for ens_idx in range(self.ensemble_size):
-                if self.k_shot > 0:
-                    # Fill in the k_shot context with random extracts from dataset
-                    
-                    # Sample math.ceil(k/2) positive and math.floor(k/2) negative examples
-                    pos_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='Yes'], math.ceil(self.k_shot/2) )
-                    neg_examples_sample = random.sample( [d for d in self.train_dset if d['label']=='No'], math.floor(self.k_shot/2) )
-                    
-                    # Creating the open ended answer version of the examples
-                    pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], directly_or_indirectly=self.directly_or_indirectly) for  d in pos_examples_sample ]
-                    neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], directly_or_indirectly=self.directly_or_indirectly) for d in neg_examples_sample ]
-
-                    # python shuffle two lists in the same order 
-                    li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
-                    random.Random(48).shuffle(li_examples)
-
-                    examples_sample, examples_open_ended_answer = zip(*li_examples)
-
-                    # Creating the format dict for all examples
-                    format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} ) # type: ignore
-                else:
-                    format_dict = {}
-
-                ## filling context examples in template
-                prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'],
-                                                    **format_dict)
-                
-                li_prompts.append(prompt)
-
-            # Add prompt to list
-            li_li_prompts.append(li_prompts)
-        
-        return li_li_prompts
 
 class PredictionGenerator():
     def __init__(self, model, tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast, prompt_style:str, ensemble_size:int,
@@ -575,7 +390,7 @@ def experiment_name(
         dset_name:str,
         aggregation_method:str,
         parse_output_method:str,
-        directly_or_indirectly:str,
+        effect_order:str,
         remove_public_health:bool
 ):
     name = f"{dset_name}/{nn_name.replace('/','_')}/"
@@ -585,7 +400,7 @@ def experiment_name(
     name += f"_ES{ensemble_size}" if ensemble_size > 1 else ""
     name += f"_AG{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
     name += f"_PO{ ''.join( [s[0] for s in parse_output_method.split('_')]) }"
-    name += f"_DI{directly_or_indirectly[0]}"
+    name += f"_EO{effect_order[0]}"
     name += "_RPH" if remove_public_health else ""
     return name
 
@@ -612,7 +427,7 @@ def parse_args():
     parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model_perplexity', 'language_model_generation' ], default='language_model_perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--k_shot', type=int, default=0, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
-    parser.add_argument('--directly_or_indirectly', type=str, default='directly', choices=['directly','indirectly'] )
+    parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary','1st', '2nd'] )
     
     parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote'] )
     parser.add_argument('--dset_name',type=str, default='spot', choices=['spot','england'] )

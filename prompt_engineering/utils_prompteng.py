@@ -60,7 +60,7 @@ map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator
 
 # region indicator to indicator templates
 li_prompts_yes_no_template_i2i = [
-    "Give me a Yes or No answer to the following question about the relatedness of two socio-economic/health indicators, is the level of  \"{indicator1}\" {effect_order} related to the state of \"{indicator2}\"?",
+    "Give me a Yes or No answer to the following question about the relatedness of two socio-economic/health indicators, does the level of  \"{indicator1}\" {effect_order} influence the state of \"{indicator2}\"?",
     
     'Does local government spending on improving the level of \"{indicator1}\" {effect_order} affect the level of \"{indicator2}\" ?, True or False',
     
@@ -75,7 +75,7 @@ li_prompts_parse_yesno_from_answer_i2i = [
     """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
 ]
 li_prompts_openend_template_i2i = [
-    'Is the level of \"{indicator1}\" {effect_order} related to the state of \"{indicator2}\"?',
+    'Does the level of \"{indicator1}\" {effect_order} influence the state of \"{indicator2}\"?',
 
     'Does local government spending on improving the level of \"{indicator1}\" {effect_order} affect the level of \"{indicator2}\"?',
 
@@ -87,7 +87,7 @@ li_prompts_openend_template_i2i = [
 
 ]
 li_prompts_openend_template_open_response_i2i = [
-    {'Yes':'The level of \"{indicator1}\" is {effect_order} related to the state of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_order} related to the state of \"{indicator2}\".'},
+    {'Yes':'The level of \"{indicator1}\" is {effect_order} influential to the state of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_order} influential to the state of \"{indicator2}\".'},
 
     {'Yes':'Local government spending on improving the level of \"{indicator1}\" does {effect_order} affect the level of \"{indicator2}\".', 'No':'Local government spending on improving the level of \"{indicator1}\" does not {effect_order} affect the level of \"{indicator2}\".'},
 
@@ -239,10 +239,11 @@ def perplexity(
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
-                 examples_dset:list[dict], effect_order:str, relationship:str="budgetitem_to_indicator"  ) -> None:
+                 examples_dset:list[dict]=None, effect_order:str="arbitrary", relationship:str="budgetitem_to_indicator"  ) -> None:
         
-        assert effect_order in [ 'arbitrary', '1st', '2nd']
-        assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator']
+        assert effect_order in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"
+        assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
+        assert k_shot <= len(examples_dset), "User can not create a K-shot context with more examples than the number of examples in the dataset"
 
         self.prompt_style = prompt_style
         self.k_shot = k_shot
@@ -298,8 +299,8 @@ class PromptBuilder():
         return li_li_prompts
     
     def _yes_no_template(self) -> list[str]:
-        # We store 10 yes_no prommpts templates in order of quality of prompt
-        # When producing a prompt set with ensemble_size<10 we simply choose the first n prompts templates
+        # We store N yes_no prommpts templates in order of quality of prompt
+        # When producing a prompt set of size M<N we randomly sample 
         # For each member of the ensemble we then extend the prompt to have self.k_shots context
         li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_yes_no_template']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
@@ -307,11 +308,17 @@ class PromptBuilder():
         for ens_idx in range(self.ensemble_size):
             
             # part of prompt to be filled with information about target
-            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_order=self.effect_order_str ).replace('  ',' ') +"\nAnswer:"
-            
+            if self.relationship == 'budgetitem_to_indicator':
+                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_order=self.effect_order_str ).replace('  ',' ') +"\nAnswer: "
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_order=self.effect_order_str ).replace('  ',' ') +"\nAnswer: "
+
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                if self.relationship == 'budgetitem_to_indicator':
+                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                elif self.relationship == 'indicator_to_indicator':
+                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -323,11 +330,18 @@ class PromptBuilder():
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
         
         for ens_idx in range(self.ensemble_size):
-            prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_order=self.effect_order_str ).replace('  ',' ') + "\nAnswer:"
-
+            if self.relationship == 'budgetitem_to_indicator':
+                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_order=self.effect_order_str ).replace('  ',' ') + "\nAnswer: "
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_order=self.effect_order_str ).replace('  ',' ') + "\nAnswer: "
+                
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
-                context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                if self.relationship == 'budgetitem_to_indicator':
+                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                elif self.relationship == 'indicator_to_indicator':
+                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -340,12 +354,18 @@ class PromptBuilder():
         for ens_idx in range(self.ensemble_size):
             
             # part of prompt to be filled with information about target
-            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', effect_order=self.effect_order_str ).replace('  ',' ')
+            if self.relationship == 'budgetitem_to_indicator':
+                prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', effect_order=self.effect_order_str ).replace('  ',' ')
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = templates[ens_idx].format( indicator1=f'{{target_indicator1}}' ,  indicator2=f'{{target_indicator2}}', effect_order=self.effect_order_str ).replace('  ',' ')
             prompt = prompt + "\nA:\n\n"
 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
-                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ')
+                if self.relationship == 'budgetitem_to_indicator':
+                    context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ')
+                elif self.relationship == 'indicator_to_indicator':
+                    context_k = "Q:\n\n"+templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ')
                 context_k = context_k + f"\nA:\n\n{{answer_{k}}}."
                 prompt = context_k + "\n\n\n\n"+prompt
             
@@ -359,7 +379,10 @@ class PromptBuilder():
         
         for ens_idx in range(self.ensemble_size):
             
-            prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', effect_order=self.effect_order_str ).replace('  ',' ')
+            if self.relationship == 'budgetitem_to_indicator':
+                prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', effect_order=self.effect_order_str ).replace('  ',' ')
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = templates[ens_idx].format( indicator1=f'{{target_indicator1}}' ,  indicator2=f'{{target_indicator2}}', effect_order=self.effect_order_str ).replace('  ',' ')
             prompt = prompt + "\nA:\n\n"
 
             # Add k_shot context
@@ -386,14 +409,23 @@ class PromptBuilder():
             for ens_idx in range(self.ensemble_size):
                 # Fill in the k_shot context with random extracts from dataset
                 ## sample k items from our train set into a format dict for the template
-                format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
+                if self.relationship == 'budgetitem_to_indicator':
+                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
+                elif self.relationship == 'indicator_to_indicator':
+                    format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
                     
 
                 ## filling context examples in template and target info
-                prompt = templates[ens_idx].format(
-                    target_budget_item= row['budget_item'], target_indicator=row['indicator'],
-                    **format_dict
-                )
+                if self.relationship == 'budgetitem_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                        **format_dict
+                    )
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                        **format_dict
+                    )
                 li_prompts.append(prompt)
 
             # Add prompt to list
@@ -402,8 +434,9 @@ class PromptBuilder():
         return li_li_prompts
 
     def fill_template_open(self, templates:list[str], batch:list[dict])->list[list[str]]:
-        
-        template_responses = copy.deepcopy( li_prompts_openend_template_open_response[:self.ensemble_size] )
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template_open_response']
+        template_responses = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
+
         li_li_prompts = []
         for row in batch:
             
@@ -417,8 +450,12 @@ class PromptBuilder():
                     neg_examples_sample = random.sample( [d for d in self.examples_dset if d['label']=='No'], math.floor(self.k_shot/2) )
                     
                     # Creating the open ended answer version of the examples
-                    pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_order=self.effect_order_str) for  d in pos_examples_sample ]
-                    neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_order=self.effect_order_str) for d in neg_examples_sample ]
+                    if self.relationship == 'budgetitem_to_indicator':
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_order=self.effect_order_str) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_order=self.effect_order_str) for d in neg_examples_sample ]
+                    elif self.relationship == 'indicator_to_indicator':
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_order=self.effect_order_str) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_order=self.effect_order_str) for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
                     li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
@@ -427,12 +464,19 @@ class PromptBuilder():
                     examples_sample, examples_open_ended_answer = zip(*li_examples)
 
                     # Creating the format dict for all examples
-                    format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} ) # type: ignore
+                    if self.relationship == 'budgetitem_to_indicator':
+                        format_dict =  reduce(operator.ior, ( { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} ) # type: ignore
+                    elif self.relationship == 'indicator_to_indicator':
+                        format_dict =  reduce(operator.ior, ( { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}": answer } for idx, (d, answer) in  enumerate( zip( examples_sample, examples_open_ended_answer ) ) ), {} )
                 else:
                     format_dict = {}
 
                 ## filling context examples in template
-                prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                if self.relationship == 'budgetitem_to_indicator':
+                    prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                                                    **format_dict).replace('  ',' ')
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt =  templates[ens_idx].format(target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
                                                     **format_dict).replace('  ',' ')
                 
                 li_prompts.append(prompt)
