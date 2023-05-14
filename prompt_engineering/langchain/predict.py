@@ -32,7 +32,12 @@ import ujson as json
 import yaml
 import numpy as np
 
-from .utils import HUGGINGFACE_MODELS
+import langchain
+from langchain import LLMChain, PromptTemplate
+
+from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS, OPENAI_MODELS
+from prompt_engineering.utils_prompteng import PromptBuilder
+
 # NOTE: when edge value is 0/1 then use majority_vote, when edge_value is float use average for aggregation_method
 
 
@@ -41,31 +46,118 @@ def main(
         finetuned:bool,
         prompt_style:str,
         parse_style:str,
-        k_shot:int,
         ensemble_size:int,
         effect_order:str, 
 
         input_csv:str,
+
+        k_shot_b2i:int=2,
+        k_shot_i2i:int=0,
+
+        k_shot_example_dset_name_b2i:str = 'spot',
+        k_shot_example_dset_name_i2i:str = None,
+
+        api_key:str = None,
         ):
     
 
+    # Load LLM
+    llm =  load_llm(lm_name, finetuned)
+
+    # Load Annotated Examples to use in K-Shot context for Prompt
+    annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budget_item_to_indicator')
+    annotated_examples_i2i = None if effect_order != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
+
     # Create Prompt Builder & Prediction Generator
+    
+    prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i, ensemble_size, annotated_examples_b2i,  effect_order )
+    
+    # when modelling second order effects we include indicator to indicator weights
+    prompt_builder_i2i = None if effect_order != '2nd' else PromptBuilder(prompt_style, k_shot_i2i, ensemble_size, annotated_examples_i2i,  effect_order )
+
+
     # prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, directly_or_indirectly,  tokenizer )
+
+
     # prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=False)
+
 
     # Create prediction set
 
-def load_model( lm_name:str, finetuned:bool):
+def load_llm( lm_name:str, finetuned:bool):
     
 
     if finetuned:
         assert lm_name in HUGGINGFACE_MODELS, f"Loading of a finetuned model is only available for models provided by HUGGINGFACE_MODELS, this includes {HUGGINGFACE_MODELS}"
 
-        model = transformers.AutoModelForCausalLM.from_pretrained( nn_name, load_in_8bit=True, device_map="auto")
-        tokenizer = transformers.AutoTokenizer.from_pretrained(nn_name)
-        tokenizer.pad_token = tokenizer.eos_token
+        from langchain import HuggingFacePipeline
+        llm = HuggingFacePipeline(lm_name, device='cuda')
     
-    pass
+    else:
+        if lm_name in OPENAI_MODELS:
+            from langchain import OpenAIPipeline
+            llm = OpenAIPipeline(lm_name, device='cuda')
+
+        elif lm_name in HUGGINGFACE_MODELS:
+            from langchain import HuggingFacePipeline
+            llm = HuggingFacePipeline(lm_name, device='cuda', load_in_8bit=True)
+    
+    return llm
+
+def load_annotated_examples(k_shot_example_dset_name) -> list[dict]:
+    # Load Annotated Examples to use in K-Shot context for Prompt
+    if k_shot_example_dset_name == 'spot':
+
+    elif k_shot_example_dset_name == 'england':
+        pass
+
+    elif k_shot_example_dset_name == None:
+        annotated_examples = None
+    
+    return annotated_examples
+
+def load_annotated_examples(k_shot_example_dset_name:str, random_state_seed:int=10, relationship_type:str='budget_item_to_indicator') -> list[dict]:
+    
+    if k_shot_example_dset_name == 'spot' and relationship_type == 'budget_item_to_indicator':
+        # Load spot dataset as pandas dataframe
+        dset = pd.read_csv('./data/spot/spot_indicator_mapping_table.csv')
+        
+        # Remove all rows where 'type' is not 'Outcome'
+        dset = dset[dset['type'] == 'Outcome']
+
+        # Creating target field
+        dset['label'] = 'Yes'
+
+        # Rename columns to match the format of the other datasets
+        dset = dset.rename( columns={'category': 'budget_item', 'name':'indicator' } )
+
+        # Create negative examples
+        random_state = np.random.RandomState(random_state_seed)
+
+        # Too vague a budget item and there are only 4 examples of it, we remove it
+        dset = dset[ dset['budget_item'] != 'Central' ]
+
+        # create negative examples
+        dset = utils_prompteng.create_negative_examples(dset, random_state=random_state )
+
+        # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
+        dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
+
+        li_records = dset.to_dict('records')
+    
+    elif k_shot_example_dset_name == 'spot' and relationship_type == 'indicator_to_indicator':
+        logging.log.warning('Currently, there does not exist any annotated examples for indicator to indicator relationships. Therefore we can not use K-Shot templates for indicator to indicator edge determination. This will be added in the future')        
+        li_records = None
+
+    elif k_shot_example_dset_name == 'england':
+        logging.log.warning('Currently, the relationshps for England dataset have not yet been distilled. This will be added in the future')        
+        li_records = None
+    
+    else:
+        raise ValueError('Invalid dset_name: ' + k_shot_example_dset_name)
+
+    return li_records
+
 
 def load_data():
     pass
