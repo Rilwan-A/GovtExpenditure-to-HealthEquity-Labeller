@@ -26,8 +26,6 @@ import ujson as json
 import yaml
 import numpy as np
 
-
-
 def main(
         nn_name:str,
         prompt_style:str,
@@ -48,13 +46,8 @@ def main(
         
         save_output:bool=True,
         debugging:bool=False):
-    """
-    Parameters:
-    
-    
-    """
-    
-    
+
+        
     # Load Model and Tokenizer
     if not finetuned:
         model = transformers.AutoModelForCausalLM.from_pretrained( nn_name, load_in_8bit=True, device_map="auto")
@@ -85,8 +78,6 @@ def main(
     prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=False)
 
     # Creating Predictions for each row in the test set
-
-
     li_prompt_ensemble = []
     li_pred_ensemble = []
     li_pred_ensemble_parsed = []
@@ -159,10 +150,8 @@ class PromptBuilder():
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
         if self.prompt_style in ['yes_no', 'pilestackoverflow_yes_no']:
             li_li_prompts = self.fill_template_yesno(templates, batch)
-        
         elif self.prompt_style in ['open', 'pilestackoverflow_open']:
             li_li_prompts = self.fill_template_open(templates, batch)
-        
         else:
             li_li_prompts = []
     
@@ -264,8 +253,6 @@ class PromptBuilder():
                     target_budget_item= row['budget_item'], target_indicator=row['indicator'],
                     **format_dict
                 )
-
-                
                 li_prompts.append(prompt)
 
             # Add prompt to list
@@ -276,7 +263,6 @@ class PromptBuilder():
     def fill_template_open(self, templates:list[str], batch:list[dict])->list[list[str]]:
         
         template_responses = copy.deepcopy( utils_prompteng.li_prompts_openend_template_open_response[:self.ensemble_size] )
-        
         li_li_prompts = []
         for row in batch:
             
