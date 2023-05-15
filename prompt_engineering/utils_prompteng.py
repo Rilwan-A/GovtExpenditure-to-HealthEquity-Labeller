@@ -112,7 +112,7 @@ map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_p
 # region SystemMessage
 system_prompt_b2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide a nuanced perspective on the possible connections between these two elements.'
 system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide a nuanced perspective on the possible connections between these two elements. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
-map_system_prompt = {
+map_relationship_system_prompt = {
     'budgetitem_to_indicator':system_prompt_b2i,
     'indicator_to_indicator':system_prompt_i2i
 }
@@ -256,7 +256,7 @@ def perplexity(
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
-                 examples_dset:list[dict]=None, effect_order:str="arbitrary", 
+                 examples_dset:list[dict]|None=None, effect_order:str="arbitrary", 
                  relationship:str="budgetitem_to_indicator"  ) -> None:
         
         assert effect_order in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"

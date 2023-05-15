@@ -25,7 +25,7 @@ import copy
 from functools import reduce
 import operator
 from collections import Counter
-import ujson as json
+import json as json
 import numpy as np
 
 import langchain
@@ -56,7 +56,7 @@ from  langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain import HuggingFacePipeline
 
 import yaml
-
+import openai
 from prompt_engineering.utils_prompteng import PromptBuilder
 from .utils import PredictionGenerator
 
@@ -83,10 +83,10 @@ def main(
         k_shot_i2i:int=0,
 
         k_shot_example_dset_name_b2i:str = 'spot',
-        k_shot_example_dset_name_i2i:str = None,
+        k_shot_example_dset_name_i2i:str|None = None,
 
         local_or_remote:str='remote',
-        api_key:str = None,
+        api_key:str|None = None,
 
         batch_size:int=1,
 
@@ -135,10 +135,10 @@ def main(
     
 
     # run predictions
-    li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i = predict_batches(llm, prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i, parse_style)
+    li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i) # type: ignore #ignore
     
     
-    li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i = (None, None, None, None) if effect_order != '2nd' else predict_batches(llm, prompt_builder_i2i, prediction_generator_i2i, li_li_record_b2i, parse_style)
+    li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i = (None, None, None, None) if li_li_record_i2i is not None else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_li_record_i2i) #type: ignore 
     
     # saving to file
     if save_output:
@@ -162,25 +162,29 @@ def main(
         # Save experiment config
         os.makedirs(os.path.join('.prompt_engineering','experiments' ), exist_ok=True )
 
-        experiment_number = [int(x.split('_')[-1]) for x in os.listdir(os.path.join('.prompt_engineering','experiments' )) if x.startswith('exp_') ]
+        existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(os.path.join('.prompt_engineering','experiments' )) if x.startswith('exp_') ]
+        lowest_available_number = min(set(range(1000)) - set(existing_numbers))
+        experiment_number = lowest_available_number
+
         os.makedirs(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}" ), exist_ok=True )
         
         with open(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'config.json'), 'w') as f:
             yaml.safe_dump(experiment_config, f)
             
-        save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i, relationship='budget_item_to_indicator')
-        save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator')
+        save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budget_item_to_indicator') #type: ignore
+        
+        if effect_order is not None: 
+            save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator') #type: ignore #ignore
         
 
     return 
        
-
-def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str = None, prompt_style:str = 'yes_no'):
+def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str|None = None, prompt_style:str = 'yes_no'):
     
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
     if local_or_remote == 'local': assert llm_name not in OPENAI_MODELS, f"llm_name must be a HuggingFace model if local_or_remote is 'local'" 
-    
+    assert llm_name in ALL_MODELS, f"llm_name must be a valid model name, not {llm_name}"
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
@@ -214,43 +218,50 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
         if llm_name in OPENAI_MODELS:
             
             llm = ChatOpenAI(
-                model_name=llm_name if not finetuned else f"rilwanade/{llm_name}",
+                client=openai.ChatCompletion,
+                model_name=llm_name,
                 openai_api_key=api_key,
-                max_tokens = 5 if prompt_style == 'yes_no' else 50 )            
+                max_tokens = 5 if prompt_style == 'yes_no' else 50 )    #ignore: type        
         
-        if llm_name in HUGGINGFACE_MODELS:
-            llm = HuggingFaceHub(repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } )
+        elif llm_name in HUGGINGFACE_MODELS:
+            llm = HuggingFaceHub(
+                    repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } ) #type: ignore
+        else:
+            raise NotImplementedError(f"llm_name {llm_name} is not implemented for remote use")
 
+    else:
+        llm = None
 
     return llm 
 
-
-def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary', batch_size=2 ):
+def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary', batch_size=2 ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
     """
         Loads the data from the input_json and returns a list of lists of dicts
     """
 
     # Check json is valid
     expected_keys = ['budget_items','indicators']
-    with open(input_json, 'r') as f:
-        json_data = json.load(f)
-        assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
+    
+    
+    json_data = json.load( open(input_json, 'r') if isinstance(input_json, str) else input_json )
+    assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
                 
     li_budget_items = json_data['budget_items']
     li_indicators = json_data['indicators']
 
     # Add budget_item to indicator combinations
-    li_li_record_b2i = [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicators ] for budget_item in li_budget_items ] 
+    li_li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicators ] for budget_item in li_budget_items ], [] ) 
     li_li_record_b2i = [ li_li_record_b2i[i:i+batch_size] for i in range(0, len(li_li_record_b2i), batch_size) ]
 
     # if effect_order == 2nd Add indicator to indicator combinations
+    li_li_record_i2i = None
     if effect_order == '2nd':
-        li_li_record_i2i = [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicators ] for indicator in li_indicators ] 
+        li_li_record_i2i = sum( [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicators ] for indicator in li_indicators ] , [] )
         li_li_record_i2i = [ li_li_record_i2i[i:i+batch_size] for i in range(0, len(li_li_record_i2i), batch_size) ]
 
     return li_li_record_b2i, li_li_record_i2i
 
-def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, li_li_record:list[list[dict]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, li_li_record:list[list[dict[str,str]]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
@@ -276,22 +287,18 @@ def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:Pr
         li_pred_ensemble_parsed.append( batch_pred_ensembles_parsed ) # type: ignore
         li_pred_agg.append(batch_pred_agg) # type: ignore
 
-    return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble, li_pred_agg
+    return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg
 
 def save_experiment(experiment_number:int, 
-                    li_li_record:list[list[dict]],
+                    li_li_record:list[list[dict[str,str]]],
                     li_prompt_ensemble:list[list[str]],
                     li_pred_ensemble:list[list[str]],
                     li_pred_ensemble_parsed:list[list[str]],
                     li_pred_agg:list[str],
                     relationship:str='budget_item_to_indicator' ):
     
-
-
-
-    
     # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
-    encode = lambda _list: [ json.encode(val) for val in _list]
+    encode = lambda _list: [ json.dumps(val) for val in _list]
     
     li_record =  sum(li_li_record, [])
 
@@ -306,6 +313,8 @@ def save_experiment(experiment_number:int,
                            'indicator_2': [ d['indicator_2'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+    else:
+        raise ValueError("relationship must be one of ['budget_item_to_indicator', 'indicator_to_indicator']")
         
     df.to_csv(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'predictions.csv'), index=False)
 
@@ -314,7 +323,7 @@ def save_experiment(experiment_number:int,
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--llm_name', type=str, default='EleutherAI/gpt-j-6B', choices=ALL_MODELS )
+    parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-instruct', choices=ALL_MODELS )
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
@@ -327,8 +336,8 @@ def parse_args():
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
 
-    parser.add_argument('--k_shot_example_dset_name_b2i', type=str, default='spot', choices=['spot','england'], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
-    parser.add_argument('--k_shot_example_dset_name_i2i', type=str, default='spot', choices=['spot','england'], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_b2i', type=str, default='spot', choices=['spot','england', None], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_i2i', type=str, default=None, choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
 
     parser.add_argument('--local_or_remote', type=str, default='local', choices=['local','remote'], help='Whether to use llms on a remote server or locally' )
     parser.add_argument('--api_key', type=str, default=None, help='The api key for the remote server e.g. HuggingfaceHub or OpenAIapi' )

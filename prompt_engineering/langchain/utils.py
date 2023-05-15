@@ -34,7 +34,7 @@ class PredictionGenerator():
                   deepspeed_compat:bool=False ):
         
         # Can not get model logits scores from ChatOpenAI
-        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'language_model_perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI")
+        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'language_model_perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
         if parse_style == 'language_model_perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
 
         # Restrictions on combinations of parse style and edge value
@@ -51,28 +51,32 @@ class PredictionGenerator():
         self.relationship = relationship
         self.edge_value   = edge_value
         self.local_or_remote = local_or_remote
+        self.deepspeed_compat = deepspeed_compat
 
 
-    def predict(self, li_li_prompts:list[list[str]])->tuple[list[list[str]], list[list[str]]]:
+    def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
         
         # Generate predictions
-        li_li_preds = []
+        li_li_preds : list[list[str]] = []
         for li_prompts in li_li_prompts:
             
-            if isinstance(self.llm, langchain.chat_models.base.BaseChatModel):
+            if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
                 batch_messages = [
                     [ SystemMessage(content=map_relationship_system_prompt[self.relationship]),
                         HumanMessage(content=prompt) ]
                         for prompt in li_prompts]
                 
                 outputs = self.llm.generate(batch_messages)
-                li_preds = [ chatgen.text for chatgen in outputs.generations ]
+                li_preds: list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
-            elif isinstance(self.llm, langchain.llms.base.LLM):
+            elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             
                outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship] + '\n' + prompt for prompt in li_prompts ] )
-               li_preds = [ chatgen.text for chatgen in outputs.generations ]
+               li_preds : list[str] = [ chatgen.text for chatgen in outputs.generations ]
+            
+            else:
+                raise ValueError(f"llm type {type(self.llm)} not recognized")
 
             li_li_preds.append(li_preds)
 
@@ -92,32 +96,32 @@ class PredictionGenerator():
 
         return li_li_preds, li_li_preds_parsed
 
-    def parse_yesno_with_rules(self, li_predictions:list[str])->list[dict]:
+    def parse_yesno_with_rules(self, li_predictions:list[str]) -> list[dict[str,float]] :
         
-        li_preds = ['NA']*len(li_predictions)
+        li_preds = [{}]*len(li_predictions)
 
         # Parse yes/no from falsetrue
-        for idx in range(len(li_predictions)):
+        for idx, prediction in enumerate(li_predictions):
             
-            prediction = li_predictions[idx].lower()
+            prediction = copy.deepcopy(prediction).lower()
 
             if 'yes' in prediction:
-                prediction = {'Yes':1, 'No':0, 'NA':0}
+                prediction = {'Yes':1.0, 'No':0.0, 'NA':0}
             
             elif 'no' in prediction:
-                prediction = {'Yes':0, 'No':1, 'NA':0}
+                prediction = {'Yes':0, 'No':1, 'NA':0.0}
             
             elif any( ( neg_phrase in prediction for neg_phrase in ['not true','false', 'is not', 'not correct', 'does not', 'can not', 'not'])):
-                prediction = {'Yes':0, 'No':1, 'NA':0}
+                prediction = {'Yes':0, 'No':1, 'NA':0.0}
 
             else:
-                prediction = {'Yes':0, 'No':0, 'NA':0 }
+                prediction = {'Yes':0.0, 'No':0, 'NA':0.0 }
         
-            li_preds[idx] = prediction
+            li_preds[idx] = prediction 
                    
-        return li_predictions
+        return li_preds
                
-    def parse_yesno_with_lm_generation(self, li_predictions:list[str])->list[dict]:
+    def parse_yesno_with_lm_generation(self, li_predictions:list[str])-> list[dict[str, float]] :
         
         # Template to prompt language llm to simplify the answer to a Yes/No output
         li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_parse_yesno_from_answer']
@@ -128,28 +132,30 @@ class PredictionGenerator():
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
         
         # Generate prediction
-        if isinstance(self.llm, langchain.chat_models.base.BaseChatModel):
+        if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
             batch_messages = [
                 [ SystemMessage(content=map_relationship_system_prompt[self.relationship] ),
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
             outputs = self.llm.generate(batch_messages)
-            li_preds = [ chatgen.text for chatgen in outputs.generations ]
+            li_preds_str:list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
 
-        elif isinstance(self.llm, langchain.llms.base.LLM):
+        elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
         
             outputs = self.llm.generate( prompts= li_prompts )
-            li_preds = [ chatgen.text for chatgen in outputs.generations ]
+            li_preds_str: list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
+        else:
+            raise ValueError(f"llm type {type(self.llm)} not recognized")
 
         # Parse Yes/No/Na from the prediction
-        li_preds = [ {'Yes':1,'No':0, 'NA':0 } if 'affirm' in pred.lower() else {'Yes':0,'No':1, 'NA':0 } if 'negat' in pred.lower() else {'Yes':0,'No':0, 'NA':1 } for pred in li_preds]
+        li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
 
         return li_preds
     
-    def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->list[str]:
+    def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->  list[dict[str,float]] :
         # Get average perplexity of text when sentence is labelled Negation vs when it is labelled Affirmation.
         # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
         #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
@@ -170,16 +176,16 @@ class PredictionGenerator():
         # return a flattened set of perplexities
         li_perplexity = perplexity(
             li_filledtemplates_with_answers, 
-            self.llm.pipeline.model , 
+            self.llm.pipeline.model, 
             self.llm.pipeline.tokenizer,
             batch_size=6, 
             deepspeed_compat = self.deepspeed_compat ) 
         
-        li_preds = [ {'Yes': li_perplexity[ idx + answers.index('Affirmation') ] , 'No': li_perplexity[ idx + answers.index('Negation') ] , } for idx in range(0,len(li_perplexity),len(answers)) ]
+        li_preds: list[dict[str,float]] = [ {'Yes': li_perplexity[ idx + answers.index('Affirmation') ] , 'No': li_perplexity[ idx + answers.index('Negation') ] , } for idx in range(0,len(li_perplexity),len(answers)) ]
 
         return li_preds
         
-    def aggregate_predictions(self, li_li_predictions:list[list[dict]])->list[int|float|dict]:
+    def aggregate_predictions(self, li_li_predictions:list[list[dict[str,int|float]]] )->  list[float | dict[str,float] ] :
         
         """            
             
@@ -198,10 +204,10 @@ class PredictionGenerator():
         if self.edge_value == 'binary weight':
             
             # For each prediction (list of samples), return 1 if Yes is the model prediction
-            def is_yes_mode(li_dict_pred) -> int:
+            def is_yes_mode(li_dict_pred) -> float:
                 li_argmax_pred = [ max(d, key=d.get) for d in li_dict_pred ]
                 most_common_pred = Counter(li_argmax_pred).most_common(1)[0][0]                
-                return 1 if most_common_pred == 'Yes' else 0
+                return 1.0 if most_common_pred == 'Yes' else 0.0
            
             li_pred_agg = [ is_yes_mode(li_dict_pred) for li_dict_pred in li_li_predictions ]
         
@@ -228,14 +234,15 @@ class PredictionGenerator():
             li_pred_agg = [ distribution(li_dict_pred) for li_dict_pred in li_li_predictions ]
 
         else:
-            raise NotImplementedError(f"Aggregation method {self.aggregation_method} not implemented")
+            raise NotImplementedError(f"Aggregation method {self.edge_value} not implemented")
         
-        return li_pred_agg
+        return li_pred_agg #type: ignore
 
-def load_annotated_examples(k_shot_example_dset_name:str, 
+def load_annotated_examples(k_shot_example_dset_name:str|None, 
                             random_state_seed:int=10, 
-                            relationship_type:str='budget_item_to_indicator') -> list[dict]:
-    
+                            relationship_type:str='budget_item_to_indicator') -> list[dict[str,str]] | None:
+    li_records: list[dict[str,str]] | None = None
+
     if k_shot_example_dset_name == 'spot' and relationship_type == 'budget_item_to_indicator':
         # Load spot dataset as pandas dataframe
         dset = pd.read_csv('./data/spot/spot_indicator_mapping_table.csv')
@@ -261,17 +268,17 @@ def load_annotated_examples(k_shot_example_dset_name:str,
         # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
         dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
 
-        li_records = dset.to_dict('records')
+        li_records = dset.to_dict('records') #type: ignore
     
     elif k_shot_example_dset_name == 'spot' and relationship_type == 'indicator_to_indicator':
-        logging.log.warning('Currently, there does not exist any annotated examples for indicator to indicator relationships. Therefore we can not use K-Shot templates for indicator to indicator edge determination. This will be added in the future')        
+        logging.warning('Currently, there does not exist any annotated examples for indicator to indicator relationships. Therefore we can not use K-Shot templates for indicator to indicator edge determination. This will be added in the future')        
         li_records = None
 
     elif k_shot_example_dset_name == 'england':
-        logging.log.warning('Currently, the relationshps for England dataset have not yet been distilled. This will be added in the future')        
+        logging.warning('Currently, the relationshps for England dataset have not yet been distilled. This will be added in the future')        
         li_records = None
     
     else:
-        raise ValueError('Invalid dset_name: ' + k_shot_example_dset_name)
+        raise ValueError('Invalid dset_name: ' + str(k_shot_example_dset_name))
 
     return li_records
