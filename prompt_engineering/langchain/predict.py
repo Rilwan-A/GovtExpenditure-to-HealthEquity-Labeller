@@ -32,8 +32,9 @@ import numpy as np
 import langchain
 from langchain import LLMChain, PromptTemplate
 from importlib.lazy import lazy_import
-from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS
+from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGeneratorLM
 
+import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
 # TODO: convert to lazy loading later - check for
 
@@ -55,13 +56,17 @@ from  langchain.chat_models import ChatOpenAI
 from  langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, AIMessagePromptTemplate, HumanMessagePromptTemplate
 from  langchain.schema import AIMessage, HumanMessage, SystemMessage
 from  langchain.llms import HuggingFaceHub
-
 # endregion
 
 
 from prompt_engineering.utils_prompteng import PromptBuilder
 from .utils import PredictionGeneratorLM
-# NOTE: when edge value is 0/1 then use majority_vote, when edge_value is float use average for aggregation_method
+
+from django.core.files.uploadedfile import UploadedFile
+# TODO: add functionality for running it locally
+# Make sure things such as perplexity work on local run
+# TODO: Debug local run - set up tests
+# TODO: Debug remote run - for OpenAI GPT and then for HuggingFaceHub
 
 
 def main(
@@ -72,8 +77,9 @@ def main(
 
         ensemble_size:int,
         effect_order:str, 
+        edge_value:str,
 
-        input_csv:str,
+        input_json:str|UploadedFile,
 
         k_shot_b2i:int=2,
         k_shot_i2i:int=0,
@@ -82,7 +88,9 @@ def main(
         k_shot_example_dset_name_i2i:str = None,
 
         local_or_remote:str='remote',
-        api_key:str = None):
+        api_key:str = None,
+
+        deepspeed_compat=False):
     
     # Load LLM
     llm =  load_llm(lm_name, finetuned, local_or_remote, api_key)
@@ -91,31 +99,43 @@ def main(
     annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budget_item_to_indicator')
     annotated_examples_i2i = None if effect_order != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
 
-    # Create Prompt Builder & Prediction Generator
-    # when modelling second order effects we include indicator to indicator weights    
+    # Create Prompt Builders 
+    
     prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_order,
                                         relationship='budget_item_to_indicator')
+    
     prompt_builder_i2i = None if effect_order != '2nd' else PromptBuilder(prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_order,
                                                                            relationship='indicator_to_indicator')
 
-    if local_or_remote == 'remote':
-        prediction_generator = PredictionGeneratorLM(llm, prompt_style, ensemble_size,
-                                                aggregation_method, parse_output_method, deepspeed_compat=False)
-    else:
-        raise NotImplementedError("Local LMs not yet supported")
+    # Create Prediction Generators
+    prediction_generator_b2i = PredictionGeneratorLM(llm, prompt_style, ensemble_size,
+                                                     edge_value,
+                                                     parse_style,
+                                                     relationship='budget_item_to_indicator',
+                                                     deepspeed_compat=deepspeed_compat
+                                                     )
+    prediction_generator_i2i = None if effect_order != '2nd' else PredictionGeneratorLM(llm, prompt_style, ensemble_size,
+                                                     edge_value,
+                                                     parse_style,
+                                                     relationship='indicator_to_indicator',
+                                                     deepspeed_compat=deepspeed_compat
+                                                     )
+        
+    # prepare data
+    li_li_record_b2i, li_li_record_i2i = prepare_data(input_json, effect_order)
+    
 
     # run predictions
-    batch_prompt_ensembles_b2i, batch_pred_ensembles_b2i, batch_pred_ensembles_parsed_b2i, batch_pred_agg_b21 = predict_batches(llm, prompt_builder_b2i, prompt_builder_i2i, prediction_generator, input_csv, parse_style, api_key)
-    if effect_order == '2nd':
-        batch_prompt_ensembles_i2i, batch_pred_ensembles_i2i, batch_pred_ensembles_parsed_i2i, batch_pred_agg_i2i = predict_batches(llm, prompt_builder_b2i, prompt_builder_i2i, prediction_generator, input_csv, parse_style, api_key)
+    batch_prompt_ensembles_b2i, batch_pred_ensembles_b2i, batch_pred_ensembles_parsed_b2i, batch_pred_agg_b21 = predict_batches(llm, prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i, parse_style)
     
-    # format predictions
-
-    # email to user
+    if effect_order == '2nd':
+        batch_prompt_ensembles_i2i, batch_pred_ensembles_i2i, batch_pred_ensembles_parsed_i2i, batch_pred_agg_i2i = predict_batches(llm, prompt_builder_i2i, prediction_generator_i2i, li_li_record_b2i, parse_style)
+    
+    # email responses to requester
        
 
 def load_llm( lm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str = None, prompt_style:str = 'yes_no'):
@@ -144,8 +164,28 @@ def load_llm( lm_name:str, finetuned:bool, local_or_remote:str='remote', api_key
 
     return llm 
 
-def prepare_data():
-    pass
+def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary' ):
+    """
+        Loads the data from the input_json and returns a list of lists of dicts
+    """
+
+    # Check json is valid
+    expected_keys = ['budget_items','indicators']
+    with open(input_json, 'r') as f:
+        json_data = json.load(f)
+        assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
+                
+    li_budget_items = json_data['budget_items']
+    li_indicators = json_data['indicators']
+
+    # Add budget_item to indicator combinations
+    li_li_record_b2i = [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicators ] for budget_item in li_budget_items ] 
+
+    # if effect_order == 2nd Add indicator to indicator combinations
+    if effect_order == '2nd':
+        li_li_record_i2i = [  [ {'indicator':indicator, 'indicator':indicator} for indicator in li_indicators ] for indicator in li_indicators ] 
+
+    return li_li_record_b2i, li_li_record_i2i
 
 def prepare_prediction_set():
     pass
@@ -153,7 +193,7 @@ def prepare_prediction_set():
 def generate_predictions():
     pass
 
-def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGeneratorLM, li_li_record:list[list[dict]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
@@ -161,7 +201,7 @@ def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:Pr
     li_pred_ensemble_parsed = []
     preds_agg = []
 
-    for idx, batch in enumerate(test_dset_records):
+    for idx, batch in enumerate(li_li_record):
 
         # Create prompts
         batch_prompt_ensembles = prompt_builder(batch)
@@ -204,6 +244,7 @@ def parse_args():
     parser.add_argument('--k_shot', type=int, default=2, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
     parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary', '1st', '2nd'], help='The degree of orders which we require from our model' )
+    parser.add_argument('--edge_value', type=str, default='binary weight', choices=['binary weight', 'float_weight', 'distribution'], help='' )
     
 
     parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote', 'aggregate '], help='The method used to aggregate the results of the ensemble.' )
