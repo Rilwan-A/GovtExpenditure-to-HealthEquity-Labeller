@@ -9,6 +9,7 @@ import copy
 from random import sample 
 from functools import reduce
 import operator
+import random
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -35,13 +36,13 @@ li_prompts_openend_template = [
     'Does local government spending on \"{budget_item}\" {effect_order} affects \"{indicator}\"?'
 ]
 li_prompts_openend_template_open_response =[
-    {'Yes':'Local government spending on \"{budget_item}\" is {effect_order} related to \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_order} related to \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" is {effect_order} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_order} related to the state of \"{indicator}\".'},
 
     {'Yes':'Local government spending on \"{budget_item}\" does {effect_order} affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_order} affect \"{indicator}\".'},
 
-    {'Yes':'\"{indicator}\" is {effect_order} related to local government spending on \"{budget_item}\".', 'No':'\"{indicator}\" is not {effect_order} related to local government spending on \"{budget_item}\".'},
+    {'Yes':'The state of \"{indicator}\" is {effect_order} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_order} related to local government spending on \"{budget_item}\".'},
 
-    {'Yes':'Local government spending on \"{budget_item}\" does {effect_order} improve \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_order} improve \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" does {effect_order} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_order} improve the level of \"{indicator}\".'},
 
     {'Yes':'A local government can {effect_order} affect \"{indicator}\" by spending on \"{budget_item}\".', 'No':'A local government can not {effect_order} affect \"{indicator}\" by spending on \"{budget_item}\".'}
 ]
@@ -106,6 +107,22 @@ indicator_to_indicator_prompts = {
     'li_prompts_parse_yesno_from_answer_i2i':li_prompts_parse_yesno_from_answer_i2i
 }
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
+# endregion
+
+# region SystemMessage
+system_prompt_b2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide a nuanced perspective on the possible connections between these two elements.'
+system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide a nuanced perspective on the possible connections between these two elements. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+map_system_prompt = {
+    'budgetitem_to_indicator':system_prompt_b2i,
+    'indicator_to_indicator':system_prompt_i2i
+}
+
+system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a negation or affirmation. The statement will discuss whether or not there is a causal relationship between a government budget item and a socio-economic/health indicator. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
+system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a negation or affirmation. The statement will discuss whether or not there is a causal relationship between a two socio-economic / health indicators. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
+map_relationship_sppywlg = {
+    'budgetitem_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i,
+    'indicator_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i
+}
 # endregion
 
 
@@ -239,7 +256,8 @@ def perplexity(
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
-                 examples_dset:list[dict]=None, effect_order:str="arbitrary", relationship:str="budgetitem_to_indicator"  ) -> None:
+                 examples_dset:list[dict]=None, effect_order:str="arbitrary", 
+                 relationship:str="budgetitem_to_indicator"  ) -> None:
         
         assert effect_order in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"

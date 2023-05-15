@@ -60,7 +60,7 @@ from  langchain.llms import HuggingFaceHub
 
 
 from prompt_engineering.utils_prompteng import PromptBuilder
-from .utils import PredictionGeneratorRemoteLM
+from .utils import PredictionGeneratorLM
 # NOTE: when edge value is 0/1 then use majority_vote, when edge_value is float use average for aggregation_method
 
 
@@ -103,7 +103,7 @@ def main(
                                                                            relationship='indicator_to_indicator')
 
     if local_or_remote == 'remote':
-        prediction_generator = PredictionGeneratorRemoteLM(llm, prompt_style, ensemble_size,
+        prediction_generator = PredictionGeneratorLM(llm, prompt_style, ensemble_size,
                                                 aggregation_method, parse_output_method, deepspeed_compat=False)
     else:
         raise NotImplementedError("Local LMs not yet supported")

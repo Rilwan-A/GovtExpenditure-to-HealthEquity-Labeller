@@ -2,13 +2,23 @@ import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
 from langchain import PromptTemplate, LLMChain
+from langchain.schema import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage
+)
+from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sppywlg, create_negative_examples
+import random
+
+import copy
+import numpy as np
 
 HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-instruct' ]
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
 
 # chat_models = ['gpt-3.5-turbo-030', 'gpt-4', 'mosaicml/mpt-7b-instruct']
 
-class PredictionGeneratorRemoteLM():
+class PredictionGeneratorLM():
     """
         NOTE: This prediction generator currently only designed for models tuned on instruct datasets that are remote
     """
@@ -17,18 +27,27 @@ class PredictionGeneratorRemoteLM():
                  prompt_style:str,
                   ensemble_size:int,
                   effect_order:str='arbitrary', 
-                  edge_value:str="0/1",
+                  edge_value:str="0/1", # 0/1 or float or float pair
                   parse_style:str='rule_based',
+                  relationship:str='budget_item_to_indicator',
                   deepspeed_compat:bool=False ):
         
+        # Can not get model logits scores from ChatOpenAI
+        if isinstance(lm, langchain.chat_models.ChatOpenAI) and parse_style == 'language_model_perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI")
+
+        # Restrictions on combinations of parse style and edge value
+        if edge_value in ['float','float_pair'] and parse_style != 'language_model_perplexity': 
+            if ensemble_size == 1: raise ValueError("Can not get a float edge value with ensemble size 1, use ensemble size of at least 2 or use parse_style='language_model_perplexity'")
+            
         
+
         self.lm = lm
-        # discern if the langchain lm is a chat model or lm model
 
         self.prompt_style = prompt_style
         self.ensemble_size = ensemble_size
         self.parse_style = parse_style
-        self.deepspeed_compat = deepspeed_compat
+        self.relationship = relationship
+        self.edge_value   = edge_value
 
         self.aggregation_method = None
         if edge_value == '0/1':
@@ -42,41 +61,43 @@ class PredictionGeneratorRemoteLM():
         
         # Generate predictions
         li_li_preds = []
-        
         for li_prompts in li_li_prompts:
-
+            
             if isinstance(self.lm, langchain.chat_models.base.BaseChatModel):
-            
-            
+                batch_messages = [
+                    [ SystemMessage(content=map_relationship_system_prompt[self.relationship]),
+                        HumanMessage(content=prompt) ]
+                        for prompt in li_prompts]
+                
+                outputs = self.lm.generate(batch_messages)
+                li_preds = [ chatgen.text for chatgen in outputs.generations ]
+
+
             elif isinstance(self.lm, langchain.llms.base.LLM):
             
                outputs = self.lm.generate( prompts= li_prompts )
-               li_preds = [ outputs[i]['text'] for i in range(len(outputs)) ]
+               li_preds = [ chatgen.text for chatgen in outputs.generations ]
 
-            li_li_preds.append(outputs)
+            li_li_preds.append(li_preds)
 
-        if 
-
-        # Extract just the answers from the decoded texts, removing the prompts
-        li_li_predictions = [ [ pred.replace(prompt,'') for pred, prompt in zip(li_prediction, li_prompt) ] for li_prediction, li_prompt in zip(li_li_predictions, li_li_prompts) ]
-        
+                
         # Parse Yes/No/Nan from the predictions
-        if self.parse_output_method == 'rule_based':
-            li_li_predictions_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_predictions]
+        if self.parse_style == 'rule_based':
+            li_li_predictions_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_preds]
 
-        elif self.parse_output_method == 'language_model_perplexity':
-            li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
+        elif self.parse_style == 'language_model_perplexity':
+            li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_preds]
         
-        elif self.parse_output_method == 'language_model_generation':
-            li_li_predictions_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_predictions]
+        elif self.parse_style == 'language_model_generation':
+            li_li_predictions_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_preds]
         
         else:
-            raise ValueError(f"parse_output_method {self.parse_output_method} not recognized")
+            raise ValueError(f"parse_style {self.parse_style} not recognized")
 
         return li_li_predictions, li_li_predictions_parsed
 
 
-    def parse_yesno_with_rules(self, li_predictions:list[str])->list[str]:
+    def parse_yesno_with_rules(self, li_predictions:list[str])->list[dict]:
         
         li_preds_parsed = ['NA']*len(li_predictions)
 
@@ -86,58 +107,52 @@ class PredictionGeneratorRemoteLM():
             prediction = li_predictions[idx].lower()
 
             if 'yes' in prediction:
-                prediction = 'Yes'
+                prediction = {'Yes':1, 'No':0, 'NA':0}
             
             elif 'no' in prediction:
-                prediction = 'No'
+                prediction = {'Yes':0, 'No':1, 'NA':0}
             
             elif any( ( neg_phrase in prediction for neg_phrase in ['not true','false', 'is not', 'not correct', 'does not', 'can not', 'not'])):
-                prediction = 'No'
+                prediction = {'Yes':0, 'No':1, 'NA':0}
 
             else:
-                prediction = 'NA'
+                prediction = {'Yes':0, 'No':0, 'NA':0 }
         
             li_preds_parsed[idx] = prediction
                    
         return li_predictions
                
-    def parse_yesno_with_lm_generation(self, li_predictions:list[str])->list[str]:
+    def parse_yesno_with_lm_generation(self, li_predictions:list[str])->list[dict]:
         
         # Template to prompt language lm to simplify the answer to a Yes/No output
-        template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_parse_yesno_from_answer']
+        template = copy.deepcopy( random.choice(li_prompts) )
+            
 
         # Create filled versions of the template with each of the predictions
-        li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions]
-
-        # Create batch encoding
-        batch_encoding = self.tokenizer(li_filledtemplate, return_tensors='pt', padding=True, truncation_strategy='do_not_truncate')
-
-        # Move to device
-        batch_encoding = batch_encoding.to(self.lm.device)
-
-
-        # setup generation config for parsing yesno
-        eos_token_ids = [self.tokenizer.eos_token_id] + [ self.tokenizer(text)['input_ids'][-1] for text in ['"Negation".', '"Affirmation".', 'Negation.', 'Affirmation.','\n' ] ]
-        
-        gen_config = transformers.GenerationConfig(max_new_tokens = 20, min_new_tokens = 2, early_stopping=True, 
-                                            temperature=0.7, no_repeat_ngram_size=3,
-                                            eos_token_id=eos_token_ids,
-                                            do_sample=False,
-                                            pad_token_id = self.tokenizer.pad_token_id   )
+        li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
         
         # Generate prediction
-        output = self.lm.generate(**batch_encoding, generation_config=gen_config )
+        if isinstance(self.lm, langchain.chat_models.base.BaseChatModel):
+            batch_messages = [
+                [ SystemMessage(content=map_relationship_system_prompt[self.relationship] ),
+                    HumanMessage(content=prompt) ]
+                    for prompt in li_filledtemplate]
+            
+            outputs = self.lm.generate(batch_messages)
+            li_preds = [ chatgen.text for chatgen in outputs.generations ]
 
-        # Decode output
-        predictions_w_prompt = self.tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        # Extract just the answers from the decoded texts, removing the prompts
-        li_predictions = [ pred.replace(template,'') for pred,template in zip(predictions_w_prompt, li_filledtemplate) ]
+        elif isinstance(self.lm, langchain.llms.base.LLM):
+        
+            outputs = self.lm.generate( prompts= li_prompts )
+            li_preds = [ chatgen.text for chatgen in outputs.generations ]
+
 
         # Parse Yes/No/Na from the prediction
-        li_predictions_parsed = [ 'Yes' if 'affirm' in pred.lower() else 'No' if 'negat' in pred.lower() else 'NA' for pred in li_predictions]
+        li_preds_parsed = [ {'Yes':1,'No':0, 'NA':0 } if 'affirm' in pred.lower() else {'Yes':0,'No':1, 'NA':0 } if 'negat' in pred.lower() else {'Yes':0,'No':0, 'NA':1 } for pred in li_preds]
 
-        return li_predictions_parsed
+        return li_preds_parsed
     
     def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->list[str]:
         # Get average perplexity of text when sentence is labelled Negation vs when it is labelled Affirmation.
@@ -145,9 +160,10 @@ class PredictionGeneratorRemoteLM():
         #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
 
         # Template to prompt language lm to simplify the answer to a Yes/No output
-        template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_parse_yesno_from_answer']
+        template = copy.deepcopy( random.choice(li_prompts) )
 
-        li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions]
+        li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
 
         # For each fill template, create 3 filled versions with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -156,13 +172,15 @@ class PredictionGeneratorRemoteLM():
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
         # Get the perplexity of each of the filled templates
-        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.lm, self.tokenizer, batch_size=6, deepspeed_compat = self.deepspeed_compat ) 
+        # return a flattened set of perplexities
+        li_perplexity = perplexity(li_filledtemplates_with_answers, self.lm, self.tokenizer, batch_size=6, deepspeed_compat = self.deepspeed_compat ) 
 
-        # For each set of filltemplates get the index of the answer with the lowest perplexity
-        li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
-
-        li_predictions = [ 'No' if idx==0 else 'Yes' for idx in li_idx ]
+        # # For each set of filltemplates get the index of the answer with the lowest perplexity
+        # li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
+        # li_predictions = [ 'No' if idx==0 else 'Yes' for idx in li_idx ]
         
+        li_predictions = [ {'Yes': answers.index('Affirmation') , 'No': li_perplexity[ answers.index('Negation') ] , } for idx in range(0,len(li_perplexity),len(answers)) ]
+
         return li_predictions
         
     def aggregate_predictions(self, li_li_predictions:list[list[str]])->list[str]:
@@ -222,3 +240,91 @@ def load_annotated_examples(k_shot_example_dset_name:str,
         raise ValueError('Invalid dset_name: ' + k_shot_example_dset_name)
 
     return li_records
+
+
+def perplexity(
+    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False):
+
+    model = model
+    tokenizer = tokenizer
+
+    # if batch_size > 1 (which generally leads to padding being required), and
+    # if there is not an already assigned pad_token, assign an existing
+    # special token to also be the padding token
+    if tokenizer.pad_token is None and batch_size > 1:
+        existing_special_tokens = list(tokenizer.special_tokens_map_extended.values())
+        # check that the model already has at least one special token defined
+        assert (
+            len(existing_special_tokens) > 0
+        ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
+        # assign one of the special tokens to also be the pad token
+        tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
+
+    if add_start_token and max_length:
+        # leave room for <BOS> token to be added:
+        assert (
+            tokenizer.bos_token is not None
+        ), "Input model must already have a BOS token if using add_start_token=True. Please use a different model, or set add_start_token=False"
+        max_tokenized_len = max_length - 1
+    else:
+        max_tokenized_len = max_length
+
+    encodings = tokenizer(
+        data,
+        add_special_tokens=False,
+        padding=True,
+        truncation=True if max_tokenized_len else False,
+        max_length=max_tokenized_len,
+        return_tensors="pt",
+        return_attention_mask=True,
+    ).to(model.device)
+
+    encoded_texts = encodings["input_ids"]
+    attn_masks = encodings["attention_mask"]
+
+    # check that each input is long enough:
+    if add_start_token:
+        assert torch.all(torch.ge(attn_masks.sum(1), 1)), "Each input text must be at least one token long."
+    else:
+        assert torch.all(
+            torch.ge(attn_masks.sum(1), 2)
+        ), "When add_start_token=False, each input text must be at least two tokens long. Run with add_start_token=True if inputting strings of only one token, and remove all empty input strings."
+
+    ppls = []
+    loss_fct = CrossEntropyLoss(reduction="none")
+
+    for start_index in range(0, len(encoded_texts), batch_size):
+        end_index = min(start_index + batch_size, len(encoded_texts))
+        encoded_batch = encoded_texts[start_index:end_index]
+        attn_mask = attn_masks[start_index:end_index]
+
+        if add_start_token:
+            bos_tokens_tensor = torch.tensor([[tokenizer.bos_token_id]] * encoded_batch.size(dim=0)).to(model.device)
+            encoded_batch = torch.cat([bos_tokens_tensor, encoded_batch], dim=1)
+            attn_mask = torch.cat(
+                [torch.ones(bos_tokens_tensor.size(), dtype=torch.int64).to(model.device), attn_mask], dim=1
+            )
+
+        labels = encoded_batch
+
+        # use a dummy context for now
+        with torch.no_grad() if not deepspeed_compat else nullcontext():
+            out_logits = model(encoded_batch, attention_mask=attn_mask).logits
+
+        shift_logits = out_logits[..., :-1, :]
+        shift_labels = labels[..., 1:]
+        shift_attention_mask_batch = attn_mask[..., 1:]
+
+        if deepspeed_compat is False:
+            shift_logits = shift_logits.contiguous()
+            shift_labels = shift_labels.contiguous()
+            shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
+
+        perplexity_batch = torch.exp(
+            (loss_fct(shift_logits.transpose(1, 2), shift_labels) * shift_attention_mask_batch).sum(1)
+            / shift_attention_mask_batch.sum(1)
+        )
+
+        ppls += perplexity_batch.tolist()
+
+    return ppls
