@@ -57,12 +57,13 @@ from  langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTempl
 from  langchain.schema import AIMessage, HumanMessage, SystemMessage
 from  langchain.llms import HuggingFaceHub
 # endregion
-
+import yaml
 
 from prompt_engineering.utils_prompteng import PromptBuilder
 from .utils import PredictionGeneratorLM
 
 from django.core.files.uploadedfile import UploadedFile
+# DONE: draft script for running experiment remotely
 # TODO: add functionality for running it locally
 # Make sure things such as perplexity work on local run
 # TODO: Debug local run - set up tests
@@ -90,7 +91,10 @@ def main(
         local_or_remote:str='remote',
         api_key:str = None,
 
-        deepspeed_compat=False):
+        deepspeed_compat=False,
+
+        save_output:bool = False,
+        ):
     
     # Load LLM
     llm =  load_llm(lm_name, finetuned, local_or_remote, api_key)
@@ -130,12 +134,34 @@ def main(
     
 
     # run predictions
-    batch_prompt_ensembles_b2i, batch_pred_ensembles_b2i, batch_pred_ensembles_parsed_b2i, batch_pred_agg_b21 = predict_batches(llm, prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i, parse_style)
+    li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i = predict_batches(llm, prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i, parse_style)
     
     if effect_order == '2nd':
-        batch_prompt_ensembles_i2i, batch_pred_ensembles_i2i, batch_pred_ensembles_parsed_i2i, batch_pred_agg_i2i = predict_batches(llm, prompt_builder_i2i, prediction_generator_i2i, li_li_record_b2i, parse_style)
+        li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i = predict_batches(llm, prompt_builder_i2i, prediction_generator_i2i, li_li_record_b2i, parse_style)
     
-    # email responses to requester
+    # saving to file
+    if save_output:
+        experiment_config = {
+                            "lm_name": lm_name,
+                            'codebase': 'langchain',
+                            "finetuned": finetuned,
+                            "prompt_style": prompt_style,
+                            "parse_style": parse_style,
+                            "ensemble_size": ensemble_size,
+                            "effect_order": effect_order,
+                            "edge_value": edge_value,
+                            "k_shot_b2i": k_shot_b2i,
+                            "k_shot_i2i": k_shot_i2i,
+                            "k_shot_example_dset_name_b2i": k_shot_example_dset_name_b2i,
+                            "k_shot_example_dset_name_i2i": k_shot_example_dset_name_i2i,
+                            "local_or_remote": local_or_remote,
+                            "deepspeed_compat": deepspeed_compat,
+                        }
+        
+        
+        save_experiment(experiment_config, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i)
+
+    return 
        
 
 def load_llm( lm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str = None, prompt_style:str = 'yes_no'):
@@ -199,7 +225,7 @@ def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:Pr
     li_prompt_ensemble = []
     li_pred_ensemble = []
     li_pred_ensemble_parsed = []
-    preds_agg = []
+    li_pred_agg = []
 
     for idx, batch in enumerate(li_li_record):
 
@@ -217,19 +243,36 @@ def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:Pr
         li_prompt_ensemble.append(batch_prompt_ensembles)  # type: ignore
         li_pred_ensemble.append( batch_pred_ensembles ) # type: ignore
         li_pred_ensemble_parsed.append( batch_pred_ensembles_parsed ) # type: ignore
-        preds_agg.append(batch_pred_agg) # type: ignore
+        li_pred_agg.append(batch_pred_agg) # type: ignore
 
+    return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble, li_pred_agg
 
-    # Create prompts
-    batch_prompt_ensembles = prompt_builder(batch)
+def save_experiment(experiment_config:str, 
+                    li_prompt_ensemble:list[list[str]],
+                    li_pred_ensemble:list[list[str]],
+                    li_pred_ensemble_parsed:list[list[str]],
+                    li_pred_agg:list[str] ):
     
-    # Generate predictions
-    batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+    os.makedirs(os.path.join('.prompt_engineering','experiments' ), exist_ok=True )
 
-    # Aggregate ensembles into predictions
-    batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
+    experiment_number = [int(x.split('_')[-1]) for x in os.listdir(os.path.join('.prompt_engineering','experiments' )) if x.startswith('experiment_') ]
 
-    return batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg
+    os.makedirs(os.path.join('.prompt_engineering','experiments', experiment_number ), exist_ok=True )
+
+    # Save experiment config
+    with open(os.path.join('.prompt_engineering','experiments', experiment_number, 'config.json'), 'w') as f:
+        yaml.safe_dump(experiment_config, f)
+    
+    # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
+    encode = lambda _list: [ json.encode(val) for val in _list]
+    df = pd.DataFrame({'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+    df.to_csv(os.path.join('.prompt_engineering','experiments', experiment_number, 'predictions.csv'), index=False)
+
+
+
+
+
+
 
 def parse_args():
     
