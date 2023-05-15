@@ -15,7 +15,6 @@ import math
 from argparse import ArgumentParser
 
 import pandas as pd
-from sklearn.model_selection import train_test_split
 import logging
 import random
 
@@ -31,7 +30,6 @@ import numpy as np
 
 import langchain
 from langchain import LLMChain, PromptTemplate
-from importlib.lazy import lazy_import
 from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator
 
 import csv
@@ -64,11 +62,10 @@ from .utils import PredictionGenerator
 
 from django.core.files.uploadedfile import UploadedFile
 # DONE: draft script for running experiment remotely
-# TODO: add functionality for running it locally
-# Make sure things such as perplexity work on local run
-# TODO: Debug local run - set up tests
+# DONE: add functionality for running it locally
+# TODO: Debug local run - set up tests w/ indicator to indicator data too
 # TODO: Debug remote run - for OpenAI GPT and then for HuggingFaceHub
-# TODO: Figure out how to pass system messages to 
+# TODO: Figure out how to pass system messages to huggingface models
 
 def main(
         llm_name:str,
@@ -138,8 +135,8 @@ def main(
     # run predictions
     li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i = predict_batches(llm, prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i, parse_style)
     
-    if effect_order == '2nd':
-        li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i = predict_batches(llm, prompt_builder_i2i, prediction_generator_i2i, li_li_record_b2i, parse_style)
+    
+    li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i = (None, None, None, None) if effect_order != '2nd' else predict_batches(llm, prompt_builder_i2i, prediction_generator_i2i, li_li_record_b2i, parse_style)
     
     # saving to file
     if save_output:
@@ -160,8 +157,18 @@ def main(
                             "deepspeed_compat": deepspeed_compat,
                         }
         
+        # Save experiment config
+        os.makedirs(os.path.join('.prompt_engineering','experiments' ), exist_ok=True )
+
+        experiment_number = [int(x.split('_')[-1]) for x in os.listdir(os.path.join('.prompt_engineering','experiments' )) if x.startswith('exp_') ]
+        os.makedirs(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}" ), exist_ok=True )
         
-        save_experiment(experiment_config, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i)
+        with open(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'config.json'), 'w') as f:
+            yaml.safe_dump(experiment_config, f)
+            
+        save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i, relationship='budget_item_to_indicator')
+        save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator')
+        
 
     return 
        
@@ -234,15 +241,9 @@ def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary' ):
 
     # if effect_order == 2nd Add indicator to indicator combinations
     if effect_order == '2nd':
-        li_li_record_i2i = [  [ {'indicator':indicator, 'indicator':indicator} for indicator in li_indicators ] for indicator in li_indicators ] 
+        li_li_record_i2i = [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicators ] for indicator in li_indicators ] 
 
     return li_li_record_b2i, li_li_record_i2i
-
-def prepare_prediction_set():
-    pass
-
-def generate_predictions():
-    pass
 
 def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, li_li_record:list[list[dict]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
@@ -272,26 +273,36 @@ def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:Pr
 
     return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble, li_pred_agg
 
-def save_experiment(experiment_config:str, 
+def save_experiment(experiment_number:int, 
+                    li_li_record:list[list[dict]],
                     li_prompt_ensemble:list[list[str]],
                     li_pred_ensemble:list[list[str]],
                     li_pred_ensemble_parsed:list[list[str]],
-                    li_pred_agg:list[str] ):
+                    li_pred_agg:list[str],
+                    relationship:str='budget_item_to_indicator' ):
     
-    os.makedirs(os.path.join('.prompt_engineering','experiments' ), exist_ok=True )
 
-    experiment_number = [int(x.split('_')[-1]) for x in os.listdir(os.path.join('.prompt_engineering','experiments' )) if x.startswith('experiment_') ]
 
-    os.makedirs(os.path.join('.prompt_engineering','experiments', experiment_number ), exist_ok=True )
 
-    # Save experiment config
-    with open(os.path.join('.prompt_engineering','experiments', experiment_number, 'config.json'), 'w') as f:
-        yaml.safe_dump(experiment_config, f)
     
     # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
     encode = lambda _list: [ json.encode(val) for val in _list]
-    df = pd.DataFrame({'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
-    df.to_csv(os.path.join('.prompt_engineering','experiments', experiment_number, 'predictions.csv'), index=False)
+    
+    li_record =  sum(li_li_record, [])
+
+    if relationship == 'budget_item_to_indicator':
+        df = pd.DataFrame({ 'budget_item': [ d['budget_item'] for d in li_record],
+                           'indicator': [ d['indicator'] for d in li_record],
+                        'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
+                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+        
+    elif relationship == 'indicator_to_indicator':
+        df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
+                           'indicator_2': [ d['indicator_2'] for d in li_record],
+                        'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
+                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+        
+    df.to_csv(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'predictions.csv'), index=False)
 
     return None
 

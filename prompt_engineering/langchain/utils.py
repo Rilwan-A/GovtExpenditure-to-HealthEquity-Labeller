@@ -173,10 +173,6 @@ class PredictionGenerator():
             self.llm.pipeline.tokenizer,
             batch_size=6, 
             deepspeed_compat = self.deepspeed_compat ) 
-
-        # # For each set of filltemplates get the index of the answer with the lowest perplexity
-        # li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
-        # li_predictions = [ 'No' if idx==0 else 'Yes' for idx in li_idx ]
         
         li_preds = [ {'Yes': li_perplexity[ idx + answers.index('Affirmation') ] , 'No': li_perplexity[ idx + answers.index('Negation') ] , } for idx in range(0,len(li_perplexity),len(answers)) ]
 
