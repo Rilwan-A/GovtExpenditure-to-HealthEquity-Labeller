@@ -16,6 +16,7 @@ import pandas as pd
 
 HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-instruct' ]
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
+ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
 

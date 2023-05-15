@@ -30,7 +30,7 @@ import numpy as np
 
 import langchain
 from langchain import LLMChain, PromptTemplate
-from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator
+from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS
 
 import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
@@ -88,6 +88,8 @@ def main(
         local_or_remote:str='remote',
         api_key:str = None,
 
+        batch_size:int=1,
+
         deepspeed_compat=False,
 
         save_output:bool = False,
@@ -129,7 +131,7 @@ def main(
                                                      )
         
     # prepare data
-    li_li_record_b2i, li_li_record_i2i = prepare_data(input_json, effect_order)
+    li_li_record_b2i, li_li_record_i2i = prepare_data(input_json, effect_order, batch_size)
     
 
     # run predictions
@@ -222,7 +224,8 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
 
     return llm 
 
-def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary' ):
+
+def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary', batch_size=2 ):
     """
         Loads the data from the input_json and returns a list of lists of dicts
     """
@@ -238,10 +241,12 @@ def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary' ):
 
     # Add budget_item to indicator combinations
     li_li_record_b2i = [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicators ] for budget_item in li_budget_items ] 
+    li_li_record_b2i = [ li_li_record_b2i[i:i+batch_size] for i in range(0, len(li_li_record_b2i), batch_size) ]
 
     # if effect_order == 2nd Add indicator to indicator combinations
     if effect_order == '2nd':
         li_li_record_i2i = [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicators ] for indicator in li_indicators ] 
+        li_li_record_i2i = [ li_li_record_i2i[i:i+batch_size] for i in range(0, len(li_li_record_i2i), batch_size) ]
 
     return li_li_record_b2i, li_li_record_i2i
 
@@ -309,21 +314,25 @@ def save_experiment(experiment_number:int,
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--llm_name', type=str, default='EleutherAI/gpt-j-6B', choices=['gpt-3.5-turbo-030','EleutherAI/gpt-j-6B'] )
+    parser.add_argument('--llm_name', type=str, default='EleutherAI/gpt-j-6B', choices=ALL_MODELS )
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
-
-
     parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
-
-    parser.add_argument('--k_shot', type=int, default=2, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
     parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary', '1st', '2nd'], help='The degree of orders which we require from our model' )
     parser.add_argument('--edge_value', type=str, default='binary weight', choices=['binary weight', 'float_weight', 'distribution'], help='' )
-    
 
-    parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote', 'aggregate '], help='The method used to aggregate the results of the ensemble.' )
-    parser.add_argument('--dset_name',type=str, default='spot', choices=['spot','england'] )
+    parser.add_argument('--input_json', type=str, default='input.json', help='Path to the json file containing the input data' )
+
+    parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
+    parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
+
+    parser.add_argument('--k_shot_example_dset_name_b2i', type=str, default='spot', choices=['spot','england'], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_i2i', type=str, default='spot', choices=['spot','england'], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
+
+    parser.add_argument('--local_or_remote', type=str, default='local', choices=['local','remote'], help='Whether to use llms on a remote server or locally' )
+    parser.add_argument('--api_key', type=str, default=None, help='The api key for the remote server e.g. HuggingfaceHub or OpenAIapi' )
+    
     parser.add_argument('--batch_size', type=int, default=1 )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
