@@ -32,7 +32,7 @@ import numpy as np
 import langchain
 from langchain import LLMChain, PromptTemplate
 from importlib.lazy import lazy_import
-from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGeneratorLM
+from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator
 
 import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
@@ -50,17 +50,17 @@ from prompt_engineering.langchain.utils import load_annotated_examples
 # SystemMessage = lazy_import("langchain.schema", "SystemMessage")
 # #endregion
 
-#region HuggingFace imports
-# HuggingFaceHub = lazy_import("langchain.llms", "HuggingFaceHub")
+
 from  langchain.chat_models import ChatOpenAI
+from  langchain.llms import HuggingFaceHub
 from  langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, AIMessagePromptTemplate, HumanMessagePromptTemplate
 from  langchain.schema import AIMessage, HumanMessage, SystemMessage
-from  langchain.llms import HuggingFaceHub
-# endregion
+from langchain import HuggingFacePipeline
+
 import yaml
 
 from prompt_engineering.utils_prompteng import PromptBuilder
-from .utils import PredictionGeneratorLM
+from .utils import PredictionGenerator
 
 from django.core.files.uploadedfile import UploadedFile
 # DONE: draft script for running experiment remotely
@@ -68,10 +68,10 @@ from django.core.files.uploadedfile import UploadedFile
 # Make sure things such as perplexity work on local run
 # TODO: Debug local run - set up tests
 # TODO: Debug remote run - for OpenAI GPT and then for HuggingFaceHub
-
+# TODO: Figure out how to pass system messages to 
 
 def main(
-        lm_name:str,
+        llm_name:str,
         finetuned:bool,
         prompt_style:str,
         parse_style:str,
@@ -97,7 +97,7 @@ def main(
         ):
     
     # Load LLM
-    llm =  load_llm(lm_name, finetuned, local_or_remote, api_key)
+    llm =  load_llm(llm_name, finetuned, local_or_remote, api_key)
 
     # Load Annotated Examples to use in K-Shot context for Prompt
     annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budget_item_to_indicator')
@@ -116,16 +116,18 @@ def main(
                                                                            relationship='indicator_to_indicator')
 
     # Create Prediction Generators
-    prediction_generator_b2i = PredictionGeneratorLM(llm, prompt_style, ensemble_size,
+    prediction_generator_b2i = PredictionGenerator(llm, prompt_style, ensemble_size,
                                                      edge_value,
                                                      parse_style,
                                                      relationship='budget_item_to_indicator',
+                                                     local_or_remote=local_or_remote,
                                                      deepspeed_compat=deepspeed_compat
                                                      )
-    prediction_generator_i2i = None if effect_order != '2nd' else PredictionGeneratorLM(llm, prompt_style, ensemble_size,
+    prediction_generator_i2i = None if effect_order != '2nd' else PredictionGenerator(llm, prompt_style, ensemble_size,
                                                      edge_value,
                                                      parse_style,
                                                      relationship='indicator_to_indicator',
+                                                     local_or_remote=local_or_remote,
                                                      deepspeed_compat=deepspeed_compat
                                                      )
         
@@ -142,7 +144,7 @@ def main(
     # saving to file
     if save_output:
         experiment_config = {
-                            "lm_name": lm_name,
+                            "llm_name": llm_name,
                             'codebase': 'langchain',
                             "finetuned": finetuned,
                             "prompt_style": prompt_style,
@@ -164,28 +166,51 @@ def main(
     return 
        
 
-def load_llm( lm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str = None, prompt_style:str = 'yes_no'):
+def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str = None, prompt_style:str = 'yes_no'):
     
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
+    if local_or_remote == 'local': assert llm_name not in OPENAI_MODELS, f"llm_name must be a HuggingFace model if local_or_remote is 'local'" 
     
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
-        raise NotImplementedError
+        if llm_name in HUGGINGFACE_MODELS and not finetuned:
             
+            llm = HuggingFacePipeline.from_model_id(
+                model_id="llm_name",
+                task="text-generation",
+                model_kwargs={"max_new_tokens":5 if prompt_style == 'yes_no' else 50,
+                              'trust_remote_code':True,
+                              'load_in_8bit':True,
+                              'device_map':"auto"}
+                              )
+        
+        elif llm_name in HUGGINGFACE_MODELS and finetuned:
+            path = './finetune/finetuned_models/' + llm_name + '/checkpoints/'
+            llm = HuggingFacePipeline.from_model_id(
+                model_id=path,
+                task="text-generation",
+                model_kwargs={"max_new_tokens":5 if prompt_style == 'yes_no' else 50,
+                              'trust_remote_code':True,
+                              'load_in_8bit':True,
+                              'device_map':"auto"}
+                              )
+        else:
+            raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
+        
     elif local_or_remote == 'remote':
         #NOTE: max_tokens is currently dependent on prompt_style, it maybe should be depndent on parse_style
 
-        if lm_name in OPENAI_MODELS:
+        if llm_name in OPENAI_MODELS:
             
             llm = ChatOpenAI(
-                model_name=lm_name if not finetuned else f"rilwanade/{lm_name}",
+                model_name=llm_name if not finetuned else f"rilwanade/{llm_name}",
                 openai_api_key=api_key,
-                max_tokens = 5 if prompt_style == 'yes_no' else 100 )            
+                max_tokens = 5 if prompt_style == 'yes_no' else 50 )            
         
-        if lm_name in HUGGINGFACE_MODELS:
-            llm = HuggingFaceHub(repo_id=lm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } )
+        if llm_name in HUGGINGFACE_MODELS:
+            llm = HuggingFaceHub(repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } )
 
 
     return llm 
@@ -219,7 +244,7 @@ def prepare_prediction_set():
 def generate_predictions():
     pass
 
-def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGeneratorLM, li_li_record:list[list[dict]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+def predict_batches(batch, prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, li_li_record:list[list[dict]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
@@ -268,16 +293,12 @@ def save_experiment(experiment_config:str,
     df = pd.DataFrame({'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
     df.to_csv(os.path.join('.prompt_engineering','experiments', experiment_number, 'predictions.csv'), index=False)
 
-
-
-
-
-
+    return None
 
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--lm_name', type=str, default='EleutherAI/gpt-j-6B', choices=['gpt-3.5-turbo-030','EleutherAI/gpt-j-6B'] )
+    parser.add_argument('--llm_name', type=str, default='EleutherAI/gpt-j-6B', choices=['gpt-3.5-turbo-030','EleutherAI/gpt-j-6B'] )
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
 

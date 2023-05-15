@@ -15,7 +15,6 @@ from sklearn.model_selection import train_test_split
 import logging
 import random
 
-
 from prompt_engineering import utils_prompteng
 from prompt_engineering.utils_prompteng import PromptBuilder
 
@@ -314,7 +313,8 @@ class PredictionGenerator():
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
         # Get the perplexity of each of the filled templates
-        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, self.model, self.tokenizer, batch_size=6, deepspeed_compat = self.deepspeed_compat ) 
+        li_perplexity = utils_prompteng.perplexity(li_filledtemplates_with_answers, 
+                                                   self.model, self.tokenizer, batch_size=6, deepspeed_compat = self.deepspeed_compat ) 
 
         # For each set of filltemplates get the index of the answer with the lowest perplexity
         li_idx = [ np.argmin(li_perplexity[idx:idx+len(answers)]) for idx in range(0,len(li_perplexity),len(answers)) ]
