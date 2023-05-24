@@ -28,6 +28,10 @@ from prompt_engineering.huggingface.predict import load_dataset as load_dataset_
 from prompt_engineering.huggingface.predict import PromptBuilder, PredictionGenerator
 from prompt_engineering.huggingface.predict import step as val_step_spot_alignment_inner
 
+# We also advise users to use the nested quantization technique. This saves more memory at no additional performance - 
+# from our empirical observations, this enables fine-tuning llama-13b model on an NVIDIA-T4 16GB with a sequence length of 1024,
+#  batch size of 1 and gradient accumulation steps of 4.
+
 # from lightning.pytorch.plugins.training_type import DeepSpeedPlugin
 class PromptEngineeringLM(pl.LightningModule):
     """LightningModule for prompt engineering LM training and evaluation."""

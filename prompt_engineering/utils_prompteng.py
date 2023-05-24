@@ -261,7 +261,7 @@ class PromptBuilder():
         
         assert effect_order in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
-        assert k_shot <= len(examples_dset), "User can not create a K-shot context with more examples than the number of examples in the dataset"
+        assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
 
         self.prompt_style = prompt_style
         self.k_shot = k_shot

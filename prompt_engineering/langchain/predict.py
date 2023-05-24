@@ -3,57 +3,24 @@
         where the graph nodes represent government budget items and socioeconomic/health indicators.
 
 """
-
 import os,sys
-# This experiment produces predictions for a given test set
-
-## Add path to parent directory to sys.path
-# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.getcwd())
-import math
-
 from argparse import ArgumentParser
 
 import pandas as pd
-import logging
-import random
 
-# import utils_prompteng
-from prompt_engineering import utils_prompteng
-# import utils_prompteng
-import copy 
 from functools import reduce
-import operator
-from collections import Counter
 import json as json
-import numpy as np
 
-import langchain
-from langchain import LLMChain, PromptTemplate
+
 # from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
-from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
+from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT, MAP_DEVICE_MAP
 
 import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
-# TODO: convert to lazy loading later - check for
-
-# # Lazy imports of modules depending on the model to be used
-# #region chatOpenAI imports
-# ChatOpenAI = lazy_import("langchain.chat_models", "ChatOpenAI")
-# ChatPromptTemplate = lazy_import("langchain.prompts.chat", "ChatPromptTemplate")
-# SystemMessagePromptTemplate = lazy_import("langchain.prompts.chat", "SystemMessagePromptTemplate")
-# AIMessagePromptTemplate = lazy_import("langchain.prompts.chat", "AIMessagePromptTemplate")
-# HumanMessagePromptTemplate = lazy_import("langchain.prompts.chat", "HumanMessagePromptTemplate")
-# AIMessage = lazy_import("langchain.schema", "AIMessage")
-# HumanMessage = lazy_import("langchain.schema", "HumanMessage")
-# SystemMessage = lazy_import("langchain.schema", "SystemMessage")
-# #endregion
-
 
 from  langchain.chat_models import ChatOpenAI
 from  langchain.llms import HuggingFaceHub
-from  langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, AIMessagePromptTemplate, HumanMessagePromptTemplate
-from  langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain import HuggingFacePipeline
 
 import yaml
@@ -61,11 +28,7 @@ import openai
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
-# DONE: draft script for running experiment remotely
-# DONE: add functionality for running it locally
-# TODO: Debug local run - set up tests w/ indicator to indicator data too
-# TODO: Debug remote run - for OpenAI GPT and then for HuggingFaceHub
-# TODO: Figure out how to pass system messages to huggingface models
+
 
 def main(
         llm_name:str,
@@ -77,7 +40,7 @@ def main(
         effect_order:str, 
         edge_value:str,
 
-        input_json:str|UploadedFile,
+        input_file:str|UploadedFile,
 
         k_shot_b2i:int=2,
         k_shot_i2i:int=0,
@@ -99,7 +62,7 @@ def main(
     llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
 
     # Load Annotated Examples to use in K-Shot context for Prompt
-    annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budget_item_to_indicator')
+    annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator')
     annotated_examples_i2i = None if effect_order != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
 
     # Create Prompt Builders 
@@ -107,7 +70,7 @@ def main(
     prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_order,
-                                        relationship='budget_item_to_indicator')
+                                        relationship='budgetitem_to_indicator')
     
     prompt_builder_i2i = None if effect_order != '2nd' else PromptBuilder(prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
@@ -118,7 +81,7 @@ def main(
     prediction_generator_b2i = PredictionGenerator(llm, prompt_style, ensemble_size,
                                                      edge_value,
                                                      parse_style,
-                                                     relationship='budget_item_to_indicator',
+                                                     relationship='budgetitem_to_indicator',
                                                      local_or_remote=local_or_remote,
                                                      deepspeed_compat=deepspeed_compat
                                                      )
@@ -131,7 +94,7 @@ def main(
                                                      )
         
     # prepare data
-    li_li_record_b2i, li_li_record_i2i = prepare_data(input_json, effect_order, batch_size)
+    li_li_record_b2i, li_li_record_i2i = prepare_data(input_file, effect_order, batch_size)
     
 
     # run predictions
@@ -171,7 +134,7 @@ def main(
         with open(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'config.json'), 'w') as f:
             yaml.safe_dump(experiment_config, f)
             
-        save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budget_item_to_indicator') #type: ignore
+        save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator') #type: ignore
         
         if effect_order is not None: 
             save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator') #type: ignore #ignore
@@ -188,25 +151,28 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
-        if llm_name in HUGGINGFACE_MODELS and not finetuned:
+
+        if llm_name in HUGGINGFACE_MODELS:
+            from transformers import BitsAndBytesConfig
             
+            quant_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+            )
+
+            model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
+
             llm = HuggingFacePipeline.from_model_id(
-                model_id=llm_name,
+                model_id=model_id,
                 task="text-generation",
                 model_kwargs={'trust_remote_code':True,
-                              'load_in_8bit':MAP_LOAD_IN_8BIT[llm_name],
-                              'device_map':"auto"}
-                              )
-        
-        elif llm_name in HUGGINGFACE_MODELS and finetuned:
-            path = './finetune/finetuned_models/' + llm_name + '/checkpoints/'
-            llm = HuggingFacePipeline.from_model_id(
-                model_id=path,
-                task="text-generation",
-                model_kwargs={'trust_remote_code':True,
-                              'load_in_8bit':True,
-                              'device_map':"auto"}
-                              )
+                            # 'load_in_8bit':MAP_LOAD_IN_8BIT[llm_name],
+                                # '_no_split_modules':[], 
+                                'quantization_config':quant_config 
+                            }
+
+                            )
+
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
         
@@ -232,20 +198,38 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
 
     return llm 
 
-def prepare_data(input_json:str|UploadedFile, effect_order:str = 'arbitrary', batch_size=2 ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
+def prepare_data(input_file:str|UploadedFile, effect_order:str = 'arbitrary', batch_size=2 ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
     """
-        Loads the data from the input_json and returns a list of lists of dicts
+        Loads the data from the input_file and returns a list of lists of dicts
+
+        Data can be passed in as a json or csv file name, or as a Django UploadedFile Object
     """
 
     # Check json is valid
     expected_keys = ['budget_items','indicators']
     
+    if isinstance(input_file, str) and input_file[-4:]=='.json':
+        json_data = json.load( open(input_file, 'r') )
+        assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
+                    
+        li_budget_items = json_data['budget_items']
+        li_indicators = json_data['indicators']
     
-    json_data = json.load( open(input_json, 'r') if isinstance(input_json, str) else input_json )
-    assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
-                
-    li_budget_items = json_data['budget_items']
-    li_indicators = json_data['indicators']
+    elif isinstance(input_file, str) and input_file[-4:] == '.csv':
+        df = pd.read_csv(input_file)
+        assert all([key in df.columns for key in expected_keys]), f"input_csv must have the following columns: {expected_keys}"
+        li_budget_items = df['budget_items'].tolist()
+        li_indicators = df['indicators'].tolist()
+
+    elif isinstance(input_file, UploadedFile):
+        json_data = input_file
+        raise NotImplementedError("UploadedFile not implemented yet")
+        li_budget_items = json_data['budget_items']
+        li_indicators = json_data['indicators']
+    
+    else:
+        raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
+
 
     # Add budget_item to indicator combinations
     li_li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicators ] for budget_item in li_budget_items ], [] ) 
@@ -293,14 +277,14 @@ def save_experiment(experiment_number:int,
                     li_pred_ensemble:list[list[str]],
                     li_pred_ensemble_parsed:list[list[str]],
                     li_pred_agg:list[str],
-                    relationship:str='budget_item_to_indicator' ):
+                    relationship:str='budgetitem_to_indicator' ):
     
     # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
     encode = lambda _list: [ json.dumps(val) for val in _list]
     
     li_record =  sum(li_li_record, [])
 
-    if relationship == 'budget_item_to_indicator':
+    if relationship == 'budgetitem_to_indicator':
         df = pd.DataFrame({ 'budget_item': [ d['budget_item'] for d in li_record],
                            'indicator': [ d['indicator'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
@@ -312,7 +296,7 @@ def save_experiment(experiment_number:int,
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
     else:
-        raise ValueError("relationship must be one of ['budget_item_to_indicator', 'indicator_to_indicator']")
+        raise ValueError("relationship must be one of ['budgetitem_to_indicator', 'indicator_to_indicator']")
         
     df.to_csv(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'predictions.csv'), index=False)
 
@@ -321,7 +305,7 @@ def save_experiment(experiment_number:int,
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-instruct', choices=ALL_MODELS )
+    parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
@@ -329,7 +313,7 @@ def parse_args():
     parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary', '1st', '2nd'], help='The degree of orders which we require from our model' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'float_weight', 'distribution'], help='' )
 
-    parser.add_argument('--input_json', type=str, default='input.json', help='Path to the json file containing the input data' )
+    parser.add_argument('--input_file', type=str, default='input.json', help='Path to the file containing the input data' )
 
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )

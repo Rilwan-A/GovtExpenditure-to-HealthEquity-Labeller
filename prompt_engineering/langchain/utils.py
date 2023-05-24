@@ -14,12 +14,18 @@ import copy
 import numpy as np
 import pandas as pd
 
-HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-instruct', 'ausboss/llama-30b-supercot','TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g', 'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g' ]
+HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-chat', 'ausboss/llama-30b-supercot','TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g', 'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g' ]
 MAP_LOAD_IN_8BIT = {
-    'mosaicml/mpt-7b-instruct': True,
+    'mosaicml/mpt-7b-chat': False,
     'ausboss/llama-30b-supercot': True,
     'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': False,
     'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': False
+}
+MAP_DEVICE_MAP = {
+    'mosaicml/mpt-7b-chat': "auto",
+    'ausboss/llama-30b-supercot': 'sequential',
+    'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': 'sequential',
+    'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': 'sequential'
 }
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
 ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
@@ -35,7 +41,7 @@ class PredictionGenerator():
                   ensemble_size:int,
                   edge_value:str="binary_weight", # binary_weight or float weight or float pair
                   parse_style:str='rule_based',
-                  relationship:str='budget_item_to_indicator',
+                  relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
                   deepspeed_compat:bool=False ):
         
@@ -61,7 +67,7 @@ class PredictionGenerator():
 
         self.generation_kwargs = {}
         self.generation_parse_kwargs = {}
-        k = isinstance(llm, langchain.llms.HuggingFaceHub )*'max_new_tokens' + isinstance(langchain.chat_models.ChatOpenAI)*'max_length'
+        k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
         self.generation_kwargs[k]= 5 if prompt_style == 'yes_no' else 50 if prompt_style == 'open_ended' else None
         self.generation_parse_kwargs[k]= 6
 
@@ -252,10 +258,10 @@ class PredictionGenerator():
 
 def load_annotated_examples(k_shot_example_dset_name:str|None, 
                             random_state_seed:int=10, 
-                            relationship_type:str='budget_item_to_indicator') -> list[dict[str,str]] | None:
+                            relationship_type:str='budgetitem_to_indicator') -> list[dict[str,str]] | None:
     li_records: list[dict[str,str]] | None = None
 
-    if k_shot_example_dset_name == 'spot' and relationship_type == 'budget_item_to_indicator':
+    if k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
         # Load spot dataset as pandas dataframe
         dset = pd.read_csv('./data/spot/spot_indicator_mapping_table.csv')
         

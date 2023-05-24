@@ -6,6 +6,8 @@ ckpt
 __pycache*
 **.pytest_cache
 
+# Environment variables
+tests/env_vars.yml
 
 # Temporary Files
 **/**.temp
