@@ -14,7 +14,13 @@ import copy
 import numpy as np
 import pandas as pd
 
-HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-instruct' ]
+HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-instruct', 'ausboss/llama-30b-supercot','TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g', 'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g' ]
+MAP_LOAD_IN_8BIT = {
+    'mosaicml/mpt-7b-instruct': True,
+    'ausboss/llama-30b-supercot': True,
+    'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': False,
+    'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': False
+}
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
 ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
@@ -27,7 +33,7 @@ class PredictionGenerator():
     def __init__(self, llm,  
                  prompt_style:str,
                   ensemble_size:int,
-                  edge_value:str="binary weight", # binary weight or float weight or float pair
+                  edge_value:str="binary_weight", # binary_weight or float weight or float pair
                   parse_style:str='rule_based',
                   relationship:str='budget_item_to_indicator',
                   local_or_remote='local',
@@ -53,6 +59,12 @@ class PredictionGenerator():
         self.local_or_remote = local_or_remote
         self.deepspeed_compat = deepspeed_compat
 
+        self.generation_kwargs = {}
+        self.generation_parse_kwargs = {}
+        k = isinstance(llm, langchain.llms.HuggingFaceHub )*'max_new_tokens' + isinstance(langchain.chat_models.ChatOpenAI)*'max_length'
+        self.generation_kwargs[k]= 5 if prompt_style == 'yes_no' else 50 if prompt_style == 'open_ended' else None
+        self.generation_parse_kwargs[k]= 6
+
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
@@ -67,12 +79,12 @@ class PredictionGenerator():
                         HumanMessage(content=prompt) ]
                         for prompt in li_prompts]
                 
-                outputs = self.llm.generate(batch_messages)
+                outputs = self.llm.generate(batch_messages, **self.generation_kwargs)
                 li_preds: list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
             elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             
-               outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship] + '\n' + prompt for prompt in li_prompts ] )
+               outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship] + '\n' + prompt for prompt in li_prompts ], **self.generation_kwargs )
                li_preds : list[str] = [ chatgen.text for chatgen in outputs.generations ]
             
             else:
@@ -138,13 +150,13 @@ class PredictionGenerator():
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
-            outputs = self.llm.generate(batch_messages)
+            outputs = self.llm.generate(batch_messages, **self.generation_parse_kwargs)
             li_preds_str:list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
 
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
         
-            outputs = self.llm.generate( prompts= li_prompts )
+            outputs = self.llm.generate( prompts= li_prompts, **self.generation_parse_kwargs )
             li_preds_str: list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
         else:
@@ -192,7 +204,7 @@ class PredictionGenerator():
             For Each prediction we have a list of samples.
                 Each sample is a dictionary with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}"
 
-            edge_value: 'binary weight': for a prediction p with n samples, returns 1 if Yes is the modal prediction
+            edge_value: 'binary_weight': for a prediction p with n samples, returns 1 if Yes is the modal prediction
 
             edge_value: 'float weight': for a prediction p with n samples, returns the average relative weight of Yes for each sample
             
@@ -201,7 +213,7 @@ class PredictionGenerator():
             output format: list of dictionaries with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}. Reduced to 1 sample per prediction
         """
         
-        if self.edge_value == 'binary weight':
+        if self.edge_value == 'binary_weight':
             
             # For each prediction (list of samples), return 1 if Yes is the model prediction
             def is_yes_mode(li_dict_pred) -> float:

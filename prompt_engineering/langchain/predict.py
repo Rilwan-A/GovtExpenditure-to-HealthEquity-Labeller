@@ -30,7 +30,8 @@ import numpy as np
 
 import langchain
 from langchain import LLMChain, PromptTemplate
-from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS
+# from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
+from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
 
 import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
@@ -58,7 +59,6 @@ from langchain import HuggingFacePipeline
 import yaml
 import openai
 from prompt_engineering.utils_prompteng import PromptBuilder
-from .utils import PredictionGenerator
 
 from django.core.files.uploadedfile import UploadedFile
 # DONE: draft script for running experiment remotely
@@ -96,7 +96,7 @@ def main(
         ):
     
     # Load LLM
-    llm =  load_llm(llm_name, finetuned, local_or_remote, api_key)
+    llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
 
     # Load Annotated Examples to use in K-Shot context for Prompt
     annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budget_item_to_indicator')
@@ -177,7 +177,7 @@ def main(
             save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator') #type: ignore #ignore
         
 
-    return 
+    return None
        
 def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str|None = None, prompt_style:str = 'yes_no'):
     
@@ -191,11 +191,10 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
         if llm_name in HUGGINGFACE_MODELS and not finetuned:
             
             llm = HuggingFacePipeline.from_model_id(
-                model_id="llm_name",
+                model_id=llm_name,
                 task="text-generation",
-                model_kwargs={"max_new_tokens":5 if prompt_style == 'yes_no' else 50,
-                              'trust_remote_code':True,
-                              'load_in_8bit':True,
+                model_kwargs={'trust_remote_code':True,
+                              'load_in_8bit':MAP_LOAD_IN_8BIT[llm_name],
                               'device_map':"auto"}
                               )
         
@@ -204,8 +203,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
             llm = HuggingFacePipeline.from_model_id(
                 model_id=path,
                 task="text-generation",
-                model_kwargs={"max_new_tokens":5 if prompt_style == 'yes_no' else 50,
-                              'trust_remote_code':True,
+                model_kwargs={'trust_remote_code':True,
                               'load_in_8bit':True,
                               'device_map':"auto"}
                               )
@@ -329,22 +327,22 @@ def parse_args():
     parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
     parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary', '1st', '2nd'], help='The degree of orders which we require from our model' )
-    parser.add_argument('--edge_value', type=str, default='binary weight', choices=['binary weight', 'float_weight', 'distribution'], help='' )
+    parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'float_weight', 'distribution'], help='' )
 
     parser.add_argument('--input_json', type=str, default='input.json', help='Path to the json file containing the input data' )
 
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
 
-    parser.add_argument('--k_shot_example_dset_name_b2i', type=str, default='spot', choices=['spot','england', None], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
-    parser.add_argument('--k_shot_example_dset_name_i2i', type=str, default=None, choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_b2i', type=lambda inp: None if inp.lower()=="none" else str(inp), default='spot', choices=['spot','england', None], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_i2i', type= lambda inp: None if inp.lower()=="none" else str(inp), default=None, choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
 
     parser.add_argument('--local_or_remote', type=str, default='local', choices=['local','remote'], help='Whether to use llms on a remote server or locally' )
     parser.add_argument('--api_key', type=str, default=None, help='The api key for the remote server e.g. HuggingfaceHub or OpenAIapi' )
     
     parser.add_argument('--batch_size', type=int, default=1 )
 
-    parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
+    # parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
 
     
     args = parser.parse_known_args()[0]
