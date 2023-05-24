@@ -9,7 +9,7 @@ python3 ./prompt_engineering/finetune/finetune.py --exp_name gptj --nn_name Eleu
         --max_epochs 10 --batch_size 6 --batch_size_inf 8 --accumulate_grad_batches 6 \
         --num_workers 2 --devices 2 --strategy deepspeed_stage_3_offload \
         --optimizer DeepSpeedCPUAdam --val_task spot_alignment --k_shot 0 \
-        --prompt_style yes_no --parse_output_method language_model_perplexity \
+        --prompt_style yes_no --parse_output_method perplexity \
         --directly_or_indirectly indirectly \
         --lr 1e-5 --freeze_layers 21
         

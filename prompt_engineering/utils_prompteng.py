@@ -14,37 +14,40 @@ map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
 li_prompts_yes_no_template = [    
-    "Give me a Yes or No answer to the following question, is local government spending on \"{budget_item}\" {effect_order} related to \"{indicator}\"?",
+    "Give me a Yes or No answer to the following question, is local government spending on \"{budget_item}\" {effect_type} related to \"{indicator}\"?",
     
-    'Does local government spending on \"{budget_item}\" {effect_order} affect \"{indicator}\"?, True or False',
+    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?, True or False',
     
-    'Is it true that \"{indicator}\" is {effect_order} related to local government spending on \"{budget_item}\"?',
+    'Is it true that \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\"?',
     
-    'Does \"{budget_item}\" {effect_order} affect \"{indicator}\"?, Yes or No',
+    'Does \"{budget_item}\" {effect_type} affect \"{indicator}\"?, Yes or No',
     
-    'Answer the following question with True or False: Does local government spending on \"{budget_item}\" {effect_order} affect \"{indicator}\"?'
+    'Answer the following question with True or False: Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
 ]
 li_prompts_openend_template = [    
-    'Is local government spending on \"{budget_item}\" {effect_order} related to \"{indicator}\"?',
+    'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
     
-    'Does local government spending on \"{budget_item}\" {effect_order} affects \"{indicator}\"?',
+    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
+
+    'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
     
-    'Is \"{indicator}\" {effect_order} related to local government spending on \"{budget_item}\"?',
+    'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
     
-    'Local government spending on \"{budget_item}\" {effect_order} improves \"{indicator}\"?',
+    'Is there an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}?'
     
-    'Does local government spending on \"{budget_item}\" {effect_order} affects \"{indicator}\"?'
 ]
+
 li_prompts_openend_template_open_response =[
-    {'Yes':'Local government spending on \"{budget_item}\" is {effect_order} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_order} related to the state of \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
 
-    {'Yes':'Local government spending on \"{budget_item}\" does {effect_order} affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_order} affect \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} affect \"{indicator}\".'},
 
-    {'Yes':'The state of \"{indicator}\" is {effect_order} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_order} related to local government spending on \"{budget_item}\".'},
+    {'Yes':'The state of \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_type} related to local government spending on \"{budget_item}\".'},
 
-    {'Yes':'Local government spending on \"{budget_item}\" does {effect_order} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_order} improve the level of \"{indicator}\".'},
+    {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} improve the level of \"{indicator}\".'},
 
-    {'Yes':'A local government can {effect_order} affect \"{indicator}\" by spending on \"{budget_item}\".', 'No':'A local government can not {effect_order} affect \"{indicator}\" by spending on \"{budget_item}\".'}
+    {'Yes':'There is an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.', 'No':'There is no effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.'}
+
 ]
 li_prompts_parse_yesno_from_answer = [
     """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
@@ -61,42 +64,42 @@ map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator
 
 # region indicator to indicator templates
 li_prompts_yes_no_template_i2i = [
-    "Give me a Yes or No answer to the following question about the relatedness of two socio-economic/health indicators, does the level of  \"{indicator1}\" {effect_order} influence the state of \"{indicator2}\"?",
+    "Give me a Yes or No answer to the following question about the relatedness of two socio-economic/health indicators, does the level of  \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?",
     
-    'Does local government spending on improving the level of \"{indicator1}\" {effect_order} affect the level of \"{indicator2}\" ?, True or False',
+    'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\" ?, True or False',
     
-    'Is it true that the level of \"{indicator1}\" is {effect_order} related to the level of \"{indicator2}\"?',
+    'Is it true that the level of \"{indicator1}\" is {effect_type} related to the level of \"{indicator2}\"?',
     
-    'Do improvements in {indicator1} {effect_order} affect \"{indicator2}\"?, Yes or No',
+    'Do improvements in {indicator1} {effect_type} affect \"{indicator2}\"?, Yes or No',
     
-    'Answer the following question with True or False: Does local government spending aimed at affecting \"{indicator1}\" {effect_order} affect \"{indicator2}\"?'
+    'Answer the following question with True or False: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ] 
 li_prompts_parse_yesno_from_answer_i2i = [
     """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
 ]
 li_prompts_openend_template_i2i = [
-    'Does the level of \"{indicator1}\" {effect_order} influence the state of \"{indicator2}\"?',
+    'Does the level of \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?',
 
-    'Does local government spending on improving the level of \"{indicator1}\" {effect_order} affect the level of \"{indicator2}\"?',
+    'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?',
 
-    'Is the level of \"{indicator1}\" {effect_order} related to the level of \"{indicator2}\"?',
+    'Is the level of \"{indicator1}\" {effect_type} related to the level of \"{indicator2}\"?',
 
-    'Improvements in {indicator1} {effect_order} affect \"{indicator2}\"?',
+    'Do improvements in {indicator1} {effect_type} affect \"{indicator2}\"?',
 
-    'Does local government spending aimed at affecting \"{indicator1}\" {effect_order} affect \"{indicator2}\"?'
+    'Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ]
 li_prompts_openend_template_open_response_i2i = [
-    {'Yes':'The level of \"{indicator1}\" is {effect_order} influential to the state of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_order} influential to the state of \"{indicator2}\".'},
+    {'Yes':'The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_type} influential to the state of \"{indicator2}\".'},
 
-    {'Yes':'Local government spending on improving the level of \"{indicator1}\" does {effect_order} affect the level of \"{indicator2}\".', 'No':'Local government spending on improving the level of \"{indicator1}\" does not {effect_order} affect the level of \"{indicator2}\".'},
+    {'Yes':'Local government spending on improving the level of \"{indicator1}\" does {effect_type} affect the level of \"{indicator2}\".', 'No':'Local government spending on improving the level of \"{indicator1}\" does not {effect_type} affect the level of \"{indicator2}\".'},
 
-    {'Yes':'The level of \"{indicator1}\" is {effect_order} related to the level of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_order} related to the level of \"{indicator2}\".'},
+    {'Yes':'The level of \"{indicator1}\" is {effect_type} related to the level of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_type} related to the level of \"{indicator2}\".'},
 
-    {'Yes':'Improvements in {indicator1} do {effect_order} affect \"{indicator2}\".', 'No':'Improvements in {indicator1} do not {effect_order} affect \"{indicator2}\".'},
+    {'Yes':'Improvements in {indicator1} do {effect_type} affect \"{indicator2}\".', 'No':'Improvements in {indicator1} do not {effect_type} affect \"{indicator2}\".'},
 
-    {'Yes':'Local government spending aimed at affecting \"{indicator1}\" does {effect_order} affect \"{indicator2}\".', 'No':'Local government spending aimed at affecting \"{indicator1}\" does not {effect_order} affect \"{indicator2}\".'}
+    {'Yes':'Local government spending aimed at affecting \"{indicator1}\" does {effect_type} affect \"{indicator2}\".', 'No':'Local government spending aimed at affecting \"{indicator1}\" does not {effect_type} affect \"{indicator2}\".'}
 
 ]
 
@@ -256,10 +259,10 @@ def perplexity(
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
-                 examples_dset:list[dict]|None=None, effect_order:str="arbitrary", 
+                 examples_dset:list[dict]|None=None, effect_type:str="arbitrary", 
                  relationship:str="budgetitem_to_indicator"  ) -> None:
         
-        assert effect_order in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"
+        assert effect_type in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
 
@@ -267,27 +270,10 @@ class PromptBuilder():
         self.k_shot = k_shot
         self.ensemble_size = ensemble_size
         self.examples_dset = examples_dset
-        self.effect_order = effect_order
-        self.effect_order_str = ""
+        self.effect_type = effect_type
         self.relationship = relationship
-        self.init_effect_order_str()
         # when arbitrary is subbed into the prompt template, it will result in a double space in the prompt. We use .replace("  ", " ") to remove this
 
-    def init_effect_order_str(self):
-        """ Initialize the string representation of effect order
-
-            If we are modelling 1st order effects only then we will use the word "indirectly" in the prompt. This achieves higher recall with lower precision.
-            If we are modelling 2nd order effects only then we will use the word "directly" in the prompt. This achieves higher precision with lower recall.
-
-            This is ideal since 2nd order effects also estimates weights of 
-
-        """
-        if self.effect_order == 'arbitrary':
-            self.effect_order_str = ''
-        elif self.effect_order == '1st':
-            self.effect_order_str = 'indirectly'
-        elif self.effect_order == '2nd':
-            self.effect_order_str = 'directly'
 
     def __call__(self, batch:list[dict]) -> list[list[str]]:
         
@@ -297,8 +283,6 @@ class PromptBuilder():
             templates = self._yes_no_template()
         elif self.prompt_style == 'open':
             templates = self._open_template()
-        elif self.prompt_style == 'ama':
-            templates = self._ama_template()
         elif self.prompt_style == 'pilestackoverflow_yes_no':
             templates = self._pilestackoverflow_yes_no_template()
         elif self.prompt_style == 'pilestackoverflow_open':
@@ -327,16 +311,16 @@ class PromptBuilder():
             
             # part of prompt to be filled with information about target
             if self.relationship == 'budgetitem_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_order=self.effect_order_str ).replace('  ',' ') +"\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') +"\nAnswer: "
             elif self.relationship == 'indicator_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_order=self.effect_order_str ).replace('  ',' ') +"\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') +"\nAnswer: "
 
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -349,16 +333,16 @@ class PromptBuilder():
         
         for ens_idx in range(self.ensemble_size):
             if self.relationship == 'budgetitem_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_order=self.effect_order_str ).replace('  ',' ') + "\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
             elif self.relationship == 'indicator_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_order=self.effect_order_str ).replace('  ',' ') + "\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
                 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
 
                 prompt = context_k + "\n\n"+prompt
             
@@ -366,55 +350,6 @@ class PromptBuilder():
 
         return templates
 
-    def _pilestackoverflow_yes_no_template(self) -> list[str]:
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_yes_no_template']
-        templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
-        for ens_idx in range(self.ensemble_size):
-            
-            # part of prompt to be filled with information about target
-            if self.relationship == 'budgetitem_to_indicator':
-                prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', effect_order=self.effect_order_str ).replace('  ',' ')
-            elif self.relationship == 'indicator_to_indicator':
-                prompt = templates[ens_idx].format( indicator1=f'{{target_indicator1}}' ,  indicator2=f'{{target_indicator2}}', effect_order=self.effect_order_str ).replace('  ',' ')
-            prompt = prompt + "\nA:\n\n"
-
-            # Add k_shot context
-            for k in reversed(range(self.k_shot)):
-                if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ')
-                elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Q:\n\n"+templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ')
-                context_k = context_k + f"\nA:\n\n{{answer_{k}}}."
-                prompt = context_k + "\n\n\n\n"+prompt
-            
-            templates[ens_idx] = prompt
-        
-        return templates
-
-    def _pilestackoverflow_open_template(self) -> list[str]:
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template']
-        templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
-        
-        for ens_idx in range(self.ensemble_size):
-            
-            if self.relationship == 'budgetitem_to_indicator':
-                prompt = templates[ens_idx].format( budget_item=f'{{target_budget_item}}' ,  indicator=f'{{target_indicator}}', effect_order=self.effect_order_str ).replace('  ',' ')
-            elif self.relationship == 'indicator_to_indicator':
-                prompt = templates[ens_idx].format( indicator1=f'{{target_indicator1}}' ,  indicator2=f'{{target_indicator2}}', effect_order=self.effect_order_str ).replace('  ',' ')
-            prompt = prompt + "\nA:\n\n"
-
-            # Add k_shot context
-            for k in reversed(range(self.k_shot)):
-                context_k = "Q:\n\n"+templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}' ,  indicator=f'{{indicator_{k}}}', effect_order=self.effect_order_str ).replace('  ',' ')
-                context_k_response = f"\nA:\n\n{{answer_{k}}}."
-
-                context_k = context_k + context_k_response
-                prompt = context_k + "\n\n\n\n"+prompt
-            
-            templates[ens_idx] = prompt
-
-        return templates
-    
     def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> list[list[str]]:
         
         li_li_prompts = []
@@ -469,11 +404,11 @@ class PromptBuilder():
                     
                     # Creating the open ended answer version of the examples
                     if self.relationship == 'budgetitem_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_order=self.effect_order_str) for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_order=self.effect_order_str) for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type) for d in neg_examples_sample ]
                     elif self.relationship == 'indicator_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_order=self.effect_order_str) for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_order=self.effect_order_str) for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type) for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
                     li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))

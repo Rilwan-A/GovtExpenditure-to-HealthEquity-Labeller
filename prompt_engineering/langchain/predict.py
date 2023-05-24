@@ -2,7 +2,10 @@
     This file provides a LangChain based approach to using a LLM to determine the weights of edges in a graph, 
         where the graph nodes represent government budget items and socioeconomic/health indicators.
 
+    NOTE: A bug exists within the transformers library that prevents used of 8bit models with automatically inferred device_map parameter to from_pretrained..
+        User must go to change the default value of _no_split_modules in transformers.modelling_utils.PretrainedModel to an empty list
 """
+
 import os,sys
 sys.path.append(os.getcwd())
 from argparse import ArgumentParser
@@ -12,9 +15,8 @@ import pandas as pd
 from functools import reduce
 import json as json
 
-
 # from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
-from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT, MAP_DEVICE_MAP
+from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
 import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
@@ -28,7 +30,8 @@ import openai
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
-
+import torch
+import random
 
 def main(
         llm_name:str,
@@ -37,7 +40,7 @@ def main(
         parse_style:str,
 
         ensemble_size:int,
-        effect_order:str, 
+        effect_type:str, 
         edge_value:str,
 
         input_file:str|UploadedFile,
@@ -56,25 +59,28 @@ def main(
         deepspeed_compat=False,
 
         save_output:bool = False,
+
+        max_dset_size:int|None = None,
+        data_load_seed:int = 10,
         ):
     
     # Load LLM
     llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
 
     # Load Annotated Examples to use in K-Shot context for Prompt
-    annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator')
-    annotated_examples_i2i = None if effect_order != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
+    annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
+    annotated_examples_i2i = None if effect_type != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
 
     # Create Prompt Builders 
     
     prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
-                                        effect_order,
+                                        effect_type,
                                         relationship='budgetitem_to_indicator')
     
-    prompt_builder_i2i = None if effect_order != '2nd' else PromptBuilder(prompt_style, k_shot_i2i,
+    prompt_builder_i2i = None if effect_type != '2nd' else PromptBuilder(prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
-                                                                           effect_order,
+                                                                           effect_type,
                                                                            relationship='indicator_to_indicator')
 
     # Create Prediction Generators
@@ -85,7 +91,7 @@ def main(
                                                      local_or_remote=local_or_remote,
                                                      deepspeed_compat=deepspeed_compat
                                                      )
-    prediction_generator_i2i = None if effect_order != '2nd' else PredictionGenerator(llm, prompt_style, ensemble_size,
+    prediction_generator_i2i = None if effect_type != '2nd' else PredictionGenerator(llm, prompt_style, ensemble_size,
                                                      edge_value,
                                                      parse_style,
                                                      relationship='indicator_to_indicator',
@@ -94,13 +100,12 @@ def main(
                                                      )
         
     # prepare data
-    li_li_record_b2i, li_li_record_i2i = prepare_data(input_file, effect_order, batch_size)
+    li_li_record_b2i, li_li_record_i2i = prepare_data(input_file, effect_type, batch_size, max_dset_size=max_dset_size, data_load_seed=data_load_seed)
     
 
     # run predictions
     li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i) # type: ignore #ignore
-    
-    
+        
     li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i = (None, None, None, None) if li_li_record_i2i is not None else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_li_record_i2i) #type: ignore 
     
     # saving to file
@@ -112,7 +117,7 @@ def main(
                             "prompt_style": prompt_style,
                             "parse_style": parse_style,
                             "ensemble_size": ensemble_size,
-                            "effect_order": effect_order,
+                            "effect_type": effect_type,
                             "edge_value": edge_value,
                             "k_shot_b2i": k_shot_b2i,
                             "k_shot_i2i": k_shot_i2i,
@@ -136,11 +141,23 @@ def main(
             
         save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator') #type: ignore
         
-        if effect_order is not None: 
+        if effect_type is not None: 
             save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator') #type: ignore #ignore
         
 
-    return None
+    return {
+        'li_li_record_b2i': li_li_record_b2i,
+        'li_prompt_ensemble_b2i': li_prompt_ensemble_b2i,
+        'li_pred_ensemble_b2i': li_pred_ensemble_b2i,
+        'li_pred_ensemble_parsed_b2i': li_pred_ensemble_parsed_b2i,
+        'li_pred_agg_b2i': li_pred_agg_b2i,
+
+        'li_li_record_i2i': li_li_record_i2i,
+        'li_prompt_ensemble_i2i': li_prompt_ensemble_i2i,
+        'li_pred_ensemble_i2i': li_pred_ensemble_i2i,
+        'li_pred_ensemble_parsed_i2i': li_pred_ensemble_parsed_i2i,
+        'li_pred_agg_i2i': li_pred_agg_i2i,
+    }
        
 def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str|None = None, prompt_style:str = 'yes_no'):
     
@@ -155,9 +172,18 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
         if llm_name in HUGGINGFACE_MODELS:
             from transformers import BitsAndBytesConfig
             
+            bool_8=MAP_LOAD_IN_NBIT[llm_name] ==8
+            bool_4=MAP_LOAD_IN_NBIT[llm_name] ==4
             quant_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
+                
+                load_in_8bit=bool_8,
+                llm_int8_has_fp16_weights=bool_8,
+                
+                load_in_4bit=bool_4,
+                bnb_4bit_quant_type="nf4" ,
+                bnb_4bit_use_double_quant=bool_4,
+                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None,
+
             )
 
             model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
@@ -169,8 +195,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
                             # 'load_in_8bit':MAP_LOAD_IN_8BIT[llm_name],
                                 # '_no_split_modules':[], 
                                 'quantization_config':quant_config 
-                            }
-
+                                }
                             )
 
         else:
@@ -198,7 +223,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
 
     return llm 
 
-def prepare_data(input_file:str|UploadedFile, effect_order:str = 'arbitrary', batch_size=2 ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
+def prepare_data(input_file:str|UploadedFile, effect_type:str = 'arbitrary', batch_size=2, max_dset_size=None, data_load_seed=10 ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
 
@@ -206,44 +231,60 @@ def prepare_data(input_file:str|UploadedFile, effect_order:str = 'arbitrary', ba
     """
 
     # Check json is valid
-    expected_keys = ['budget_items','indicators']
+    random.seed(data_load_seed)
+    expected_keys = ['budget_item','indicator','label']
     
+    # Load data
     if isinstance(input_file, str) and input_file[-4:]=='.json':
         json_data = json.load( open(input_file, 'r') )
         assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
                     
-        li_budget_items = json_data['budget_items']
-        li_indicators = json_data['indicators']
+        li_budget_items = json_data['budget_item']
+        li_indicator = json_data['indicator']
+        li_labels = json_data['label']
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
         df = pd.read_csv(input_file)
         assert all([key in df.columns for key in expected_keys]), f"input_csv must have the following columns: {expected_keys}"
-        li_budget_items = df['budget_items'].tolist()
-        li_indicators = df['indicators'].tolist()
+        li_budget_items = df['budget_item'].tolist()
+        li_indicator = df['indicator'].tolist()
+        li_labels = df['label'].tolist()
 
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
         raise NotImplementedError("UploadedFile not implemented yet")
-        li_budget_items = json_data['budget_items']
-        li_indicators = json_data['indicators']
+        li_budget_items = json_data['budget_item']
+        li_indicator = json_data['indicator']
+        li_labels = json_data['label']
+
     
     else:
         raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
 
+    
 
-    # Add budget_item to indicator combinations
-    li_li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicators ] for budget_item in li_budget_items ], [] ) 
+    # Add 'budget_item to indicator' combinations
+    li_li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicator ] for budget_item in li_budget_items ], [] ) 
+    if max_dset_size is not None:
+        li_li_record_b2i = random.sample(li_li_record_b2i, max_dset_size)
+    #batching
     li_li_record_b2i = [ li_li_record_b2i[i:i+batch_size] for i in range(0, len(li_li_record_b2i), batch_size) ]
+    
 
-    # if effect_order == 2nd Add indicator to indicator combinations
+    # if effect_type == 2nd: Add indicator to indicator combinations
     li_li_record_i2i = None
-    if effect_order == '2nd':
-        li_li_record_i2i = sum( [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicators ] for indicator in li_indicators ] , [] )
+    if effect_type == '2nd':
+        li_li_record_i2i = sum( [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicator ] for indicator in li_indicator ] , [] )
+        if max_dset_size is not None:
+            li_li_record_i2i = random.sample(li_li_record_i2i, max_dset_size)
+        # batching
         li_li_record_i2i = [ li_li_record_i2i[i:i+batch_size] for i in range(0, len(li_li_record_i2i), batch_size) ]
+
 
     return li_li_record_b2i, li_li_record_i2i
 
-def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, li_li_record:list[list[dict[str,str]]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, 
+                    li_li_record:list[list[dict[str,str]]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
@@ -287,12 +328,14 @@ def save_experiment(experiment_number:int,
     if relationship == 'budgetitem_to_indicator':
         df = pd.DataFrame({ 'budget_item': [ d['budget_item'] for d in li_record],
                            'indicator': [ d['indicator'] for d in li_record],
+                           'label': [ d['label'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
         
     elif relationship == 'indicator_to_indicator':
         df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
                            'indicator_2': [ d['indicator_2'] for d in li_record],
+                           'label': [ d['label'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
     else:
@@ -310,7 +353,7 @@ def parse_args():
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
-    parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary', '1st', '2nd'], help='The degree of orders which we require from our model' )
+    parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'direct', 'indirect'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'float_weight', 'distribution'], help='' )
 
     parser.add_argument('--input_file', type=str, default='input.json', help='Path to the file containing the input data' )
@@ -325,6 +368,13 @@ def parse_args():
     parser.add_argument('--api_key', type=str, default=None, help='The api key for the remote server e.g. HuggingfaceHub or OpenAIapi' )
     
     parser.add_argument('--batch_size', type=int, default=1 )
+
+    parser.add_argument('--data_load_seed', type=int, default=10, help='The seed to use when loading the data' )
+
+    parser.add_argument('--save_output', action='store_true', default=False, help='Indicates whether the output should be saved' )
+
+    parser.add_argument('--max_dset_size', type=int, default=None, help='The maximum number of examples to use from the dataset' )
+
 
     # parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
 

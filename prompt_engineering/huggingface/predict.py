@@ -37,7 +37,7 @@ def main(
 
         aggregation_method='majority_vote',
         parse_output_method='rule_based',
-        effect_order='directly',
+        effect_type='directly',
 
         remove_public_health:bool=False,
         
@@ -73,7 +73,7 @@ def main(
     test_dset_records = [test_dset_records[i:i+batch_size] for i in range(0, len(test_dset), batch_size)]
 
     # Create Prompt Builder
-    prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, effect_order )
+    prompt_builder = PromptBuilder(prompt_style, k_shot, ensemble_size, train_dset_records, effect_type )
     prediction_generator = PredictionGenerator(model, tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=False)
 
     # Creating Predictions for each row in the test set
@@ -102,13 +102,13 @@ def main(
         # Save CSV with predictions
         parent_dir = "./prompt_engineering/output/"
         exp_name = experiment_name(nn_name, finetuned, prompt_style, k_shot, ensemble_size, 
-                                   dset_name, aggregation_method, parse_output_method, effect_order,
+                                   dset_name, aggregation_method, parse_output_method, effect_type,
                                    remove_public_health)
         os.makedirs(os.path.join(parent_dir,exp_name), exist_ok=True )
         test_dset.to_csv( os.path.join( parent_dir, exp_name, "predictions.csv"), index=False )
         
         experiment_config = {'nn_name':nn_name, 'finetuned':finetuned, 'prompt_style':prompt_style, 'k_shot':k_shot, 'ensemble_size':ensemble_size, 'dset_name':dset_name, 
-                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'effect_order':effect_order,
+                                'aggregation_method':aggregation_method, 'parse_output_method':parse_output_method, 'effect_type':effect_type,
                                  'remove_public_health':remove_public_health }
         # Save experiment config as a yaml file
         yaml.safe_dump(experiment_config, open( os.path.join(parent_dir,exp_name, 'exp_config.yml'), 'w') )
@@ -222,10 +222,10 @@ class PredictionGenerator():
         if self.parse_output_method == 'rule_based':
             li_li_predictions_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_predictions]
 
-        elif self.parse_output_method == 'language_model_perplexity':
+        elif self.parse_output_method == 'perplexity':
             li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
         
-        elif self.parse_output_method == 'language_model_generation':
+        elif self.parse_output_method == 'generation':
             li_li_predictions_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_predictions]
         
         else:
@@ -390,7 +390,7 @@ def experiment_name(
         dset_name:str,
         aggregation_method:str,
         parse_output_method:str,
-        effect_order:str,
+        effect_type:str,
         remove_public_health:bool
 ):
     name = f"{dset_name}/{nn_name.replace('/','_')}/"
@@ -400,7 +400,7 @@ def experiment_name(
     name += f"_ES{ensemble_size}" if ensemble_size > 1 else ""
     name += f"_AG{ ''.join( [s[0] for s in aggregation_method.split('_')] ) }"
     name += f"_PO{ ''.join( [s[0] for s in parse_output_method.split('_')]) }"
-    name += f"_EO{effect_order[0]}"
+    name += f"_EO{effect_type[0]}"
     name += "_RPH" if remove_public_health else ""
     return name
 
@@ -424,10 +424,10 @@ def parse_args():
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilestackoverflow_yes_no', 'pilestackoverflow_open'], default='open', help='Style of prompt' )
-    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','language_model_perplexity', 'language_model_generation' ], default='language_model_perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--k_shot', type=int, default=0, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
-    parser.add_argument('--effect_order', type=str, default='arbitrary', choices=['arbitrary','1st', '2nd'] )
+    parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary','1st', '2nd'] )
     
     parser.add_argument('--aggregation_method', type=str, default='majority_vote', choices=['majority_vote'] )
     parser.add_argument('--dset_name',type=str, default='spot', choices=['spot','england'] )

@@ -14,19 +14,14 @@ import copy
 import numpy as np
 import pandas as pd
 
-HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-chat', 'ausboss/llama-30b-supercot','TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g', 'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g' ]
-MAP_LOAD_IN_8BIT = {
-    'mosaicml/mpt-7b-chat': False,
-    'ausboss/llama-30b-supercot': True,
-    'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': False,
-    'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': False
+HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-chat', 'JosephusCheung/Guanaco','TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g', 'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g' ]
+MAP_LOAD_IN_NBIT = {
+    'mosaicml/mpt-7b-chat': 4,
+    'JosephusCheung/Guanaco':4,
+    'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': 4,
+    'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': 4
 }
-MAP_DEVICE_MAP = {
-    'mosaicml/mpt-7b-chat': "auto",
-    'ausboss/llama-30b-supercot': 'sequential',
-    'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': 'sequential',
-    'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': 'sequential'
-}
+
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
 ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
@@ -46,13 +41,13 @@ class PredictionGenerator():
                   deepspeed_compat:bool=False ):
         
         # Can not get model logits scores from ChatOpenAI
-        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'language_model_perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
-        if parse_style == 'language_model_perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
+        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
+        if parse_style == 'perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['float weight','distribution'] and parse_style != 'language_model_perplexity': 
+        if edge_value in ['float weight','distribution'] and parse_style != 'perplexity': 
             if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
-                                                         To use ensemble size 1, please use parse_style='language_model_perplexity'.\
+                                                         To use ensemble size 1, please use parse_style='perplexity'.\
                                                          Alternatively use ensemble size > 1, ")
             
         self.llm = llm
@@ -68,7 +63,7 @@ class PredictionGenerator():
         self.generation_kwargs = {}
         self.generation_parse_kwargs = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
-        self.generation_kwargs[k]= 5 if prompt_style == 'yes_no' else 50 if prompt_style == 'open_ended' else None
+        self.generation_kwargs[k]= 5 if prompt_style == 'yes_no' else 50 if prompt_style == 'open' else None
         self.generation_parse_kwargs[k]= 6
 
 
@@ -77,9 +72,9 @@ class PredictionGenerator():
         
         # Generate predictions
         li_li_preds : list[list[str]] = []
-        for li_prompts in li_li_prompts:
             
-            if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
+        if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
+            for li_prompts in li_li_prompts:
                 batch_messages = [
                     [ SystemMessage(content=map_relationship_system_prompt[self.relationship]),
                         HumanMessage(content=prompt) ]
@@ -87,26 +82,30 @@ class PredictionGenerator():
                 
                 outputs = self.llm.generate(batch_messages, **self.generation_kwargs)
                 li_preds: list[str] = [ chatgen.text for chatgen in outputs.generations ]
+                li_li_preds.append(li_preds)
+        
+        elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
+            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs
+            for k,v in self.generation_kwargs.items():
+                self.llm.pipeline._forward_params[k] = v
 
-            elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
+            for li_prompts in li_li_prompts:
+                outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship] + '\n' + prompt for prompt in li_prompts ] )
+                li_preds : list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
             
-               outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship] + '\n' + prompt for prompt in li_prompts ], **self.generation_kwargs )
-               li_preds : list[str] = [ chatgen.text for chatgen in outputs.generations ]
-            
-            else:
-                raise ValueError(f"llm type {type(self.llm)} not recognized")
+                li_li_preds.append(li_preds)
+        else:
+            raise ValueError(f"llm type {type(self.llm)} not recognized")
 
-            li_li_preds.append(li_preds)
 
-                
         # Parse {'Yes':prob_yes, 'No':prob_no, 'Nan':prob_nan } from the predictions
         if self.parse_style == 'rule_based':
             li_li_preds_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_preds]
 
-        elif self.parse_style == 'language_model_perplexity':
+        elif self.parse_style == 'perplexity':
             li_li_preds_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_preds]
         
-        elif self.parse_style == 'language_model_generation':
+        elif self.parse_style == 'generation':
             li_li_preds_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_preds]
         
         else:
@@ -161,9 +160,11 @@ class PredictionGenerator():
 
 
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
-        
-            outputs = self.llm.generate( prompts= li_prompts, **self.generation_parse_kwargs )
-            li_preds_str: list[str] = [ chatgen.text for chatgen in outputs.generations ]
+            for k,v in self.generation_parse_kwargs.items():
+                self.llm.pipeline._forward_params[k] =  v
+
+            outputs = self.llm.generate( prompts= li_prompts )
+            li_preds_str: list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
 
         else:
             raise ValueError(f"llm type {type(self.llm)} not recognized")
@@ -257,35 +258,14 @@ class PredictionGenerator():
         return li_pred_agg #type: ignore
 
 def load_annotated_examples(k_shot_example_dset_name:str|None, 
-                            random_state_seed:int=10, 
                             relationship_type:str='budgetitem_to_indicator') -> list[dict[str,str]] | None:
+    
     li_records: list[dict[str,str]] | None = None
 
     if k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
         # Load spot dataset as pandas dataframe
-        dset = pd.read_csv('./data/spot/spot_indicator_mapping_table.csv')
+        dset = pd.read_csv('./data/spot/spot_indicator_mapping_table_train.csv')
         
-        # Remove all rows where 'type' is not 'Outcome'
-        dset = dset[dset['type'] == 'Outcome']
-
-        # Creating target field
-        dset['label'] = 'Yes'
-
-        # Rename columns to match the format of the other datasets
-        dset = dset.rename( columns={'category': 'budget_item', 'name':'indicator' } )
-
-        # Create negative examples
-        random_state = np.random.RandomState(random_state_seed)
-
-        # Too vague a budget item and there are only 4 examples of it, we remove it
-        dset = dset[ dset['budget_item'] != 'Central' ]
-
-        # create negative examples
-        dset = create_negative_examples(dset, random_state=random_state )
-
-        # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
-        dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
-
         li_records = dset.to_dict('records') #type: ignore
     
     elif k_shot_example_dset_name == 'spot' and relationship_type == 'indicator_to_indicator':
