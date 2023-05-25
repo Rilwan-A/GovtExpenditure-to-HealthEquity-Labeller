@@ -99,7 +99,6 @@ def break_up_text(dict_text:Dict[str,str], max_words:int=200, min_word_per_chunk
 
     return {'text':li_text}
 
-
 def split_paragraphs(input_text:str="", min_word_per_chunk:int=10):
     # Split text into paragraphs
     # Paragraphs are separated by two or more newlines
@@ -125,7 +124,6 @@ def split_paragraphs(input_text:str="", min_word_per_chunk:int=10):
     
     return split_text
 
-
 def map_tokenize(batch, tokenizer, max_len:int):
     # Tokenize each row of the dataset
     # batch['text'] is a list of strings
@@ -134,12 +132,15 @@ def map_tokenize(batch, tokenizer, max_len:int):
 
     return outp
 
-
-
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--nn_name', type=str, default='EleutherAI/gpt-j-6B' )
+    parser.add_argument('--nn_name', type=str, 
+                        default='TheBloke/wizard-vicuna-13B-HF'
+                         
+                          )
+    
+    # mosaicml/mpt-7b-chat', 'JosephusCheung/Guanaco','TheBloke/stable-vicuna-7B-HF','TheBloke/stable-vicuna-13B-HF'
     parser.add_argument('--token_chunk_len',type=int, default=200 )
     parser.add_argument('--min_word_per_chunk',type=int, default=10)
 

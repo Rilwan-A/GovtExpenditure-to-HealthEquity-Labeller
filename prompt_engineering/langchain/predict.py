@@ -4,7 +4,11 @@
 
     NOTE: A bug exists within the transformers library that prevents used of 8bit models with automatically inferred device_map parameter to from_pretrained..
         User must go to change the default value of _no_split_modules in transformers.modelling_utils.PretrainedModel to an empty list
-"""
+
+    NOTE: currently an issue with kshot prompt generation, currently the prompt is created in the PromptGenerator and System message  in the Predictor. However, prompt message should
+            system message should be dependent on the prompt message. This is currently not the case. e.g. if there are k shot examples system message should change to include " there will be some example questions"
+        
+        """
 
 import os,sys
 sys.path.append(os.getcwd())
@@ -90,7 +94,9 @@ def main(
                                                                            seed=data_load_seed)
 
     # Create Prediction Generators
-    prediction_generator_b2i = PredictionGenerator(llm, prompt_style, ensemble_size,
+    prediction_generator_b2i = PredictionGenerator(llm,
+                                                   llm_name,
+                                                   prompt_style, ensemble_size,
                                                      edge_value,
                                                      parse_style,
                                                      relationship='budgetitem_to_indicator',

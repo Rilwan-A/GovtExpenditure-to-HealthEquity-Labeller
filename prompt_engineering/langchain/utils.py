@@ -7,19 +7,34 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
-from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sppywlg, create_negative_examples, perplexity
+from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sppywlg, create_negative_examples, perplexity, map_llmname_input_format
 import random
 
 import copy
 import numpy as np
 import pandas as pd
 
-HUGGINGFACE_MODELS = [ 'mosaicml/mpt-7b-chat', 'JosephusCheung/Guanaco','TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g', 'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g' ]
+
+
+#https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
+HUGGINGFACE_MODELS = [ 'eachadea/vicuna-7b-1.1',
+                      'TheBloke/gpt4-x-vicuna-13B-HF', 
+                      'timdettmers/guanaco-33b-merged',
+                      
+                      'mosaicml/mpt-7b-chat', 
+                      
+                      'TheBloke/wizard-vicuna-13B-HF' ,
+                      
+                       ]
 MAP_LOAD_IN_NBIT = {
+    
+    'eachadea/vicuna-7b-1.1':4,
+    'TheBloke/gpt4-x-vicuna-13B-HF': 4,
+    'timdettmers/guanaco-33b-merged':4,
+
     'mosaicml/mpt-7b-chat': 4,
-    'JosephusCheung/Guanaco':4,
-    'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g': 4,
-    'TheBloke/vicuna-7B-1.1-GPTQ-4bit-128g': 4
+    'TheBloke/wizard-vicuna-13B-HF':4,
+
 }
 
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
@@ -32,6 +47,7 @@ class PredictionGenerator():
         NOTE: This prediction generator currently only designed for models tuned on instruct datasets that are remote
     """
     def __init__(self, llm,  
+                 llm_name,
                  prompt_style:str,
                   ensemble_size:int,
                   edge_value:str="binary_weight", # binary_weight or float_weight or float pair
@@ -52,6 +68,7 @@ class PredictionGenerator():
                                                          Alternatively use ensemble size > 1, ")
             
         self.llm = llm
+        self.llm_name = llm_name
 
         self.prompt_style = prompt_style
         self.ensemble_size = ensemble_size
@@ -64,7 +81,7 @@ class PredictionGenerator():
         self.generation_kwargs = {}
         self.generation_parse_kwargs = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
-        self.generation_kwargs[k]= 5 if prompt_style == 'yes_no' else 50 if prompt_style == 'open' else None
+        self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 50 if prompt_style == 'open' else None
         self.generation_parse_kwargs[k]= 6
         self.effect_type = effect_type
 
@@ -92,7 +109,17 @@ class PredictionGenerator():
                 self.llm.pipeline._forward_params[k] = v
 
             for li_prompts in li_li_prompts:
-                outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] + '\n' + prompt for prompt in li_prompts ] )
+                
+                li_prompts_fmtd = [
+                    map_llmname_input_format[self.llm_name].format( 
+                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style],
+                        user_message = prompt) for prompt in li_prompts ]
+
+                # prompts_fmtd = [ map_relationship_system_prompt[self.relationship][self.effect_type] + '\n' + prompt for prompt in li_prompts ]
+
+                outputs = self.llm.generate( 
+                    prompts=li_prompts_fmtd  )
+                
                 li_preds : list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
             
                 li_li_preds.append(li_preds)
@@ -145,8 +172,10 @@ class PredictionGenerator():
                
     def parse_yesno_with_lm_generation(self, li_predictions:list[str])-> list[dict[str, float]] :
         
+        """This method generates an output categorising the response to either affirmation or negation, then uses rules to  parse the output"""
+
         # Template to prompt language llm to simplify the answer to a Yes/No output
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_parse_yesno_from_answer']
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer_affirm_negat']
         template = copy.deepcopy( random.choice(li_prompts) )
             
 
@@ -156,7 +185,7 @@ class PredictionGenerator():
         # Generate prediction
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
             batch_messages = [
-                [ SystemMessage(content=map_relationship_system_prompt[self.relationship] ),
+                [ SystemMessage(content=map_relationship_sppywlg[self.relationship] ),
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
@@ -168,7 +197,13 @@ class PredictionGenerator():
             for k,v in self.generation_parse_kwargs.items():
                 self.llm.pipeline._forward_params[k] =  v
 
-            outputs = self.llm.generate( prompts= li_prompts )
+            li_prompts_fmtd = [
+                map_llmname_input_format[self.llm_name].format( 
+                    system_message = map_relationship_sppywlg[self.relationship],
+                    user_message = prompt) for prompt in li_prompts ]
+            
+            outputs = self.llm.generate( prompts= li_prompts_fmtd )
+
             li_preds_str: list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
 
         else:
@@ -184,16 +219,20 @@ class PredictionGenerator():
         # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
         #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
 
-        # Template to prompt language llm to simplify the answer to a Yes/No output
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_parse_yesno_from_answer']
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer_affirm_negat']
         template = copy.deepcopy( random.choice(li_prompts) )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
 
+        li_filledtemplate = [
+                map_llmname_input_format[self.llm_name].format( 
+                    system_message = map_relationship_sppywlg[self.relationship],
+                    user_message = prompt) for prompt in li_prompts ] #Added some base model formatting
+
         # For each fill template, create 3 filled versions with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         answers = ['Negation', 'Affirmation']
-        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
         # Get the perplexity of each of the filled templates

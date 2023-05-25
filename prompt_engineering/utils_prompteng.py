@@ -14,15 +14,16 @@ map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
 li_prompts_yes_no_template = [    
-    "Give me a Yes or No answer to the following question, is local government spending on \"{budget_item}\" {effect_type} related to \"{indicator}\"?",
+    "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
     
     'Give me a True or False answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
-    'Is it true that \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\"?',
+    'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
+
+    'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
     
-    'Yes or No, does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
+    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
-    'Answer the following question with True or False: Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
 ]
 li_prompts_openend_template = [    
     'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
@@ -36,7 +37,6 @@ li_prompts_openend_template = [
     'Is there an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}?'
     
 ]
-
 li_prompts_openend_template_open_response =[
     {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
 
@@ -49,22 +49,22 @@ li_prompts_openend_template_open_response =[
     {'Yes':'There is an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.', 'No':'There is no effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.'}
 
 ]
-li_prompts_parse_yesno_from_answer = [
+li_prompts_categorise_answer_affirm_negat = [
     """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
 ]
 
 budgetitem_to_indicator_prompts = {
-    'li_prompts_yes_no_template':li_prompts_yes_no_template,
+    'li_prompts_yes_no_template':li_prompts_yes_no_template, # NOTE: we replace the yes/no template with the openend template
     'li_prompts_openend_template':li_prompts_openend_template,
     'li_prompts_openend_template_open_response':li_prompts_openend_template_open_response,
-    'li_prompts_parse_yesno_from_answer':li_prompts_parse_yesno_from_answer
+    'li_prompts_categorise_answer_affirm_negat':li_prompts_categorise_answer_affirm_negat
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
 #endregion
 
 # region indicator to indicator templates
 li_prompts_yes_no_template_i2i = [
-    "Give me a Yes or No answer to the following question about the relatedness of two socio-economic/health indicators, does the level of  \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?",
+    "Does the level of  \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?",
     
     'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\" ?, True or False',
     
@@ -75,7 +75,7 @@ li_prompts_yes_no_template_i2i = [
     'Answer the following question with True or False: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ] 
-li_prompts_parse_yesno_from_answer_i2i = [
+li_prompts_categorise_answer_affirm_negat_i2i = [
     """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
 ]
 li_prompts_openend_template_i2i = [
@@ -107,31 +107,31 @@ indicator_to_indicator_prompts = {
     'li_prompts_yes_no_template_i2i':li_prompts_yes_no_template_i2i,
     'li_prompts_openend_template_i2i':li_prompts_openend_template_i2i,
     'li_prompts_openend_template_open_response_i2i':li_prompts_openend_template_open_response_i2i,
-    'li_prompts_parse_yesno_from_answer_i2i':li_prompts_parse_yesno_from_answer_i2i
+    'li_prompts_categorise_answer_affirm_negat_i2i':li_prompts_categorise_answer_affirm_negat_i2i
 }
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
 
 # region SystemMessage
-system_prompt_b2i_arbitrary = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_directly = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your should only consider potential direct effects, ignoring any confounding factors that could influence this relationship.'
+system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_directly = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
 system_prompt_b2i_indirectly = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship.'
 
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
-    'yes_no':'Please provide a Yes or No answer the following questions.',
-    'open':'Please use your expertise to answer the following questions with a short one or two sentence answer.',
+    'yes_no':'Please answer the following yes-no question.',
+    'open':'Please use your expertise to give me a one sentence answer to the following question.',
 }
 
-system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following questions. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
 map_system_prompts_i2i = {
     'indirectly':system_prompt_i2i,
     'directly':'',
     'arbitrary':'',
-    'yes_no':'Please provide a Yes or No answer the following questions.',
-    'open':'Please use your expertise to answer the following questions with a short one or two sentence answer.',
+    'yes_no':'Please provide a Yes or No answer the following question.',
+    'open':'Please use your expertise to answer the following question with a very short one sentence answer.',
 }
 
 map_relationship_system_prompt = {
@@ -139,14 +139,34 @@ map_relationship_system_prompt = {
     'indicator_to_indicator':map_system_prompts_i2i
 }
 
-system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a negation or affirmation. The statement will discuss whether or not there is a causal relationship between a government budget item and a socio-economic/health indicator. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
-system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a negation or affirmation. The statement will discuss whether or not there is a causal relationship between a two socio-economic / health indicators. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
+system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a government budget item and a socio-economic/health indicator. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
+system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a two socio-economic / health indicators. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
 map_relationship_sppywlg = {
     'budgetitem_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i,
     'indicator_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i
 }
 # endregion
 
+# region BaseModelFormat
+
+vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
+alpaca_lora = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
+mpt = "{system_message}\n\n{user_message}\n\n"
+
+""
+map_llmname_input_format = {
+    'eachadea/vicuna-7b-1.1':vicuna_1_1,
+    'TheBloke/gpt4-x-vicuna-13B-HF':alpaca_lora,
+    'timdettmers/guanaco-33b-merged':alpaca_lora,
+
+    'mosaicml/mpt-7b-chat':mpt,
+
+    'TheBloke/wizard-vicuna-7B-HF':vicuna_1_1,
+    'TheBloke/wizard-vicuna-13B-HF':vicuna_1_1,
+
+
+}
+# endregion
 
 def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFrame:
     """Create negative examples for the Spot Datasetby randomly selecting a budget item and indicator
@@ -332,16 +352,20 @@ class PromptBuilder():
             
             # part of prompt to be filled with information about target
             if self.relationship == 'budgetitem_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') +"\nExample Answer {k}: "
+                if self.k_shot >0:
+                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') +"\n Answer {k}: "
+                else:
+                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+                
             elif self.relationship == 'indicator_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') +"\nExample Answer {k}: "
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') +"\n Answer {k}: "
 
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
                     context_k = "Example Question {k}: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k} Answer: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -359,9 +383,16 @@ class PromptBuilder():
         
         for ens_idx in range(self.ensemble_size):
             if self.relationship == 'budgetitem_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                if self.k_shot >0:
+                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                else:
+                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+
             elif self.relationship == 'indicator_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                if self.k_shot >0:
+                    prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                else:
+                    prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ')
                 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
