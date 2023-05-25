@@ -34,18 +34,19 @@ class PredictionGenerator():
     def __init__(self, llm,  
                  prompt_style:str,
                   ensemble_size:int,
-                  edge_value:str="binary_weight", # binary_weight or float weight or float pair
+                  edge_value:str="binary_weight", # binary_weight or float_weight or float pair
                   parse_style:str='rule_based',
                   relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
-                  deepspeed_compat:bool=False ):
+                  deepspeed_compat:bool=False,
+                  effect_type:str='directly' ):
         
         # Can not get model logits scores from ChatOpenAI
         if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
         if parse_style == 'perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['float weight','distribution'] and parse_style != 'perplexity': 
+        if edge_value in ['float_weight','distribution'] and parse_style != 'perplexity': 
             if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
                                                          To use ensemble size 1, please use parse_style='perplexity'.\
                                                          Alternatively use ensemble size > 1, ")
@@ -65,6 +66,7 @@ class PredictionGenerator():
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
         self.generation_kwargs[k]= 5 if prompt_style == 'yes_no' else 50 if prompt_style == 'open' else None
         self.generation_parse_kwargs[k]= 6
+        self.effect_type = effect_type
 
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
@@ -76,7 +78,7 @@ class PredictionGenerator():
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
             for li_prompts in li_li_prompts:
                 batch_messages = [
-                    [ SystemMessage(content=map_relationship_system_prompt[self.relationship]),
+                    [ SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]  ),
                         HumanMessage(content=prompt) ]
                         for prompt in li_prompts]
                 
@@ -90,7 +92,7 @@ class PredictionGenerator():
                 self.llm.pipeline._forward_params[k] = v
 
             for li_prompts in li_li_prompts:
-                outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship] + '\n' + prompt for prompt in li_prompts ] )
+                outputs = self.llm.generate( prompts= [ map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] + '\n' + prompt for prompt in li_prompts ] )
                 li_preds : list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
             
                 li_li_preds.append(li_preds)
@@ -123,18 +125,21 @@ class PredictionGenerator():
             prediction = copy.deepcopy(prediction).lower()
 
             if 'yes' in prediction:
-                prediction = {'Yes':1.0, 'No':0.0, 'NA':0}
+                dict_pred = {'Yes':1.0, 'No':0.0, 'NA':0.0}
             
             elif 'no' in prediction:
-                prediction = {'Yes':0, 'No':1, 'NA':0.0}
-            
+                dict_pred = {'Yes':0.0, 'No':1.0, 'NA':0.0}
+                        
             elif any( ( neg_phrase in prediction for neg_phrase in ['not true','false', 'is not', 'not correct', 'does not', 'can not', 'not'])):
-                prediction = {'Yes':0, 'No':1, 'NA':0.0}
+                dict_pred = {'Yes':0.0, 'No':1.0, 'NA':0.0}
+
+            elif any( ( neg_phrase in prediction for neg_phrase in ['true','correct'])):
+                dict_pred = {'Yes':1.0, 'No':0.0, 'NA':0.0}
 
             else:
-                prediction = {'Yes':0.0, 'No':0, 'NA':0.0 }
+                dict_pred = {'Yes':0.0, 'No':0.0, 'NA':1.0 }
         
-            li_preds[idx] = prediction 
+            li_preds[idx] = dict_pred 
                    
         return li_preds
                
@@ -213,7 +218,7 @@ class PredictionGenerator():
 
             edge_value: 'binary_weight': for a prediction p with n samples, returns 1 if Yes is the modal prediction
 
-            edge_value: 'float weight': for a prediction p with n samples, returns the average relative weight of Yes for each sample
+            edge_value: 'float_weight': for a prediction p with n samples, returns the average relative weight of Yes for each sample
             
             edge_value: 'distribution': for a prediction p with n samples, returns the average relative weights of Yes/No/NA for each sample
 
@@ -226,32 +231,40 @@ class PredictionGenerator():
             def is_yes_mode(li_dict_pred) -> float:
                 li_argmax_pred = [ max(d, key=d.get) for d in li_dict_pred ]
                 most_common_pred = Counter(li_argmax_pred).most_common(1)[0][0]                
-                return 1.0 if most_common_pred == 'Yes' else 0.0
+                y_val = 1.0 if most_common_pred == 'Yes' else 0.0
+                n_val = 1.0 if most_common_pred == 'No' else 0.0
+                na_val =1 - y_val - n_val
+
+                d = {'Yes':y_val,'No':n_val,'NA':na_val}
+                return d
            
             li_pred_agg = [ is_yes_mode(li_dict_pred) for li_dict_pred in li_li_predictions ]
-        
-        elif self.edge_value == 'float weight':
+  
+        elif self.edge_value == 'distribution':
              
             def avg_relative_y(li_dict_pred):
-                li_relative_yes = [ d['Yes'] / sum(d.values()) for d in li_dict_pred ]
-                avg_relative_yes = sum(li_relative_yes) / len(li_relative_yes)
-                return avg_relative_yes
-            
-            li_pred_agg = [ avg_relative_y(li_dict_pred) for li_dict_pred in li_li_predictions ]
-        
-        elif self.edge_value == 'distribution':
+                li_relative_yes = [  ]
+                li_relative_no = [  ]
+                li_relative_na = [  ]
 
-            def distribution(li_dict_pred):
-                li_relative_yes = [ d['Yes'] / sum(d.values()) for d in li_dict_pred ]
-                li_relative_no = [ d['No'] / sum(d.values()) for d in li_dict_pred ]
-                li_relative_na = [ d['NA'] / sum(d.values()) for d in li_dict_pred ]
+                for d in li_dict_pred:
+                    sum_vals = sum(d.values())
+                    relative_yes = d['Yes'] / sum_vals 
+                    relative_no = d['No'] / sum_vals
+                    relative_na = d['NA'] / sum_vals
+
+                    li_relative_yes.append(relative_yes)
+                    li_relative_no.append(relative_no)
+                    li_relative_na.append(relative_na)
+
                 avg_relative_yes = sum(li_relative_yes) / len(li_relative_yes)
                 avg_relative_no = sum(li_relative_no) / len(li_relative_no)
                 avg_relative_na = sum(li_relative_na) / len(li_relative_na)
+
                 return {'Yes':avg_relative_yes, 'No':avg_relative_no, 'NA':avg_relative_na}
-
-            li_pred_agg = [ distribution(li_dict_pred) for li_dict_pred in li_li_predictions ]
-
+            
+            li_pred_agg = [ avg_relative_y(li_dict_pred) for li_dict_pred in li_li_predictions ]
+        
         else:
             raise NotImplementedError(f"Aggregation method {self.edge_value} not implemented")
         

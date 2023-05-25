@@ -11,6 +11,7 @@ sys.path.append(os.getcwd())
 from argparse import ArgumentParser
 
 import pandas as pd
+from collections import defaultdict
 
 from functools import reduce
 import json as json
@@ -34,34 +35,38 @@ import torch
 import random
 
 def main(
-        llm_name:str,
-        finetuned:bool,
-        prompt_style:str,
-        parse_style:str,
+    llm_name:str,
+    finetuned:bool,
 
-        ensemble_size:int,
-        effect_type:str, 
-        edge_value:str,
+    predict_b2i:bool,
+    predict_i2i:bool,
 
-        input_file:str|UploadedFile,
+    prompt_style:str,
+    parse_style:str,
 
-        k_shot_b2i:int=2,
-        k_shot_i2i:int=0,
+    ensemble_size:int,
+    effect_type:str, 
+    edge_value:str,
 
-        k_shot_example_dset_name_b2i:str = 'spot',
-        k_shot_example_dset_name_i2i:str|None = None,
+    input_file:str|UploadedFile,
 
-        local_or_remote:str='remote',
-        api_key:str|None = None,
+    k_shot_b2i:int=2,
+    k_shot_i2i:int=0,
 
-        batch_size:int=1,
+    k_shot_example_dset_name_b2i:str = 'spot',
+    k_shot_example_dset_name_i2i:str|None = None,
 
-        deepspeed_compat=False,
+    local_or_remote:str='remote',
+    api_key:str|None = None,
 
-        save_output:bool = False,
+    batch_size:int=1,
 
-        max_dset_size:int|None = None,
-        data_load_seed:int = 10,
+    deepspeed_compat=False,
+
+    save_output:bool = False,
+
+    max_dset_size:int|None = None,
+    data_load_seed:int = 10,
         ):
     
     # Load LLM
@@ -69,19 +74,20 @@ def main(
 
     # Load Annotated Examples to use in K-Shot context for Prompt
     annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
-    annotated_examples_i2i = None if effect_type != '2nd' else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
+    annotated_examples_i2i = None if predict_i2i is False else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
 
-    # Create Prompt Builders 
-    
+    # Create Prompt Builders
     prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type,
-                                        relationship='budgetitem_to_indicator')
+                                        relationship='budgetitem_to_indicator',
+                                        seed=data_load_seed)
     
-    prompt_builder_i2i = None if effect_type != '2nd' else PromptBuilder(prompt_style, k_shot_i2i,
+    prompt_builder_i2i = None if predict_i2i is False else PromptBuilder(prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type,
-                                                                           relationship='indicator_to_indicator')
+                                                                           relationship='indicator_to_indicator',
+                                                                           seed=data_load_seed)
 
     # Create Prediction Generators
     prediction_generator_b2i = PredictionGenerator(llm, prompt_style, ensemble_size,
@@ -89,24 +95,34 @@ def main(
                                                      parse_style,
                                                      relationship='budgetitem_to_indicator',
                                                      local_or_remote=local_or_remote,
-                                                     deepspeed_compat=deepspeed_compat
+                                                     deepspeed_compat=deepspeed_compat,
+                                                     effect_type=effect_type
                                                      )
-    prediction_generator_i2i = None if effect_type != '2nd' else PredictionGenerator(llm, prompt_style, ensemble_size,
+    prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, prompt_style, ensemble_size,
                                                      edge_value,
                                                      parse_style,
                                                      relationship='indicator_to_indicator',
                                                      local_or_remote=local_or_remote,
-                                                     deepspeed_compat=deepspeed_compat
+                                                     deepspeed_compat=deepspeed_compat,
+                                                     effect_type=effect_type
                                                      )
         
     # prepare data
-    li_li_record_b2i, li_li_record_i2i = prepare_data(input_file, effect_type, batch_size, max_dset_size=max_dset_size, data_load_seed=data_load_seed)
+    li_record_b2i, li_record_i2i = prepare_data(input_file,
+                                                    max_dset_size=max_dset_size,
+                                                    data_load_seed=data_load_seed,
+                                                    predict_b2i = predict_b2i,
+                                                    predict_i2i = predict_i2i ,
+                                                     )
     
 
     # run predictions
-    li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_li_record_b2i) # type: ignore #ignore
+    (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
+        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size) # type: ignore #ignore
         
-    li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i = (None, None, None, None) if li_li_record_i2i is not None else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_li_record_i2i) #type: ignore 
+    (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
+         li_pred_ensemble_parsed_i2i, li_pred_agg_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i,
+                                                                                                                                  li_record_i2i, batch_size) #type: ignore 
     
     # saving to file
     if save_output:
@@ -128,31 +144,38 @@ def main(
                         }
         
         # Save experiment config
-        os.makedirs(os.path.join('.prompt_engineering','experiments' ), exist_ok=True )
+        dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
+        os.makedirs(dir_experiments, exist_ok=True )
 
-        existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(os.path.join('.prompt_engineering','experiments' )) if x.startswith('exp_') ]
+        existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(dir_experiments) if x.startswith('exp_') ]
         lowest_available_number = min(set(range(1000)) - set(existing_numbers))
         experiment_number = lowest_available_number
 
-        os.makedirs(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}" ), exist_ok=True )
+        save_dir = os.path.join(dir_experiments, f"exp_{experiment_number:03d}" )
+        os.makedirs(save_dir, exist_ok=True )
         
-        with open(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'config.json'), 'w') as f:
+        with open(os.path.join(save_dir, 'config.json'), 'w') as f:
             yaml.safe_dump(experiment_config, f)
+
+        #unbatching data
+        # li_record_b2i = sum(li_batched_record_b2i, [])        
             
-        save_experiment(experiment_number, li_li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator') #type: ignore
+        save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
         
-        if effect_type is not None: 
-            save_experiment(experiment_number, li_li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator') #type: ignore #ignore
+        if predict_i2i: 
+            # li_record_i2i = sum(li_batched_record_i2i, [])
+
+            save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
 
     return {
-        'li_li_record_b2i': li_li_record_b2i,
+        'li_record_b2i': li_record_b2i,
         'li_prompt_ensemble_b2i': li_prompt_ensemble_b2i,
         'li_pred_ensemble_b2i': li_pred_ensemble_b2i,
         'li_pred_ensemble_parsed_b2i': li_pred_ensemble_parsed_b2i,
         'li_pred_agg_b2i': li_pred_agg_b2i,
 
-        'li_li_record_i2i': li_li_record_i2i,
+        'li_record_b2i': li_record_i2i,
         'li_prompt_ensemble_i2i': li_prompt_ensemble_i2i,
         'li_pred_ensemble_i2i': li_pred_ensemble_i2i,
         'li_pred_ensemble_parsed_i2i': li_pred_ensemble_parsed_i2i,
@@ -182,8 +205,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
                 load_in_4bit=bool_4,
                 bnb_4bit_quant_type="nf4" ,
                 bnb_4bit_use_double_quant=bool_4,
-                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None,
-
+                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
             )
 
             model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
@@ -195,8 +217,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
                             # 'load_in_8bit':MAP_LOAD_IN_8BIT[llm_name],
                                 # '_no_split_modules':[], 
                                 'quantization_config':quant_config 
-                                }
-                            )
+                                })
 
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
@@ -223,74 +244,115 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
 
     return llm 
 
-def prepare_data(input_file:str|UploadedFile, effect_type:str = 'arbitrary', batch_size=2, max_dset_size=None, data_load_seed=10 ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
+def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
+                 predict_b2i=True, predict_i2i=False ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
 
         Data can be passed in as a json or csv file name, or as a Django UploadedFile Object
+
+        If labels are supplied it is assumed that budget_items, indicators and labels are all index aligned
     """
 
     # Check json is valid
     random.seed(data_load_seed)
-    expected_keys = ['budget_item','indicator','label']
+    expected_keys = ['budget_item','indicator']
     
     # Load data
+    # Data cn be passed in as a json or csv file name, or as a Django UploadedFile Object
     if isinstance(input_file, str) and input_file[-4:]=='.json':
         json_data = json.load( open(input_file, 'r') )
         assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
-                    
+        
         li_budget_items = json_data['budget_item']
-        li_indicator = json_data['indicator']
-        li_labels = json_data['label']
+        li_indicator  = json_data['indicator']
+
+        set_budget_items = sorted(set(li_budget_items))
+        set_indicator = sorted(set(li_indicator))
+
+        li_labels = json_data.get('label',None)
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
         df = pd.read_csv(input_file)
         assert all([key in df.columns for key in expected_keys]), f"input_csv must have the following columns: {expected_keys}"
+
         li_budget_items = df['budget_item'].tolist()
         li_indicator = df['indicator'].tolist()
-        li_labels = df['label'].tolist()
+
+        set_budget_items = sorted(set(li_budget_items))
+        set_indicator = sorted(set(li_indicator))
+
+        li_labels = df['label'].tolist() if 'label' in df.columns else None
 
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
         raise NotImplementedError("UploadedFile not implemented yet")
         li_budget_items = json_data['budget_item']
         li_indicator = json_data['indicator']
-        li_labels = json_data['label']
-
+        # li_labels = json_data['label']
     
     else:
         raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
-
-    
-
+   
     # Add 'budget_item to indicator' combinations
-    li_li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator} for indicator in li_indicator ] for budget_item in li_budget_items ], [] ) 
+    li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator  } for indicator in set_indicator ] for budget_item in set_budget_items ], [] ) 
     if max_dset_size is not None:
-        li_li_record_b2i = random.sample(li_li_record_b2i, max_dset_size)
+        li_record_b2i = random.sample(li_record_b2i, max_dset_size)
+    if li_labels is not None:
+        li_record_b2i = add_labels(li_record_b2i, li_budget_items, li_indicator, li_labels)
     #batching
-    li_li_record_b2i = [ li_li_record_b2i[i:i+batch_size] for i in range(0, len(li_li_record_b2i), batch_size) ]
     
 
-    # if effect_type == 2nd: Add indicator to indicator combinations
-    li_li_record_i2i = None
-    if effect_type == '2nd':
-        li_li_record_i2i = sum( [  [ {'indicator1':indicator, 'indicator2':indicator} for indicator in li_indicator ] for indicator in li_indicator ] , [] )
+    li_record_i2i = None
+    if predict_i2i:
+        li_record_i2i = sum( [  [ {'indicator1':indicator1, 'indicator2':indicator2} for indicator1 in set_indicator ] for indicator2 in set_indicator ] , [] )
         if max_dset_size is not None:
-            li_li_record_i2i = random.sample(li_li_record_i2i, max_dset_size)
+            li_record_i2i = random.sample(li_record_i2i, max_dset_size)
+        if li_labels is not None:
+            li_record_i2i = add_labels(li_record_i2i, li_indicator, li_indicator, li_labels, group_type1='indicator')
         # batching
-        li_li_record_i2i = [ li_li_record_i2i[i:i+batch_size] for i in range(0, len(li_li_record_i2i), batch_size) ]
 
+    return li_record_b2i, li_record_i2i
 
-    return li_li_record_b2i, li_li_record_i2i
+def add_labels(li_record, li_group1, li_group2, li_labels, group_type1='budget_item', group_type2='indicator'):
+    """
+    li_group1, li_group2, li_labels are all index aligned lists
+
+    We first create a dictionary where the keys are group1 items and the value are a list of group2 items for which the corresponding (group1, group2, label) has a value of 'Yes' for label
+
+    Then from this we evaluate each (group1, group2) combination in li_record and add a label of 'Yes' if it is in the dictionary, else 'No'
+    """
+    # Create dictionary
+    di_group1 = defaultdict(list)
+    for group1, group2, label in zip(li_group1, li_group2, li_labels):
+        if label == False:
+            di_group1[group1].append(group2)
+
+    # Add labels
+    for idx, record in enumerate(li_record):
+
+        group1_val = record[group_type1]
+        group2_val = record[group_type2]
+
+        if group2_val in di_group1[group1_val]:
+            li_record[idx]['label'] = 'Yes'
+        else:
+            li_record[idx]['label'] = 'No'
+
+    return li_record
+
 
 def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, 
-                    li_li_record:list[list[dict[str,str]]] ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+                    li_record:list[dict[str,str]],
+                     batch_size=2 ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
     li_pred_ensemble = []
     li_pred_ensemble_parsed = []
     li_pred_agg = []
+
+    li_li_record = [ li_record[i:i+batch_size] for i in range(0, len(li_record), batch_size) ]
 
     for idx, batch in enumerate(li_li_record):
 
@@ -305,43 +367,59 @@ def predict_batches(prompt_builder:PromptBuilder, prediction_generator:Predictio
 
 
         # Extract predictions from the generated text
-        li_prompt_ensemble.append(batch_prompt_ensembles)  # type: ignore
-        li_pred_ensemble.append( batch_pred_ensembles ) # type: ignore
-        li_pred_ensemble_parsed.append( batch_pred_ensembles_parsed ) # type: ignore
-        li_pred_agg.append(batch_pred_agg) # type: ignore
+        li_prompt_ensemble.extend(batch_prompt_ensembles)  # type: ignore
+        li_pred_ensemble.extend( batch_pred_ensembles ) # type: ignore
+        li_pred_ensemble_parsed.extend( batch_pred_ensembles_parsed ) # type: ignore
+        li_pred_agg.extend(batch_pred_agg) # type: ignore
 
+    
     return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg
 
-def save_experiment(experiment_number:int, 
-                    li_li_record:list[list[dict[str,str]]],
+def save_experiment( 
+                    li_record:list[dict[str,str]],
                     li_prompt_ensemble:list[list[str]],
                     li_pred_ensemble:list[list[str]],
                     li_pred_ensemble_parsed:list[list[str]],
-                    li_pred_agg:list[str],
-                    relationship:str='budgetitem_to_indicator' ):
+                    li_pred_agg,
+                    relationship:str='budgetitem_to_indicator',
+                    save_dir:str='experiments' ):
     
     # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
     encode = lambda _list: [ json.dumps(val) for val in _list]
     
-    li_record =  sum(li_li_record, [])
-
     if relationship == 'budgetitem_to_indicator':
         df = pd.DataFrame({ 'budget_item': [ d['budget_item'] for d in li_record],
                            'indicator': [ d['indicator'] for d in li_record],
-                           'label': [ d['label'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
-        
+        if 'label' in li_record[0].keys():
+            df['label'] = [ d['label'] for d in li_record]
+            # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
+            df = df[['budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']]
+
+
     elif relationship == 'indicator_to_indicator':
         df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
                            'indicator_2': [ d['indicator_2'] for d in li_record],
-                           'label': [ d['label'] for d in li_record],
+                        #    'label': [ d['label'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+        if 'label' in li_record[0].keys():
+            df['label'] = [ d['label'] for d in li_record]
+            # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
+            df = df[['indicator1', 'indicator2', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']]
+                
     else:
         raise ValueError("relationship must be one of ['budgetitem_to_indicator', 'indicator_to_indicator']")
-        
-    df.to_csv(os.path.join('.prompt_engineering','experiments', f"exp_{experiment_number:03d}", 'predictions.csv'), index=False)
+
+    # Save to csv
+    os.makedirs(save_dir, exist_ok=True)
+    name = None
+    if relationship == 'budgetitem_to_indicator':
+        name = 'b2i'
+    elif relationship == 'indicator_to_indicator':
+        name = 'i2i'
+    df.to_csv(os.path.join(save_dir, f'predictions_{name}.csv'), index=False)
 
     return None
 
@@ -349,12 +427,16 @@ def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
+    
+    parser.add_argument('--predict_b2i', action='store_true', default=True, help='Indicates whether to predict budgetitem to indicator' )
+    parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
+
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
-    parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'direct', 'indirect'], help='Type of effect to ask language model to evaluate' )
-    parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'float_weight', 'distribution'], help='' )
+    parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
+    parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
 
     parser.add_argument('--input_file', type=str, default='input.json', help='Path to the file containing the input data' )
 

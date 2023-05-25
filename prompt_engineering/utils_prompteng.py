@@ -16,11 +16,11 @@ map_relationship_promptsmap ={}
 li_prompts_yes_no_template = [    
     "Give me a Yes or No answer to the following question, is local government spending on \"{budget_item}\" {effect_type} related to \"{indicator}\"?",
     
-    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?, True or False',
+    'Give me a True or False answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
     'Is it true that \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\"?',
     
-    'Does \"{budget_item}\" {effect_type} affect \"{indicator}\"?, Yes or No',
+    'Yes or No, does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
     'Answer the following question with True or False: Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
 ]
@@ -113,11 +113,30 @@ map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_p
 # endregion
 
 # region SystemMessage
-system_prompt_b2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide a nuanced perspective on the possible connections between these two elements.'
-system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide a nuanced perspective on the possible connections between these two elements. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+system_prompt_b2i_arbitrary = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_directly = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your should only consider potential direct effects, ignoring any confounding factors that could influence this relationship.'
+system_prompt_b2i_indirectly = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship.'
+
+map_system_prompts_b2i = {
+    'arbitrary':system_prompt_b2i_arbitrary,
+    'directly':system_prompt_b2i_directly,
+    'indirectly':system_prompt_b2i_indirectly,
+    'yes_no':'Please provide a Yes or No answer the following questions.',
+    'open':'Please use your expertise to answer the following questions with a short one or two sentence answer.',
+}
+
+system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following questions. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+map_system_prompts_i2i = {
+    'indirectly':system_prompt_i2i,
+    'directly':'',
+    'arbitrary':'',
+    'yes_no':'Please provide a Yes or No answer the following questions.',
+    'open':'Please use your expertise to answer the following questions with a short one or two sentence answer.',
+}
+
 map_relationship_system_prompt = {
-    'budgetitem_to_indicator':system_prompt_b2i,
-    'indicator_to_indicator':system_prompt_i2i
+    'budgetitem_to_indicator':map_system_prompts_b2i,
+    'indicator_to_indicator':map_system_prompts_i2i
 }
 
 system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a negation or affirmation. The statement will discuss whether or not there is a causal relationship between a government budget item and a socio-economic/health indicator. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
@@ -258,20 +277,25 @@ def perplexity(
     return ppls
 
 class PromptBuilder():
-    def __init__(self, prompt_style:str, k_shot:int, ensemble_size:int, 
-                 examples_dset:list[dict]|None=None, effect_type:str="arbitrary", 
-                 relationship:str="budgetitem_to_indicator"  ) -> None:
+    def __init__(self, prompt_style:str, k_shot:int,
+                 ensemble_size:int, 
+                 examples_dset:list[dict]|None=None, 
+                 effect_type:str="arbitrary", 
+                 relationship:str="budgetitem_to_indicator",
+                seed:int=10  ) -> None:
         
-        assert effect_type in [ 'arbitrary', '1st', '2nd'], "Effect order must be either arbitrary, 1st or 2nd"
+        
+        assert effect_type in [ 'arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
 
         self.prompt_style = prompt_style
-        self.k_shot = k_shot
-        self.ensemble_size = ensemble_size
+        self.k_shot = k_shot    # Number of examples to use as context for each prompt
+        self.ensemble_size = ensemble_size # Number of different prompts to use per prediction
         self.examples_dset = examples_dset
         self.effect_type = effect_type
         self.relationship = relationship
+        random.seed(seed)
         # when arbitrary is subbed into the prompt template, it will result in a double space in the prompt. We use .replace("  ", " ") to remove this
 
 
@@ -283,17 +307,13 @@ class PromptBuilder():
             templates = self._yes_no_template()
         elif self.prompt_style == 'open':
             templates = self._open_template()
-        elif self.prompt_style == 'pilestackoverflow_yes_no':
-            templates = self._pilestackoverflow_yes_no_template()
-        elif self.prompt_style == 'pilestackoverflow_open':
-            templates = self._pilestackoverflow_open_template()
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
 
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
-        if self.prompt_style in ['yes_no', 'pilestackoverflow_yes_no']:
+        if self.prompt_style in ['yes_no']:
             li_li_prompts = self.fill_template_yesno(templates, batch)
-        elif self.prompt_style in ['open', 'pilestackoverflow_open']:
+        elif self.prompt_style in ['open']:
             li_li_prompts = self.fill_template_open(templates, batch)
         else:
             li_li_prompts = []
@@ -301,9 +321,10 @@ class PromptBuilder():
         return li_li_prompts
     
     def _yes_no_template(self) -> list[str]:
-        # We store N yes_no prommpts templates in order of quality of prompt
+        # This creates sets of prompt templates, one prompt set for each prediction and M different prompts within each prompt set
         # When producing a prompt set of size M<N we randomly sample 
         # For each member of the ensemble we then extend the prompt to have self.k_shots context
+        
         li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_yes_no_template']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
 
@@ -311,16 +332,16 @@ class PromptBuilder():
             
             # part of prompt to be filled with information about target
             if self.relationship == 'budgetitem_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') +"\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') +"\nExample Answer {k}: "
             elif self.relationship == 'indicator_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') +"\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') +"\nExample Answer {k}: "
 
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k} Answer: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -328,6 +349,11 @@ class PromptBuilder():
         return templates
     
     def _open_template(self) -> list[str]:
+        # This creates sets of prompt templates, one prompt set for each prediction and M different prompts within each prompt set
+        # When producing a prompt set of size M<N we randomly sample
+        # For each member of the ensemble we then extend the prompt to have self.k_shots context
+        # This output leaves gaps for budget_items, indicators, and responses ot be filled in 
+
         li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
         
@@ -387,14 +413,16 @@ class PromptBuilder():
         return li_li_prompts
 
     def fill_template_open(self, templates:list[str], batch:list[dict])->list[list[str]]:
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template_open_response']
-        template_responses = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
+        li_answer_templates = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template_open_response']
+        template_responses = copy.deepcopy( sample(li_answer_templates, self.ensemble_size)  )
 
         li_li_prompts = []
         for row in batch:
             
             li_prompts = []
             for ens_idx in range(self.ensemble_size):
+                
+                ## filling k-shot examples in template
                 if self.k_shot > 0:
                     # Fill in the k_shot context with random extracts from dataset
                     
@@ -411,8 +439,8 @@ class PromptBuilder():
                         neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type) for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
-                    li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
-                    random.Random(48).shuffle(li_examples)
+                    li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(e) + list(neg_examples_open_ended_answer) ))
+                    random.shuffle(li_examples)
 
                     examples_sample, examples_open_ended_answer = zip(*li_examples)
 
@@ -424,7 +452,7 @@ class PromptBuilder():
                 else:
                     format_dict = {}
 
-                ## filling context examples in template
+                # filling in the target info
                 if self.relationship == 'budgetitem_to_indicator':
                     prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'],
                                                     **format_dict).replace('  ',' ')
