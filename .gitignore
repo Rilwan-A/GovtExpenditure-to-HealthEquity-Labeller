@@ -23,6 +23,8 @@ temp*
 # Dataset Files
 **/**.arrow
 **/**.pkl
+data/**.json
+data
 
 
 # Document files
