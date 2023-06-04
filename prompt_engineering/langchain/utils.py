@@ -17,15 +17,14 @@ import pandas as pd
 
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
-HUGGINGFACE_MODELS = [ 'eachadea/vicuna-7b-1.1',
-                      'TheBloke/gpt4-x-vicuna-13B-HF', 
-                      'timdettmers/guanaco-33b-merged',
-                      
-                      'mosaicml/mpt-7b-chat', 
-                      
-                      'TheBloke/wizard-vicuna-13B-HF' ,
-                      
-                       ]
+HUGGINGFACE_MODELS = [ 
+    
+
+    'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF',  'timdettmers/guanaco-33b-merged', 'TheBloke/guanaco-65B-HF',
+
+    'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g'  ,'TheBloke/guanaco-65B-GPTQ'
+    ]
+
 MAP_LOAD_IN_NBIT = {
     
     'eachadea/vicuna-7b-1.1':4,
@@ -111,7 +110,7 @@ class PredictionGenerator():
             for li_prompts in li_li_prompts:
                 
                 li_prompts_fmtd = [
-                    map_llmname_input_format[self.llm_name].format( 
+                    map_llmname_input_format(self.llm_name).format( 
                         system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style],
                         user_message = prompt) for prompt in li_prompts ]
 
@@ -198,7 +197,7 @@ class PredictionGenerator():
                 self.llm.pipeline._forward_params[k] =  v
 
             li_prompts_fmtd = [
-                map_llmname_input_format[self.llm_name].format( 
+                map_llmname_input_format(self.llm_name).format( 
                     system_message = map_relationship_sppywlg[self.relationship],
                     user_message = prompt) for prompt in li_prompts ]
             
@@ -225,7 +224,7 @@ class PredictionGenerator():
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
 
         li_filledtemplate = [
-                map_llmname_input_format[self.llm_name].format( 
+                map_llmname_input_format(self.llm_name).format( 
                     system_message = map_relationship_sppywlg[self.relationship],
                     user_message = prompt) for prompt in li_prompts ] #Added some base model formatting
 

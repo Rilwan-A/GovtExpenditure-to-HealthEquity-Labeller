@@ -216,6 +216,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
                 bnb_4bit_quant_type="nf4" ,
                 bnb_4bit_use_double_quant=bool_4,
                 bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
+
             )
 
             model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
@@ -351,7 +352,6 @@ def add_labels(li_record, li_group1, li_group2, li_labels, group_type1='budget_i
 
     return li_record
 
-
 def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, 
                     li_record:list[dict[str,str]],
                      batch_size=2 ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
@@ -466,9 +466,6 @@ def parse_args():
     parser.add_argument('--save_output', action='store_true', default=False, help='Indicates whether the output should be saved' )
 
     parser.add_argument('--max_dset_size', type=int, default=None, help='The maximum number of examples to use from the dataset' )
-
-
-    # parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether the script is being run in debugging mode')
 
     
     args = parser.parse_known_args()[0]

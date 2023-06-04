@@ -147,25 +147,25 @@ map_relationship_sppywlg = {
 }
 # endregion
 
-# region BaseModelFormat
+# region BaseModelFormat - The format required by the underlying language model
+format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
+format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
+format_mpt = "{system_message}\n\n{user_message}\n\n"
 
-vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
-alpaca_lora = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
-mpt = "{system_message}\n\n{user_message}\n\n"
+def map_llmname_input_format(llm_name):
 
-""
-map_llmname_input_format = {
-    'eachadea/vicuna-7b-1.1':vicuna_1_1,
-    'TheBloke/gpt4-x-vicuna-13B-HF':alpaca_lora,
-    'timdettmers/guanaco-33b-merged':alpaca_lora,
-
-    'mosaicml/mpt-7b-chat':mpt,
-
-    'TheBloke/wizard-vicuna-7B-HF':vicuna_1_1,
-    'TheBloke/wizard-vicuna-13B-HF':vicuna_1_1,
+    if 'vicuna' in llm_name:
+        return format_vicuna_1_1
+    elif 'alpaca' in llm_name:
+        return format_alpaca
+    elif 'guanaco' in llm_name:
+        return format_alpaca
+    elif 'mpt' in llm_name:
+        return format_mpt
+    else:
+        raise ValueError(f'Unknown llm_name: {llm_name}')
 
 
-}
 # endregion
 
 def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFrame:
