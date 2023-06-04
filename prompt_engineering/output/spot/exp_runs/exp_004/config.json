@@ -2,7 +2,7 @@ codebase: langchain
 deepspeed_compat: false
 edge_value: binary_weight
 effect_type: directly
-ensemble_size: 2
+ensemble_size: 1
 finetuned: false
 k_shot_b2i: 0
 k_shot_example_dset_name_b2i: spot

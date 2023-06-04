@@ -95,23 +95,27 @@ def main(
 
     # Create Prediction Generators
     prediction_generator_b2i = PredictionGenerator(llm,
-                                                   llm_name,
-                                                   prompt_style, ensemble_size,
-                                                     edge_value,
-                                                     parse_style,
-                                                     relationship='budgetitem_to_indicator',
-                                                     local_or_remote=local_or_remote,
-                                                     deepspeed_compat=deepspeed_compat,
-                                                     effect_type=effect_type
-                                                     )
-    prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, prompt_style, ensemble_size,
-                                                     edge_value,
-                                                     parse_style,
-                                                     relationship='indicator_to_indicator',
-                                                     local_or_remote=local_or_remote,
-                                                     deepspeed_compat=deepspeed_compat,
-                                                     effect_type=effect_type
-                                                     )
+                                                        llm_name,
+                                                        prompt_style,
+                                                        ensemble_size,
+                                                        edge_value,
+                                                        parse_style,
+                                                        relationship='budgetitem_to_indicator',
+                                                        local_or_remote=local_or_remote,
+                                                        deepspeed_compat=deepspeed_compat,
+                                                        effect_type=effect_type
+                                                        )
+    prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, 
+                                                        llm_name,
+                                                        prompt_style,
+                                                        ensemble_size,
+                                                        edge_value,
+                                                        parse_style,
+                                                        relationship='indicator_to_indicator',
+                                                        local_or_remote=local_or_remote,
+                                                        deepspeed_compat=deepspeed_compat,
+                                                        effect_type=effect_type
+                                                        )
         
     # prepare data
     li_record_b2i, li_record_i2i = prepare_data(input_file,
@@ -251,7 +255,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
     return llm 
 
 def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
-                 predict_b2i=True, predict_i2i=False ) -> tuple[list[list[dict[str,str]]]|None, list[list[dict[str,str]]]|None]:
+                 predict_b2i=True, predict_i2i=False ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
 

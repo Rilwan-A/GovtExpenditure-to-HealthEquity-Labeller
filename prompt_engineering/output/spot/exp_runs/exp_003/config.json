@@ -2,13 +2,13 @@ codebase: langchain
 deepspeed_compat: false
 edge_value: binary_weight
 effect_type: directly
-ensemble_size: 2
+ensemble_size: 1
 finetuned: false
-k_shot_b2i: 2
+k_shot_b2i: 0
 k_shot_example_dset_name_b2i: spot
 k_shot_example_dset_name_i2i: null
 k_shot_i2i: 0
-llm_name: mosaicml/mpt-7b-chat
+llm_name: TheBloke/gpt4-x-vicuna-13B-HF
 local_or_remote: local
 parse_style: rule_based
 prompt_style: yes_no
