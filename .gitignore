@@ -13,6 +13,13 @@ tests/env_vars.yml
 **/**.temp
 temp*
 
+# Bash scripts
+**/**.sh
+
+
+# Logs
+**/**.log
+
 # Dataset Files
 **/**.arrow
 **/**.pkl

@@ -20,6 +20,8 @@ from collections import defaultdict
 from functools import reduce
 import json as json
 
+# Testing models to see how well they aligned to expert's annotations of the SPOT dataset with yes_no prompt style w/ rule based parsing and binary weight edge value 
+
 # from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
 from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
@@ -37,6 +39,8 @@ from prompt_engineering.utils_prompteng import PromptBuilder
 from django.core.files.uploadedfile import UploadedFile
 import torch
 import random
+
+from prompt_engineering.my_logger import setup_logging_predict
 
 def main(
     llm_name:str,
@@ -73,14 +77,23 @@ def main(
     data_load_seed:int = 10,
         ):
     
+    # Setup Logging
+    logging = setup_logging_predict(llm_name)
+
+    logging.info("Starting Prediction Script with model: {}".format(llm_name))
+
     # Load LLM
+    logging.info(f"\tLoading {llm_name}")
     llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
 
     # Load Annotated Examples to use in K-Shot context for Prompt
+    logging.info("\tLoading Annotated Examples")
     annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
     annotated_examples_i2i = None if predict_i2i is False else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
+    logging.info("\Annotated Examples Loaded")
 
     # Create Prompt Builders
+    logging.info("\tCreating Prompt Builders")
     prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type,
@@ -92,8 +105,10 @@ def main(
                                                                            effect_type,
                                                                            relationship='indicator_to_indicator',
                                                                            seed=data_load_seed)
+    logging.info("\tPrompt Builders Created")
 
     # Create Prediction Generators
+    logging.info("\tCreating Prediction Generators")
     prediction_generator_b2i = PredictionGenerator(llm,
                                                         llm_name,
                                                         prompt_style,
@@ -116,26 +131,32 @@ def main(
                                                         deepspeed_compat=deepspeed_compat,
                                                         effect_type=effect_type
                                                         )
+    logging.info("\tPrediction Generators Created")
         
     # prepare data
+    logging.info("\tPreparing Data")
     li_record_b2i, li_record_i2i = prepare_data(input_file,
                                                     max_dset_size=max_dset_size,
                                                     data_load_seed=data_load_seed,
                                                     predict_b2i = predict_b2i,
                                                     predict_i2i = predict_i2i ,
                                                      )
+    logging.info("\tData Prepared")
     
 
     # run predictions
+    logging.info("\tRunning Predictions")
     (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
         li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size) # type: ignore #ignore
         
     (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
          li_pred_ensemble_parsed_i2i, li_pred_agg_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i,
                                                                                                                                   li_record_i2i, batch_size) #type: ignore 
-    
+    logging.info("\tPredictions Complete")
+
     # saving to file
     if save_output:
+        logging.info("\tSaving Output")
         experiment_config = {
                             "llm_name": llm_name,
                             'codebase': 'langchain',
@@ -177,6 +198,7 @@ def main(
 
             save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
+        logging.info("\tOutput Saved")
 
     return {
         'li_record_b2i': li_record_b2i,
@@ -354,7 +376,8 @@ def add_labels(li_record, li_group1, li_group2, li_labels, group_type1='budget_i
 
 def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, 
                     li_record:list[dict[str,str]],
-                     batch_size=2 ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+                     batch_size=2,
+                      logger=None ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
@@ -365,6 +388,8 @@ def predict_batches(prompt_builder:PromptBuilder, prediction_generator:Predictio
     li_li_record = [ li_record[i:i+batch_size] for i in range(0, len(li_record), batch_size) ]
 
     for idx, batch in enumerate(li_li_record):
+        if logger is not None:
+            logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
 
         # Create prompts
         batch_prompt_ensembles = prompt_builder(batch)
@@ -381,7 +406,6 @@ def predict_batches(prompt_builder:PromptBuilder, prediction_generator:Predictio
         li_pred_ensemble.extend( batch_pred_ensembles ) # type: ignore
         li_pred_ensemble_parsed.extend( batch_pred_ensembles_parsed ) # type: ignore
         li_pred_agg.extend(batch_pred_agg) # type: ignore
-
     
     return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg
 

@@ -301,7 +301,7 @@ class PromptEngineeringLM(pl.LightningModule):
             precision= 'bf16',
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
-            max_epochs=2 if config_trainer.debugging else config_trainer.max_epochs,
+            max_epochs=2 if config_trainer.debugging else config_trainer.2e-5	,
             num_sanity_val_steps=4,
             
             limit_train_batches=2 if config_trainer.debugging else None,
@@ -436,7 +436,7 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--devices', type=int, default=1)
         parser.add_argument('--accumulate_grad_batches', type=int, default=1)
 
-        parser.add_argument('--max_epochs', type=int, default=100)
+        parser.add_argument('--max_epochs', type=int, default=3)
         parser.add_argument('--val_check_interval', type=int,  default=1.0)
 
         # let user pass in a multiple values for a argument called early_stopping_metrics

@@ -27,12 +27,14 @@ HUGGINGFACE_MODELS = [
 
 MAP_LOAD_IN_NBIT = {
     
-    'eachadea/vicuna-7b-1.1':4,
-    'TheBloke/gpt4-x-vicuna-13B-HF': 4,
-    'timdettmers/guanaco-33b-merged':4,
+    'mosaicml/mpt-7b-chat': 8,
+    'TheBloke/vicuna-7B-1.1-HF': 8,
 
-    'mosaicml/mpt-7b-chat': 4,
+    'TheBloke/vicuna-7B-1.1-HF':4,
     'TheBloke/wizard-vicuna-13B-HF':4,
+
+    'timdettmers/guanaco-33b-merged':4,
+    'TheBloke/guanaco-65B-HF':4,
 
 }
 
@@ -83,7 +85,6 @@ class PredictionGenerator():
         self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 50 if prompt_style == 'open' else None
         self.generation_parse_kwargs[k]= 6
         self.effect_type = effect_type
-
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
