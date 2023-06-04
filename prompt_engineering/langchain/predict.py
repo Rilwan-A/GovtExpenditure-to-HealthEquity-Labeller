@@ -140,6 +140,7 @@ def main(
                                                     data_load_seed=data_load_seed,
                                                     predict_b2i = predict_b2i,
                                                     predict_i2i = predict_i2i ,
+                                                    logging=logging
                                                      )
     logging.info("\tData Prepared")
     
@@ -147,11 +148,10 @@ def main(
     # run predictions
     logging.info("\tRunning Predictions")
     (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
-        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size) # type: ignore #ignore
+        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, logging) # type: ignore #ignore
         
     (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
-         li_pred_ensemble_parsed_i2i, li_pred_agg_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i,
-                                                                                                                                  li_record_i2i, batch_size) #type: ignore 
+         li_pred_ensemble_parsed_i2i, li_pred_agg_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, logging) #type: ignore 
     logging.info("\tPredictions Complete")
 
     # saving to file
@@ -278,7 +278,8 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
     return llm 
 
 def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
-                 predict_b2i=True, predict_i2i=False ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
+                 predict_b2i=True, predict_i2i=False,
+                  logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
 
@@ -311,73 +312,89 @@ def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed
 
         li_budget_items = df['budget_item'].tolist()
         li_indicator = df['indicator'].tolist()
+        li_labels = df['label'].tolist() if 'label' in df.columns else None
 
         set_budget_items = sorted(set(li_budget_items))
         set_indicator = sorted(set(li_indicator))
 
-        li_labels = df['label'].tolist() if 'label' in df.columns else None
 
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
         raise NotImplementedError("UploadedFile not implemented yet")
         li_budget_items = json_data['budget_item']
         li_indicator = json_data['indicator']
-        # li_labels = json_data['label']
+        li_labels = None
     
     else:
         raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
-   
-    # Add 'budget_item to indicator' combinations
-    li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator  } for indicator in set_indicator ] for budget_item in set_budget_items ], [] ) 
-    if max_dset_size is not None:
-        li_record_b2i = random.sample(li_record_b2i, max_dset_size)
-    if li_labels is not None:
-        li_record_b2i = add_labels(li_record_b2i, li_budget_items, li_indicator, li_labels)
-    #batching
+    
+    li_record_b2i = None
+    if predict_b2i:
+        # Creating all possible combinations of budget_items and indicators
+        li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator  } for indicator in set_indicator ] for budget_item in set_budget_items ], [] ) 
+
+        if max_dset_size is not None:
+            li_record_b2i = random.sample(li_record_b2i, max_dset_size)
+        
+        # Create positive and negative labels
+        li_record_b2i = add_labels(li_record_b2i, li_budget_items, li_indicator, li_labels, group_type1='budget_item', group_type2='indicator', logging=logging)
+    
     
 
     li_record_i2i = None
     if predict_i2i:
+        raise NotImplementedError("predict_i2i not implemented yet: TODO need to split this prepare_data function into two. The li label here can not be the same used for b2i")
         li_record_i2i = sum( [  [ {'indicator1':indicator1, 'indicator2':indicator2} for indicator1 in set_indicator ] for indicator2 in set_indicator ] , [] )
         if max_dset_size is not None:
             li_record_i2i = random.sample(li_record_i2i, max_dset_size)
         if li_labels is not None:
-            li_record_i2i = add_labels(li_record_i2i, li_indicator, li_indicator, li_labels, group_type1='indicator')
+            li_record_i2i = add_labels(li_record_i2i, li_indicator, li_indicator, li_labels, group_type1='indicator', group_type2='indicator', logging=logging)
         # batching
 
     return li_record_b2i, li_record_i2i
 
-def add_labels(li_record, li_group1, li_group2, li_labels, group_type1='budget_item', group_type2='indicator'):
+def add_labels(li_record, li_group1, li_group2, li_labels, group_type1='budget_item', group_type2='indicator', logging=None):
     """
-    li_group1, li_group2, li_labels are all index aligned lists
+    
+
+    If li_labels is not None, we assume that li_group1, li_group2 and li_lables are all index aligned lists and we use this to create our set of 'Yes' labelled items.
+    Otherwise We do not produce any labels
+
+    li_labels: list of 'Yes' or 'No' labels
 
     We first create a dictionary where the keys are group1 items and the value are a list of group2 items for which the corresponding (group1, group2, label) has a value of 'Yes' for label
 
     Then from this we evaluate each (group1, group2) combination in li_record and add a label of 'Yes' if it is in the dictionary, else 'No'
     """
-    # Create dictionary
-    di_group1 = defaultdict(list)
-    for group1, group2, label in zip(li_group1, li_group2, li_labels):
-        if label == False:
-            di_group1[group1].append(group2)
+    
+    if li_labels is None:
+        if logging is not None:
+            logging.info("No labels supplied, so no Yes/No labels will be added")
+        return li_record
 
-    # Add labels
+    # Create dictionary - keys are group1 items and the value are a list of group2 items for which the corresponding (group1, group2, label) has a value of 'Yes' for label
+    map_group1_group2 = defaultdict(list)
+    for group1, group2, label in zip(li_group1, li_group2, li_labels):
+        map_group1_group2[group1].append(group2)
+
+    # Add yes/no labels to each record using the dictionary as reference
     for idx, record in enumerate(li_record):
 
         group1_val = record[group_type1]
         group2_val = record[group_type2]
 
-        if group2_val in di_group1[group1_val]:
+        if group2_val in map_group1_group2[group1_val]:
             li_record[idx]['label'] = 'Yes'
         else:
             li_record[idx]['label'] = 'No'
 
     return li_record
 
-def predict_batches(prompt_builder:PromptBuilder, prediction_generator:PredictionGenerator, 
-                    li_record:list[dict[str,str]],
-                     batch_size=2,
-                      logger=None ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+def predict_batches(prompt_builder:PromptBuilder, 
+                        prediction_generator:PredictionGenerator, 
+                        li_record:list[dict[str,str]],
+                        batch_size=2,
+                        logger=None ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
