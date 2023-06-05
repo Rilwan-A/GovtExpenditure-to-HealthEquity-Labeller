@@ -51,7 +51,7 @@ li_prompts_openend_template_open_response =[
 li_prompts_categorise_answer = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}\n"
 
-    "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category."
+    "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n"
 ]
 
 budgetitem_to_indicator_prompts = {
@@ -136,8 +136,9 @@ map_relationship_system_prompt = {
     'indicator_to_indicator':map_system_prompts_i2i
 }
 
-system_prompt_parse_outp_categories_rules_b2i = ''
-system_prompt_parse_outp_categories_rules_i2i = ''
+system_prompt_parse_outp_categories_rules_b2i = None
+system_prompt_parse_outp_categories_rules_i2i = None
+
 map_relationship_sysprompt_categoriseanswer = {
     'budgetitem_to_indicator':system_prompt_parse_outp_categories_rules_b2i,
     'indicator_to_indicator':system_prompt_parse_outp_categories_rules_i2i
@@ -146,22 +147,45 @@ map_relationship_sysprompt_categoriseanswer = {
 
 # region BaseModelFormat - The format required by the underlying language model
 format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
+format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT:"
 format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:"
+format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:"
 format_mpt = "{system_message}\n\n{user_message}\n\n"
+format_mpt_no_sysmessage = "{user_message}\n\n"
 
-def map_llmname_input_format(llm_name):
+def map_llmname_input_format(llm_name, user_message, system_message=None):
 
-    if 'vicuna' in llm_name:
-        return format_vicuna_1_1
-    elif 'alpaca' in llm_name:
-        return format_alpaca
-    elif 'guanaco' in llm_name:
-        return format_alpaca
-    elif 'mpt' in llm_name:
-        return format_mpt
+    assert user_message is not None
+
+    if 'vicuna' in llm_name and system_message is not None:
+        template = format_vicuna_1_1
+    if 'vicuna' in llm_name and system_message is None:
+        template = format_vicuna_1_1_no_sysmessage
+    
+    elif 'alpaca' in llm_name and system_message is not None:
+        template = format_alpaca
+    elif 'alpaca' in llm_name and system_message is None:
+        template = format_alpaca_no_sysmessage
+    
+    elif 'guanaco' in llm_name and system_message is not None:
+        template = format_alpaca
+    elif 'guanaco' in llm_name and system_message is None:
+        template = format_alpaca_no_sysmessage
+    
+    elif 'mpt' in llm_name and system_message is not None:
+        template = format_mpt
+    elif 'mpt' in llm_name and system_message is None:
+        template = format_mpt_no_sysmessage
+    
     else:
         raise ValueError(f'Unknown llm_name: {llm_name}')
 
+    if system_message is not None:
+        template.format(system_message=system_message, user_message=user_message)
+    else:
+        template.format(user_message=user_message)
+    
+    return template
 
 # endregion
 

@@ -108,10 +108,12 @@ class PredictionGenerator():
 
             for li_prompts in li_li_prompts:
                 
+                # Formatting prompts to adhere to format required by Base Language Model
                 li_prompts_fmtd = [
-                    map_llmname_input_format(self.llm_name).format( 
-                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style],
-                        user_message = prompt) for prompt in li_prompts ]
+                    map_llmname_input_format(self.llm_name,
+                        user_message = prompt,
+                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]
+                        ) for prompt in li_prompts ]
 
                 # prompts_fmtd = [ map_relationship_system_prompt[self.relationship][self.effect_type] + '\n' + prompt for prompt in li_prompts ]
 
@@ -199,10 +201,12 @@ class PredictionGenerator():
             for k,v in self.categorise_kwargs.items():
                 self.llm.pipeline._forward_params[k] =  v
 
+            # Formatting prompts to adhere to format required by Base Language Model
             li_prompts_fmtd = [
-                map_llmname_input_format(self.llm_name).format( 
+                map_llmname_input_format(self.llm_name,
+                    user_message = prompt,
                     system_message = map_relationship_sysprompt_categoriseanswer[self.relationship],
-                    user_message = prompt) for prompt in li_filledtemplate ]
+                    ) for prompt in li_filledtemplate ]
             
             outputs = self.llm.generate( prompts= li_prompts_fmtd )
 
@@ -238,19 +242,26 @@ class PredictionGenerator():
         return li_preds
     
     def parse_outp_categories_perplexity(self, li_predictions:list[str])->  list[dict[str,float]] :
-        # Get average perplexity of text when sentence is labelled Negation vs when it is labelled Affirmation.
-        # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
-        #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
+
+        # This function outputs a distribution of probabilities over the Yes, No, NA categories and they are calcaulated as follows:
+        #   - First select a prompt which contains the initial statement to verify and a space for potential answers
+        #   - Then fill the prompt with each of the possible answers (Yes/No/NA) - creating 3 filled prompts
+        #   - Then calculate the perplexity of each of the filled prompts - we only get perplexity of the fill text, not the whole prompt
+        #   - Then calculate the probability of each of the answers as the ratio of the perplexities
+        #   - Finally, return the probabilities as a distribution over the Yes/No/NA categories
+
 
         li_templates = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer']
         template = copy.deepcopy( random.choice(li_templates) )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
 
+        # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate = [
-                map_llmname_input_format(self.llm_name).format( 
-                    system_message = map_relationship_sysprompt_categoriseanswer[self.relationship],
-                    user_message = prompt) for prompt in li_filledtemplate ] #Added some base model formatting
+                map_llmname_input_format(self.llm_name,
+                                        user_message = prompt, 
+                                        system_message = map_relationship_sysprompt_categoriseanswer[self.relationship] )
+                                    for prompt in li_filledtemplate ] #Added some base model formatting
 
         # For each fill template, create 3 filled versions with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -267,14 +278,19 @@ class PredictionGenerator():
             batch_size=6, 
             deepspeed_compat = self.deepspeed_compat ) 
         
-        li_preds: list[dict[str,float]] = [ {'Yes': li_perplexity[ idx + answers.index('Affirmation') ] , 'No': li_perplexity[ idx + answers.index('Negation') ] , } for idx in range(0,len(li_perplexity),len(answers)) ]
+        # Convert flattened set of perplexities into a list of list with each sublist having 3 perplexities for A, B, C
+        li_li_perplexity = [ li_perplexity[ idx : idx + len(answers) ] for idx in range(0,len(li_perplexity),len(answers)) ]
+
+        # Convert this to probabilities
+        li_li_probabilities = 
+
+        li_preds = [ {'Yes': perplexities[ answers.index('A') ] , 'No': perplexities[ answers.index('B') ] , 'NA': perplexities[ answers.index('C') ] } for perplexities in li_li_perplexity ]
 
         return li_preds
         
     def aggregate_predictions(self, li_li_predictions:list[list[dict[str,int|float]]] )->  list[float | dict[str,float] ] :
         
         """            
-            
             For Each prediction we have a list of samples.
                 Each sample is a dictionary with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}"
 
