@@ -7,7 +7,7 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
-from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sppywlg, create_negative_examples, perplexity, map_llmname_input_format
+from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sysprompt_categoriseanswer, create_negative_examples, perplexity, map_llmname_input_format
 import random
 
 import copy
@@ -18,9 +18,8 @@ import pandas as pd
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
-    
 
-    'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF',  'timdettmers/guanaco-33b-merged', 'TheBloke/guanaco-65B-HF',
+    'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF',  'timdettmers/guanaco-33b-merged',
 
     'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g'  ,'TheBloke/guanaco-65B-GPTQ'
     ]
@@ -28,7 +27,6 @@ HUGGINGFACE_MODELS = [
 MAP_LOAD_IN_NBIT = {
     
     'mosaicml/mpt-7b-chat': 8,
-    'TheBloke/vicuna-7B-1.1-HF': 8,
 
     'TheBloke/vicuna-7B-1.1-HF':4,
     'TheBloke/wizard-vicuna-13B-HF':4,
@@ -82,8 +80,8 @@ class PredictionGenerator():
         self.generation_kwargs = {}
         self.generation_parse_kwargs = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
-        self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 50 if prompt_style == 'open' else None
-        self.generation_parse_kwargs[k]= 6
+        self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 75 if prompt_style == 'open' else None
+        self.generation_parse_kwargs[k]= 12
         self.effect_type = effect_type
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
@@ -120,7 +118,7 @@ class PredictionGenerator():
                 outputs = self.llm.generate( 
                     prompts=li_prompts_fmtd  )
                 
-                li_preds : list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
+                li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
             
                 li_li_preds.append(li_preds)
         else:
@@ -151,6 +149,10 @@ class PredictionGenerator():
             
             prediction = copy.deepcopy(prediction).lower()
 
+            
+            if any( ( neg_phrase in prediction for neg_phrase in ['cannot answer','can\'t answer', 'not sure', 'not certain',  ])):
+                dict_pred = {'Yes':0.0, 'No':0.0, 'NA':1.0}
+
             if 'yes' in prediction:
                 dict_pred = {'Yes':1.0, 'No':0.0, 'NA':0.0}
             
@@ -172,11 +174,11 @@ class PredictionGenerator():
                
     def parse_yesno_with_lm_generation(self, li_predictions:list[str])-> list[dict[str, float]] :
         
-        """This method generates an output categorising the response to either affirmation or negation, then uses rules to  parse the output"""
+        """This method prompts the llm to make an output constrained to categorising the response to either affirmation or negation, then uses rules to  parse the output"""
 
         # Template to prompt language llm to simplify the answer to a Yes/No output
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer_affirm_negat']
-        template = copy.deepcopy( random.choice(li_prompts) )
+        li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer']
+        template = copy.deepcopy( random.choice(li_template) )
             
 
         # Create filled versions of the template with each of the predictions
@@ -185,7 +187,7 @@ class PredictionGenerator():
         # Generate prediction
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
             batch_messages = [
-                [ SystemMessage(content=map_relationship_sppywlg[self.relationship] ),
+                [ SystemMessage(content=map_relationship_sysprompt_categoriseanswer[self.relationship] ),
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
@@ -199,18 +201,39 @@ class PredictionGenerator():
 
             li_prompts_fmtd = [
                 map_llmname_input_format(self.llm_name).format( 
-                    system_message = map_relationship_sppywlg[self.relationship],
-                    user_message = prompt) for prompt in li_prompts ]
+                    system_message = map_relationship_sysprompt_categoriseanswer[self.relationship],
+                    user_message = prompt) for prompt in li_filledtemplate ]
             
             outputs = self.llm.generate( prompts= li_prompts_fmtd )
 
-            li_preds_str: list[str] = [ chatgen.text for chatgen in sum(outputs.generations,[]) ]
+            li_preds_str: list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
 
         else:
             raise ValueError(f"llm type {type(self.llm)} not recognized")
 
         # Parse Yes/No/Na from the prediction
         li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
+        
+        def parse_outp_from_catpred(pred:str)->dict[str,float]:
+            boolA = 'A' in pred
+            boolB = 'B' in pred
+            boolC = 'C' in pred
+            
+            # If more than one is true, return NA
+            if sum([boolA, boolB, boolC]) != 1:
+                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }
+
+            if 'A' in pred:
+                outp = {'Yes':1.0,'No':0.0, 'NA':0.0 }
+            elif 'B' in pred:
+                outp = {'Yes':0.0,'No':1.0, 'NA':0.0 }
+            elif 'C' in pred:
+                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }
+
+            return outp
+            
+        li_preds:list[dict[str,float]] = [ parse_outp_from_catpred(pred) for pred in li_preds_str]
+
 
         return li_preds
     
@@ -219,19 +242,19 @@ class PredictionGenerator():
         # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
         #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
 
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer_affirm_negat']
-        template = copy.deepcopy( random.choice(li_prompts) )
+        li_templates = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer']
+        template = copy.deepcopy( random.choice(li_templates) )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
 
         li_filledtemplate = [
                 map_llmname_input_format(self.llm_name).format( 
-                    system_message = map_relationship_sppywlg[self.relationship],
-                    user_message = prompt) for prompt in li_prompts ] #Added some base model formatting
+                    system_message = map_relationship_sysprompt_categoriseanswer[self.relationship],
+                    user_message = prompt) for prompt in li_filledtemplate ] #Added some base model formatting
 
         # For each fill template, create 3 filled versions with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
-        answers = ['Negation', 'Affirmation']
+        answers = ['A', 'B', 'C' ]
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 

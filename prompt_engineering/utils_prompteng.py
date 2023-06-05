@@ -34,8 +34,7 @@ li_prompts_openend_template = [
     
     'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
     
-    'Is there an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}?'
-    
+    'Is there an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}?'    
 ]
 li_prompts_openend_template_open_response =[
     {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
@@ -49,15 +48,17 @@ li_prompts_openend_template_open_response =[
     {'Yes':'There is an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.', 'No':'There is no effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.'}
 
 ]
-li_prompts_categorise_answer_affirm_negat = [
-    """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
+li_prompts_categorise_answer = [
+    # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}\n"
+
+    "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category."
 ]
 
 budgetitem_to_indicator_prompts = {
-    'li_prompts_yes_no_template':li_prompts_yes_no_template, # NOTE: we replace the yes/no template with the openend template
+    'li_prompts_yes_no_template':li_prompts_yes_no_template,
     'li_prompts_openend_template':li_prompts_openend_template,
     'li_prompts_openend_template_open_response':li_prompts_openend_template_open_response,
-    'li_prompts_categorise_answer_affirm_negat':li_prompts_categorise_answer_affirm_negat
+    'li_prompts_categorise_answer':li_prompts_categorise_answer
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
 #endregion
@@ -75,8 +76,7 @@ li_prompts_yes_no_template_i2i = [
     'Answer the following question with True or False: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ] 
-li_prompts_categorise_answer_affirm_negat_i2i = [
-    """Select the grammatical category that best describes the statement.\n\"Categories\":\n- Negation\n- Affirmation\nStatement: {statement}\nThis statement belongs to the category """
+li_prompts_categorise_answer_i2i = [
 ]
 li_prompts_openend_template_i2i = [
     'Does the level of \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?',
@@ -107,24 +107,22 @@ indicator_to_indicator_prompts = {
     'li_prompts_yes_no_template_i2i':li_prompts_yes_no_template_i2i,
     'li_prompts_openend_template_i2i':li_prompts_openend_template_i2i,
     'li_prompts_openend_template_open_response_i2i':li_prompts_openend_template_open_response_i2i,
-    'li_prompts_categorise_answer_affirm_negat_i2i':li_prompts_categorise_answer_affirm_negat_i2i
+    'li_prompts_categorise_answer_i2i':li_prompts_categorise_answer_i2i
 }
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
 
-# region SystemMessage
+# region SystemMessages
 system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
 system_prompt_b2i_directly = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
 system_prompt_b2i_indirectly = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship.'
-
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
-    'yes_no':'Please answer the following question with a yes or no.',
-    'open':'Please use your expertise to answer the following question with a one sentence answer.',
+    'yes_no':'Answer the following question with a yes or no.',
+    'open':'Use your expertise to answer the following question with a one sentence answer.',
 }
-
 system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
 map_system_prompts_i2i = {
     'indirectly':system_prompt_i2i,
@@ -133,15 +131,14 @@ map_system_prompts_i2i = {
     'yes_no':'Please provide a Yes or No answer the following question.',
     'open':'Please use your expertise to answer the following question with a very short one sentence answer.',
 }
-
 map_relationship_system_prompt = {
     'budgetitem_to_indicator':map_system_prompts_b2i,
     'indicator_to_indicator':map_system_prompts_i2i
 }
 
-system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a government budget item and a socio-economic/health indicator. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
-system_prompt_parse_yesno_with_lm_generation_i2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a two socio-economic / health indicators. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
-map_relationship_sppywlg = {
+system_prompt_parse_yesno_with_lm_generation_b2i = ''
+system_prompt_parse_yesno_with_lm_generation_i2i = ''
+map_relationship_sysprompt_categoriseanswer = {
     'budgetitem_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i,
     'indicator_to_indicator':system_prompt_parse_yesno_with_lm_generation_i2i
 }
@@ -149,7 +146,7 @@ map_relationship_sppywlg = {
 
 # region BaseModelFormat - The format required by the underlying language model
 format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
-format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
+format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:"
 format_mpt = "{system_message}\n\n{user_message}\n\n"
 
 def map_llmname_input_format(llm_name):

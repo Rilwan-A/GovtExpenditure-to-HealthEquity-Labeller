@@ -8,7 +8,10 @@
     NOTE: currently an issue with kshot prompt generation, currently the prompt is created in the PromptGenerator and System message  in the Predictor. However, prompt message should
             system message should be dependent on the prompt message. This is currently not the case. e.g. if there are k shot examples system message should change to include " there will be some example questions"
         
-        """
+    
+    NOTE: This file expects a json/csv/file that has at least the following columns:
+            
+"""
 
 import os,sys
 sys.path.append(os.getcwd())
@@ -74,8 +77,9 @@ def main(
     save_output:bool = False,
 
     max_dset_size:int|None = None,
-    data_load_seed:int = 10,
-        ):
+    data_load_seed:int = 10):
+    
+    assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
     
     # Setup Logging
     logging = setup_logging_predict(llm_name)
@@ -84,23 +88,27 @@ def main(
 
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
-    llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
+    try:
+        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
+    except Exception as e:
+        logging.error(f"Error loading LLM: {e}")
+        raise e
 
     # Load Annotated Examples to use in K-Shot context for Prompt
     logging.info("\tLoading Annotated Examples")
-    annotated_examples_b2i = load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
+    annotated_examples_b2i =  None if predict_b2i is False else  load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
     annotated_examples_i2i = None if predict_i2i is False else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
     logging.info("\Annotated Examples Loaded")
 
     # Create Prompt Builders
     logging.info("\tCreating Prompt Builders")
-    prompt_builder_b2i = PromptBuilder(prompt_style, k_shot_b2i,
+    prompt_builder_b2i = None if predict_b2i is False else PromptBuilder(prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type,
                                         relationship='budgetitem_to_indicator',
                                         seed=data_load_seed)
     
-    prompt_builder_i2i = None if predict_i2i is False else PromptBuilder(prompt_style, k_shot_i2i,
+    prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type,
                                                                            relationship='indicator_to_indicator',
@@ -109,7 +117,7 @@ def main(
 
     # Create Prediction Generators
     logging.info("\tCreating Prediction Generators")
-    prediction_generator_b2i = PredictionGenerator(llm,
+    prediction_generator_b2i = None if predict_b2i is False else PredictionGenerator(llm,
                                                         llm_name,
                                                         prompt_style,
                                                         ensemble_size,
@@ -135,20 +143,22 @@ def main(
         
     # prepare data
     logging.info("\tPreparing Data")
-    li_record_b2i, li_record_i2i = prepare_data(input_file,
-                                                    max_dset_size=max_dset_size,
-                                                    data_load_seed=data_load_seed,
-                                                    predict_b2i = predict_b2i,
-                                                    predict_i2i = predict_i2i ,
-                                                    logging=logging
-                                                     )
+    li_record_b2i  = None if predict_b2i is False else prepare_data_b2i(input_file,
+                                                            max_dset_size=max_dset_size,
+                                                            data_load_seed=data_load_seed,
+                                                            logging=logging )
+    
+    li_record_i2i = None if predict_i2i is False else prepare_data_i2i(input_file,
+                                                            max_dset_size=max_dset_size,
+                                                            data_load_seed=data_load_seed,
+                                                            logging=logging )
     logging.info("\tData Prepared")
     
 
     # run predictions
     logging.info("\tRunning Predictions")
     (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
-        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, logging) # type: ignore #ignore
+        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = (None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, logging) # type: ignore #ignore
         
     (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
          li_pred_ensemble_parsed_i2i, li_pred_agg_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, logging) #type: ignore 
@@ -189,13 +199,10 @@ def main(
             yaml.safe_dump(experiment_config, f)
 
         #unbatching data
-        # li_record_b2i = sum(li_batched_record_b2i, [])        
-            
-        save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
+        if predict_b2i: 
+            save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
         
         if predict_i2i: 
-            # li_record_i2i = sum(li_batched_record_i2i, [])
-
             save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
         logging.info("\tOutput Saved")
@@ -207,14 +214,14 @@ def main(
         'li_pred_ensemble_parsed_b2i': li_pred_ensemble_parsed_b2i,
         'li_pred_agg_b2i': li_pred_agg_b2i,
 
-        'li_record_b2i': li_record_i2i,
+        'li_record_i2i': li_record_i2i,
         'li_prompt_ensemble_i2i': li_prompt_ensemble_i2i,
         'li_pred_ensemble_i2i': li_pred_ensemble_i2i,
         'li_pred_ensemble_parsed_i2i': li_pred_ensemble_parsed_i2i,
         'li_pred_agg_i2i': li_pred_agg_i2i,
     }
        
-def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str|None = None, prompt_style:str = 'yes_no'):
+def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str|None=None, prompt_style:str='yes_no'):
     
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
@@ -227,8 +234,8 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
         if llm_name in HUGGINGFACE_MODELS:
             from transformers import BitsAndBytesConfig
             
-            bool_8=MAP_LOAD_IN_NBIT[llm_name] ==8
-            bool_4=MAP_LOAD_IN_NBIT[llm_name] ==4
+            bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
+            bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
             quant_config = BitsAndBytesConfig(
                 
                 load_in_8bit=bool_8,
@@ -238,7 +245,6 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
                 bnb_4bit_quant_type="nf4" ,
                 bnb_4bit_use_double_quant=bool_4,
                 bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
-
             )
 
             model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
@@ -277,8 +283,7 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
 
     return llm 
 
-def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
-                 predict_b2i=True, predict_i2i=False,
+def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
                   logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
@@ -287,7 +292,7 @@ def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed
 
         If labels are supplied it is assumed that budget_items, indicators and labels are all index aligned
     """
-
+    
     # Check json is valid
     random.seed(data_load_seed)
     expected_keys = ['budget_item','indicator']
@@ -301,10 +306,10 @@ def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed
         li_budget_items = json_data['budget_item']
         li_indicator  = json_data['indicator']
 
-        set_budget_items = sorted(set(li_budget_items))
-        set_indicator = sorted(set(li_indicator))
+        # set_budget_items = sorted(set(li_budget_items))
+        # set_indicator = sorted(set(li_indicator))
 
-        li_labels = json_data.get('label',None)
+        li_labels = json_data.get('label', [None]*len(li_budget_items) )
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
         df = pd.read_csv(input_file)
@@ -312,10 +317,10 @@ def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed
 
         li_budget_items = df['budget_item'].tolist()
         li_indicator = df['indicator'].tolist()
-        li_labels = df['label'].tolist() if 'label' in df.columns else None
+        li_labels = df['label'].tolist() if 'label' in df.columns else [None]*len(li_budget_items)
 
-        set_budget_items = sorted(set(li_budget_items))
-        set_indicator = sorted(set(li_indicator))
+        # set_budget_items = sorted(set(li_budget_items))
+        # set_indicator = sorted(set(li_indicator))
 
 
     elif isinstance(input_file, UploadedFile):
@@ -323,72 +328,71 @@ def prepare_data(input_file:str|UploadedFile, max_dset_size=None, data_load_seed
         raise NotImplementedError("UploadedFile not implemented yet")
         li_budget_items = json_data['budget_item']
         li_indicator = json_data['indicator']
-        li_labels = None
+        li_labels = [None]*len(li_budget_items)
     
     else:
         raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
     
-    li_record_b2i = None
-    if predict_b2i:
-        # Creating all possible combinations of budget_items and indicators
-        li_record_b2i = sum( [ [ {'budget_item':budget_item, 'indicator':indicator  } for indicator in set_indicator ] for budget_item in set_budget_items ], [] ) 
+    # Creating all possible combinations of budget_items and indicators
+    li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'label':label  } for budget_item, indicator, label in zip( li_indicator, li_budget_items, li_labels) ] 
+    
+    if max_dset_size is not None:
+        li_record_b2i = random.sample(li_record_b2i, max_dset_size)
+    
+    return li_record_b2i # type: ignore
 
-        if max_dset_size is not None:
-            li_record_b2i = random.sample(li_record_b2i, max_dset_size)
+def prepare_data_i2i(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
+                  logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
+    """
+        Loads the data from the input_file and returns a list of lists of dicts
+
+        Data can be passed in as a json or csv file name, or as a Django UploadedFile Object
+
+        If labels are supplied it is assumed that budget_items, indicators and labels are all index aligned
+    """
+    
+    # Check json is valid
+    random.seed(data_load_seed)
+    expected_keys = ['indicator1','indicator2']
+    
+    # Load data
+    # Data cn be passed in as a json or csv file name, or as a Django UploadedFile Object
+    if isinstance(input_file, str) and input_file[-4:]=='.json':
+        json_data = json.load( open(input_file, 'r') )
+        assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
         
-        # Create positive and negative labels
-        li_record_b2i = add_labels(li_record_b2i, li_budget_items, li_indicator, li_labels, group_type1='budget_item', group_type2='indicator', logging=logging)
+        li_indicator1 = json_data['indicator1']
+        li_indicator2  = json_data['indicator2']
+        li_labels = json_data.get('label', [None]*len(li_indicator1) )
+    
+    elif isinstance(input_file, str) and input_file[-4:] == '.csv':
+        df = pd.read_csv(input_file)
+        assert all([key in df.columns for key in expected_keys]), f"input_csv must have the following columns: {expected_keys}"
+
+        li_indicator1 = df['indicator1'].tolist()
+        li_indicator2 = df['indicator2'].tolist()
+        li_labels = df['label'].tolist() if 'label' in df.columns else [None]*len(li_indicator1)
+
+    elif isinstance(input_file, UploadedFile):
+        json_data = input_file
+        raise NotImplementedError("UploadedFile not implemented yet")
+        li_indicator1 = json_data['indicator1']
+        li_indicator2 = json_data['indicator2']
+        li_labels = [None]*len(li_indicator1)
+    
+    else:
+        raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
+    
+
+    # Creating all possible combinations of budget_items and indicators
+    li_record_i2i = [ {'indicator1':indicator1, 'indicator2':indicator2, 'label':label  } for indicator1, indicator2, label in zip( li_indicator1, li_indicator2, li_labels) ] 
+    
+    if max_dset_size is not None:
+        li_record_i2i = random.sample(li_record_i2i, max_dset_size)
     
     
 
-    li_record_i2i = None
-    if predict_i2i:
-        raise NotImplementedError("predict_i2i not implemented yet: TODO need to split this prepare_data function into two. The li label here can not be the same used for b2i")
-        li_record_i2i = sum( [  [ {'indicator1':indicator1, 'indicator2':indicator2} for indicator1 in set_indicator ] for indicator2 in set_indicator ] , [] )
-        if max_dset_size is not None:
-            li_record_i2i = random.sample(li_record_i2i, max_dset_size)
-        if li_labels is not None:
-            li_record_i2i = add_labels(li_record_i2i, li_indicator, li_indicator, li_labels, group_type1='indicator', group_type2='indicator', logging=logging)
-        # batching
-
-    return li_record_b2i, li_record_i2i
-
-def add_labels(li_record, li_group1, li_group2, li_labels, group_type1='budget_item', group_type2='indicator', logging=None):
-    """
-    
-
-    If li_labels is not None, we assume that li_group1, li_group2 and li_lables are all index aligned lists and we use this to create our set of 'Yes' labelled items.
-    Otherwise We do not produce any labels
-
-    li_labels: list of 'Yes' or 'No' labels
-
-    We first create a dictionary where the keys are group1 items and the value are a list of group2 items for which the corresponding (group1, group2, label) has a value of 'Yes' for label
-
-    Then from this we evaluate each (group1, group2) combination in li_record and add a label of 'Yes' if it is in the dictionary, else 'No'
-    """
-    
-    if li_labels is None:
-        if logging is not None:
-            logging.info("No labels supplied, so no Yes/No labels will be added")
-        return li_record
-
-    # Create dictionary - keys are group1 items and the value are a list of group2 items for which the corresponding (group1, group2, label) has a value of 'Yes' for label
-    map_group1_group2 = defaultdict(list)
-    for group1, group2, label in zip(li_group1, li_group2, li_labels):
-        map_group1_group2[group1].append(group2)
-
-    # Add yes/no labels to each record using the dictionary as reference
-    for idx, record in enumerate(li_record):
-
-        group1_val = record[group_type1]
-        group2_val = record[group_type2]
-
-        if group2_val in map_group1_group2[group1_val]:
-            li_record[idx]['label'] = 'Yes'
-        else:
-            li_record[idx]['label'] = 'No'
-
-    return li_record
+    return li_record_i2i
 
 def predict_batches(prompt_builder:PromptBuilder, 
                         prediction_generator:PredictionGenerator, 

@@ -1,10 +1,12 @@
 # Folders
 research_papers
 ckpt
+prompt_engineering/output
 
 #Python files
 __pycache*
 **.pytest_cache
+**/**.ipynb
 
 # Environment variables
 tests/env_vars.yml
