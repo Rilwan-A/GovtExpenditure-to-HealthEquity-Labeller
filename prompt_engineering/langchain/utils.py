@@ -7,7 +7,7 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
-from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sysprompt_categoriseanswer, create_negative_examples, perplexity, map_llmname_input_format
+from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sysprompt_categoriseanswer, create_negative_examples, perplexity, map_llmname_input_format, perplexity_to_normalised_probability
 import random
 
 import copy
@@ -279,14 +279,12 @@ class PredictionGenerator():
             deepspeed_compat = self.deepspeed_compat ) 
         
         # Convert flattened set of perplexities into a list of list with each sublist having 3 perplexities for A, B, C
-        li_li_perplexity = [ li_perplexity[ idx : idx + len(answers) ] for idx in range(0,len(li_perplexity),len(answers)) ]
+        li_map_perplexity = [ { answer:li_perplexity[idx + answers.index(answer)] for answer in answers  } for idx in range(0,len(li_perplexity),len(answers)) ]
 
-        # Convert this to probabilities
-        li_li_probabilities = 
+        # Convert this to normalised probabilities
+        li_map_probabilities = [  perplexity_to_normalised_probability(map_perplexities) for map_perplexities in li_map_perplexity ]
 
-        li_preds = [ {'Yes': perplexities[ answers.index('A') ] , 'No': perplexities[ answers.index('B') ] , 'NA': perplexities[ answers.index('C') ] } for perplexities in li_li_perplexity ]
-
-        return li_preds
+        return li_map_probabilities
         
     def aggregate_predictions(self, li_li_predictions:list[list[dict[str,int|float]]] )->  list[float | dict[str,float] ] :
         

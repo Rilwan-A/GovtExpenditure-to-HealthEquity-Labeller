@@ -16,7 +16,7 @@ map_relationship_promptsmap ={}
 li_prompts_yes_no_template = [    
     "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
     
-    'Give me a True or False answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
+    'Give me a yes or no answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
     'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
 
@@ -34,7 +34,6 @@ li_prompts_openend_template = [
     
     'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
     
-    'Is there an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}?'    
 ]
 li_prompts_openend_template_open_response =[
     {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
@@ -45,7 +44,6 @@ li_prompts_openend_template_open_response =[
 
     {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} improve the level of \"{indicator}\".'},
 
-    {'Yes':'There is an effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.', 'No':'There is no effect on \"{indicator}\" from local government spending on \"{budget_item}\" {effect_type}.'}
 
 ]
 li_prompts_categorise_answer = [
@@ -67,13 +65,13 @@ map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator
 li_prompts_yes_no_template_i2i = [
     "Does the level of  \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?",
     
-    'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\" ?, True or False',
+    'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\" ?, yes or no',
     
     'Is it true that the level of \"{indicator1}\" is {effect_type} related to the level of \"{indicator2}\"?',
     
     'Do improvements in {indicator1} {effect_type} affect \"{indicator2}\"?, Yes or No',
     
-    'Answer the following question with True or False: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
+    'Answer the following question with yes or no: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ] 
 li_prompts_categorise_answer_i2i = [
@@ -316,6 +314,23 @@ def perplexity(
         ppls += perplexity_batch.tolist()
 
     return ppls
+
+def perplexity_to_normalised_probability( perplexities: dict[str,float]) -> dict[str,float]:
+
+    """Converts a dictionary of perplexity scores to normalised probabilities"""
+    # Convert perplexity to probabilities
+    probs = {}
+    for k,v in perplexities.items():
+        probs[k] = 1/v
+
+    # Normalise probabilities
+    total = sum(probs.values())
+    for k,v in probs.items():
+        probs[k] = v/total
+
+    return probs
+
+
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int,
