@@ -121,8 +121,8 @@ map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
-    'yes_no':'Please answer the following yes-no question.',
-    'open':'Please use your expertise to give me a one sentence answer to the following question.',
+    'yes_no':'Please answer the following question with a yes or no.',
+    'open':'Please use your expertise to answer the following question with a one sentence answer.',
 }
 
 system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
@@ -140,10 +140,10 @@ map_relationship_system_prompt = {
 }
 
 system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a government budget item and a socio-economic/health indicator. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
-system_prompt_parse_yesno_with_lm_generation_b2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a two socio-economic / health indicators. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
+system_prompt_parse_yesno_with_lm_generation_i2i = 'You are an analyst tasked with determining if a statement is a Negation or Affirmation. The statement will discuss whether or not there is a causal relationship between a two socio-economic / health indicators. The statement will be presented after the word "Statement:" . Use your expertise understanding of language to interpret the statement.'
 map_relationship_sppywlg = {
     'budgetitem_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i,
-    'indicator_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i
+    'indicator_to_indicator':system_prompt_parse_yesno_with_lm_generation_i2i
 }
 # endregion
 
