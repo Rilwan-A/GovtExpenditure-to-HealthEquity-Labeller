@@ -488,7 +488,7 @@ def parse_args():
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
-    parser.add_argument('--parse_style', type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--parse_style', type=str, choices=['rules','categories_perplexity', 'categories_rules' ], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )

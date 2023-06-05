@@ -36,7 +36,7 @@ def main(
         batch_size:int=1,
 
         aggregation_method='majority_vote',
-        parse_output_method='rule_based',
+        parse_output_method='rules',
         effect_type='directly',
 
         remove_public_health:bool=False,
@@ -117,7 +117,7 @@ def main(
 
 class PredictionGenerator():
     def __init__(self, model, tokenizer:transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast, prompt_style:str, ensemble_size:int,
-                  aggregation_method:str='majority_vote', parse_output_method:str='rule_based',
+                  aggregation_method:str='majority_vote', parse_output_method:str='rules',
                     device=None, deepspeed_compat:bool=False ):
         
         self.prompt_style = prompt_style
@@ -219,21 +219,21 @@ class PredictionGenerator():
         li_li_predictions = [ [ pred.replace(prompt,'') for pred, prompt in zip(li_prediction, li_prompt) ] for li_prediction, li_prompt in zip(li_li_predictions, li_li_prompts) ]
         
         # Parse Yes/No/Nan from the predictions
-        if self.parse_output_method == 'rule_based':
-            li_li_predictions_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_predictions]
+        if self.parse_output_method == 'rules':
+            li_li_predictions_parsed = [ self.parse_outp_rules(li_predictions) for li_predictions in li_li_predictions]
 
         elif self.parse_output_method == 'perplexity':
-            li_li_predictions_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_predictions]
+            li_li_predictions_parsed = [ self.parse_outp_categories_perplexity(li_predictions) for li_predictions in li_li_predictions]
         
         elif self.parse_output_method == 'generation':
-            li_li_predictions_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_predictions]
+            li_li_predictions_parsed = [ self.parse_outp_categories_rules(li_predictions) for li_predictions in li_li_predictions]
         
         else:
             raise ValueError(f"parse_output_method {self.parse_output_method} not recognized")
 
         return li_li_predictions, li_li_predictions_parsed
 
-    def parse_yesno_with_rules(self, li_predictions:list[str])->list[str]:
+    def parse_outp_rules(self, li_predictions:list[str])->list[str]:
         
         li_preds_parsed = ['NA']*len(li_predictions)
 
@@ -258,7 +258,7 @@ class PredictionGenerator():
                    
         return li_predictions
                
-    def parse_yesno_with_lm_generation(self, li_predictions:list[str])->list[str]:
+    def parse_outp_categories_rules(self, li_predictions:list[str])->list[str]:
         
         # Template to prompt language model to simplify the answer to a Yes/No output
         template = copy.deepcopy( utils_prompteng.li_prompts_parse_yesno_from_answer[0] )
@@ -296,7 +296,7 @@ class PredictionGenerator():
 
         return li_predictions_parsed
     
-    def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->list[str]:
+    def parse_outp_categories_perplexity(self, li_predictions:list[str])->list[str]:
         # Get average perplexity of text when sentence is labelled Negation vs when it is labelled Affirmation.
         # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
         #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
@@ -424,7 +424,7 @@ def parse_args():
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open','ama','pilestackoverflow_yes_no', 'pilestackoverflow_open'], default='open', help='Style of prompt' )
-    parser.add_argument('--parse_output_method',type=str, choices=['rule_based','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--parse_output_method',type=str, choices=['rules','perplexity', 'generation' ], default='perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--k_shot', type=int, default=0, help='Number of examples to use for each prompt. Note this number must respect the maximum length allowed by the language model used' )
     parser.add_argument('--ensemble_size', type=int, default=1 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary','1st', '2nd'] )

@@ -136,11 +136,11 @@ map_relationship_system_prompt = {
     'indicator_to_indicator':map_system_prompts_i2i
 }
 
-system_prompt_parse_yesno_with_lm_generation_b2i = ''
-system_prompt_parse_yesno_with_lm_generation_i2i = ''
+system_prompt_parse_outp_categories_rules_b2i = ''
+system_prompt_parse_outp_categories_rules_i2i = ''
 map_relationship_sysprompt_categoriseanswer = {
-    'budgetitem_to_indicator':system_prompt_parse_yesno_with_lm_generation_b2i,
-    'indicator_to_indicator':system_prompt_parse_yesno_with_lm_generation_i2i
+    'budgetitem_to_indicator':system_prompt_parse_outp_categories_rules_b2i,
+    'indicator_to_indicator':system_prompt_parse_outp_categories_rules_i2i
 }
 # endregion
 

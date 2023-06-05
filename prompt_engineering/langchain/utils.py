@@ -50,20 +50,20 @@ class PredictionGenerator():
                  prompt_style:str,
                   ensemble_size:int,
                   edge_value:str="binary_weight", # binary_weight or float_weight or float pair
-                  parse_style:str='rule_based',
+                  parse_style:str='rules',
                   relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
                   deepspeed_compat:bool=False,
                   effect_type:str='directly' ):
         
         # Can not get model logits scores from ChatOpenAI
-        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
-        if parse_style == 'perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
+        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'categories_perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
+        if parse_style == 'categories_perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['float_weight','distribution'] and parse_style != 'perplexity': 
+        if edge_value in ['float_weight','distribution'] and parse_style != 'categories_perplexity': 
             if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
-                                                         To use ensemble size 1, please use parse_style='perplexity'.\
+                                                         To use ensemble size 1, please use parse_style='categories_perplexity'.\
                                                          Alternatively use ensemble size > 1, ")
             
         self.llm = llm
@@ -78,10 +78,10 @@ class PredictionGenerator():
         self.deepspeed_compat = deepspeed_compat
 
         self.generation_kwargs = {}
-        self.generation_parse_kwargs = {}
+        self.categorise_kwargs = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
         self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 75 if prompt_style == 'open' else None
-        self.generation_parse_kwargs[k]= 12
+        self.categorise_kwargs[k]= 12
         self.effect_type = effect_type
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
@@ -126,21 +126,21 @@ class PredictionGenerator():
 
 
         # Parse {'Yes':prob_yes, 'No':prob_no, 'Nan':prob_nan } from the predictions
-        if self.parse_style == 'rule_based':
-            li_li_preds_parsed = [ self.parse_yesno_with_rules(li_predictions) for li_predictions in li_li_preds]
+        if self.parse_style == 'rules':
+            li_li_preds_parsed = [ self.parse_outp_rules(li_predictions) for li_predictions in li_li_preds]
 
-        elif self.parse_style == 'perplexity':
-            li_li_preds_parsed = [ self.parse_yesno_with_lm_perplexity(li_predictions) for li_predictions in li_li_preds]
+        elif self.parse_style == 'categories_perplexity':
+            li_li_preds_parsed = [ self.parse_outp_categories_perplexity(li_predictions) for li_predictions in li_li_preds]
         
-        elif self.parse_style == 'generation':
-            li_li_preds_parsed = [ self.parse_yesno_with_lm_generation(li_predictions) for li_predictions in li_li_preds]
+        elif self.parse_style == 'categories_rules':
+            li_li_preds_parsed = [ self.parse_outp_categories_rules(li_predictions) for li_predictions in li_li_preds]
         
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
         return li_li_preds, li_li_preds_parsed
 
-    def parse_yesno_with_rules(self, li_predictions:list[str]) -> list[dict[str,float]] :
+    def parse_outp_rules(self, li_predictions:list[str]) -> list[dict[str,float]] :
         
         li_preds = [{}]*len(li_predictions)
 
@@ -172,7 +172,7 @@ class PredictionGenerator():
                    
         return li_preds
                
-    def parse_yesno_with_lm_generation(self, li_predictions:list[str])-> list[dict[str, float]] :
+    def parse_outp_categories_rules(self, li_predictions:list[str])-> list[dict[str, float]] :
         
         """This method prompts the llm to make an output constrained to categorising the response to either affirmation or negation, then uses rules to  parse the output"""
 
@@ -191,12 +191,12 @@ class PredictionGenerator():
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
-            outputs = self.llm.generate(batch_messages, **self.generation_parse_kwargs)
+            outputs = self.llm.generate(batch_messages, **self.categorise_kwargs)
             li_preds_str:list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
 
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
-            for k,v in self.generation_parse_kwargs.items():
+            for k,v in self.categorise_kwargs.items():
                 self.llm.pipeline._forward_params[k] =  v
 
             li_prompts_fmtd = [
@@ -237,7 +237,7 @@ class PredictionGenerator():
 
         return li_preds
     
-    def parse_yesno_with_lm_perplexity(self, li_predictions:list[str])->  list[dict[str,float]] :
+    def parse_outp_categories_perplexity(self, li_predictions:list[str])->  list[dict[str,float]] :
         # Get average perplexity of text when sentence is labelled Negation vs when it is labelled Affirmation.
         # NOTE: the perpleixty is calculated as an average on the whole text, not just the answer. Therefore, we rely on the
         #       the fact that 'Negation". and "Affirmation". both contain the same number of tokens
