@@ -228,8 +228,10 @@ def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFra
 
     return dset
 
-def perplexity(
+def perplexity_for_category(
     data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False):
+
+    """Calculate the perplexity of the final token for a given set of sentences"""
 
     model = model
     tokenizer = tokenizer
@@ -300,6 +302,11 @@ def perplexity(
         shift_logits = out_logits[..., :-1, :]
         shift_labels = labels[..., 1:]
         shift_attention_mask_batch = attn_mask[..., 1:]
+
+        # Slice to get only the last positions which is the category label:
+        shift_logits = shift_logits[..., -1:, :]
+        shift_labels = shift_labels[..., -1:]
+        shift_attention_mask_batch = shift_attention_mask_batch[..., -1:]
 
         if deepspeed_compat is False:
             shift_logits = shift_logits.contiguous()

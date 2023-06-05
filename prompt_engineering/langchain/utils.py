@@ -57,11 +57,14 @@ class PredictionGenerator():
                   effect_type:str='directly' ):
         
         # Can not get model logits scores from ChatOpenAI
-        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'categories_perplexity': raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
-        if parse_style == 'categories_perplexity': assert local_or_remote == 'local', "Can not get model logits scores from remote models"
+        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'categories_perplexity': 
+            raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
+        
+        if parse_style == 'categories_perplexity': 
+            assert local_or_remote == 'local', "Can not get model logits scores from remote models"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['float_weight','distribution'] and parse_style != 'categories_perplexity': 
+        if edge_value in ['distribution'] and parse_style != 'categories_perplexity': 
             if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
                                                          To use ensemble size 1, please use parse_style='categories_perplexity'.\
                                                          Alternatively use ensemble size > 1, ")
@@ -81,7 +84,7 @@ class PredictionGenerator():
         self.categorise_kwargs = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
         self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 75 if prompt_style == 'open' else None
-        self.categorise_kwargs[k]= 12
+        self.categorise_kwargs[k]= 4
         self.effect_type = effect_type
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
