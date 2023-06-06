@@ -334,7 +334,7 @@ def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
         raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
     
     # Creating all possible combinations of budget_items and indicators
-    li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'label':label  } for budget_item, indicator, label in zip( li_indicator, li_budget_items, li_labels) ] 
+    li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'label':label  } for budget_item, indicator, label in zip( li_budget_items, li_indicator, li_labels) ] 
     
     if max_dset_size is not None:
         li_record_b2i = random.sample(li_record_b2i, max_dset_size)
@@ -390,8 +390,6 @@ def prepare_data_i2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
     if max_dset_size is not None:
         li_record_i2i = random.sample(li_record_i2i, max_dset_size)
     
-    
-
     return li_record_i2i
 
 def predict_batches(prompt_builder:PromptBuilder, 

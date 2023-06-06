@@ -7,7 +7,9 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
-from prompt_engineering.utils_prompteng import map_relationship_system_prompt, map_relationship_promptsmap, map_relationship_sysprompt_categoriseanswer, create_negative_examples, perplexity, map_llmname_input_format, perplexity_to_normalised_probability
+from prompt_engineering.utils_prompteng import (map_relationship_system_prompt, map_relationship_promptsmap, 
+                                                map_relationship_sysprompt_categoriseanswer, perplexity_for_category, map_llmname_input_format, 
+                                                perplexity_to_normalised_probability, open_response_cats)
 import random
 
 import copy
@@ -80,11 +82,10 @@ class PredictionGenerator():
         self.local_or_remote = local_or_remote
         self.deepspeed_compat = deepspeed_compat
 
-        self.generation_kwargs = {}
-        self.categorise_kwargs = {}
+        self.generation_params = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
-        self.generation_kwargs[k]= 10 if prompt_style == 'yes_no' else 75 if prompt_style == 'open' else None
-        self.categorise_kwargs[k]= 4
+        self.generation_params[k]= 10 if prompt_style == 'yes_no' else 100 if prompt_style == 'open' else None
+                
         self.effect_type = effect_type
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
@@ -94,20 +95,28 @@ class PredictionGenerator():
         li_li_preds : list[list[str]] = []
             
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
+            
+            generation_params = {
+                'max_length': 10 if self.prompt_style == 'yes_no' else 100 if self.prompt_style == 'open' else None,
+            }
+
             for li_prompts in li_li_prompts:
                 batch_messages = [
                     [ SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]  ),
                         HumanMessage(content=prompt) ]
                         for prompt in li_prompts]
                 
-                outputs = self.llm.generate(batch_messages, **self.generation_kwargs)
+                outputs = self.llm.generate(batch_messages, **generation_params)
                 li_preds: list[str] = [ chatgen.text for chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
-            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs
-            for k,v in self.generation_kwargs.items():
-                self.llm.pipeline._forward_params[k] = v
+            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
+            generation_params = {
+                'max_new_tokens': 10 if self.prompt_style == 'yes_no' else 100 if self.prompt_style == 'open' else None,
+            }
+            self.llm.pipeline._forward_params =  generation_params
+
 
             for li_prompts in li_li_prompts:
                 
@@ -120,8 +129,8 @@ class PredictionGenerator():
 
                 # prompts_fmtd = [ map_relationship_system_prompt[self.relationship][self.effect_type] + '\n' + prompt for prompt in li_prompts ]
 
-                outputs = self.llm.generate( 
-                    prompts=li_prompts_fmtd  )
+                outputs = self.llm.generate(
+                    prompts=li_prompts_fmtd)
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
             
@@ -183,26 +192,37 @@ class PredictionGenerator():
 
         # Template to prompt language llm to simplify the answer to a Yes/No output
         li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer']
-        template = copy.deepcopy( random.choice(li_template) )
-            
+        template = copy.deepcopy( random.choice(li_template) )     
 
+        
         # Create filled versions of the template with each of the predictions
+        # NOTE: Currently the statement isn't inserted
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
         
         # Generate prediction
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
+            generation_params = {
+                'max_length': 10,
+            }
+                        
             batch_messages = [
                 [ SystemMessage(content=map_relationship_sysprompt_categoriseanswer[self.relationship] ),
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
-            outputs = self.llm.generate(batch_messages, **self.categorise_kwargs)
+            outputs = self.llm.generate(batch_messages, **generation_params)
             li_preds_str:list[str] = [ chatgen.text for chatgen in outputs.generations ]
 
-
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
-            for k,v in self.categorise_kwargs.items():
-                self.llm.pipeline._forward_params[k] =  v
+            
+            generation_params = {
+                'num_beams':3,
+                'num_return_sequences':1,
+                'early_stopping':True,
+                'max_new_tokens': 10,
+            }
+
+            self.llm.pipeline._forward_params =  generation_params
 
             # Formatting prompts to adhere to format required by Base Language Model
             li_prompts_fmtd = [
@@ -211,6 +231,8 @@ class PredictionGenerator():
                     system_message = map_relationship_sysprompt_categoriseanswer[self.relationship],
                     ) for prompt in li_filledtemplate ]
             
+            #TODO: responses such as 'there is no clear relationship between local .. and  ...'  are classified as 'Nan' instead of No 
+            #NOTE: Model keeps outputting the whole category name not just the first letter, how to fix
             outputs = self.llm.generate( prompts= li_prompts_fmtd )
 
             li_preds_str: list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
@@ -219,23 +241,34 @@ class PredictionGenerator():
             raise ValueError(f"llm type {type(self.llm)} not recognized")
 
         # Parse Yes/No/Na from the prediction
-        li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
+        # li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
         
-        def parse_outp_from_catpred(pred:str)->dict[str,float]:
-            boolA = 'A' in pred
-            boolB = 'B' in pred
-            boolC = 'C' in pred
-            
-            # If more than one is true, return NA
-            if sum([boolA, boolB, boolC]) != 1:
-                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }
+        # li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
 
-            if 'A' in pred:
+        def parse_outp_from_catpred(pred:str)->dict[str,float]:
+            # Prompt tries to coerce model to answer with category letter, so first we check if model instead output category name
+
+            pred_lower = pred.lower()
+
+            # Categorize using name of category
+            # The order of elifs is important here 
+            # While the category name for B is a substring of the category name for A
+            if open_response_cats['C'].lower() in pred_lower:
+                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }
+            elif open_response_cats['B'].lower() in pred_lower:
+                outp = {'Yes':0.0,'No':1.0, 'NA':0.0 }
+            elif open_response_cats['A'].lower() in pred_lower:
                 outp = {'Yes':1.0,'No':0.0, 'NA':0.0 }
+
+            # Categorize using Letter for Category
+            # The order of elifs is important here - as the category letter C is a substring of the category names for A and B
             elif 'B' in pred:
                 outp = {'Yes':0.0,'No':1.0, 'NA':0.0 }
+            elif 'A' in pred:
+                outp = {'Yes':1.0,'No':0.0, 'NA':0.0 }
             elif 'C' in pred:
-                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }
+                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }            
+
 
             return outp
             
@@ -268,18 +301,19 @@ class PredictionGenerator():
 
         # For each fill template, create 3 filled versions with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
-        answers = ['A', 'B', 'C' ]
+        answers = [' A', ' B', ' C' ]
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
         li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
         # Get the perplexity of each of the filled templates
         # return a flattened set of perplexities
-        li_perplexity = perplexity(
+        li_perplexity = perplexity_for_category(
             li_filledtemplates_with_answers, 
             self.llm.pipeline.model, 
             self.llm.pipeline.tokenizer,
             batch_size=6, 
-            deepspeed_compat = self.deepspeed_compat ) 
+            deepspeed_compat = self.deepspeed_compat,
+            category_token_len=len(answers[0]) ) 
         
         # Convert flattened set of perplexities into a list of list with each sublist having 3 perplexities for A, B, C
         li_map_perplexity = [ { answer:li_perplexity[idx + answers.index(answer)] for answer in answers  } for idx in range(0,len(li_perplexity),len(answers)) ]

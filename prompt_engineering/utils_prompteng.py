@@ -46,10 +46,18 @@ li_prompts_openend_template_open_response =[
 
 
 ]
-li_prompts_categorise_answer = [
-    # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}\n"
 
-    "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n"
+open_response_cats = { 'A':'Relationship Exists', 'B':'No Relationship Exists', 'C':'Inconclusive' }
+li_prompts_categorise_answer: list[str] = [
+    # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
+
+    # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
+
+    # "Please choose the letter that accurately classifies the assertion made in the statement regarding the potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. The statement will be presented to you, and you must select one of the three categories provided: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should consist of the letter that corresponds to the most suitable classification."
+
+    # "Please evaluate the statement provided, which discusses a potential causal link between local government spending on a specific budget item and a socio-economic or health indicator. Based on the information in the statement, classify the relationship into one of the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should be the letter that best represents your classification."
+
+    f"Please evaluate the statement provided, which discusses a potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. Classify the statement into one of the following categories: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}. Please provide your answer as a single letter (A, B, or C) that best fits your classification. \nStatement: {'{statement}'}"
 ]
 
 budgetitem_to_indicator_prompts = {
@@ -113,7 +121,7 @@ map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_p
 # region SystemMessages
 system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
 system_prompt_b2i_directly = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_indirectly = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". Both the budget item and socio-economic/health indicator will be presented within quotation marks. Your should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship.'
+system_prompt_b2i_indirectly = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
@@ -146,8 +154,8 @@ map_relationship_sysprompt_categoriseanswer = {
 # region BaseModelFormat - The format required by the underlying language model
 format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
 format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT:"
-format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:"
-format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:"
+format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
+format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
 format_mpt = "{system_message}\n\n{user_message}\n\n"
 format_mpt_no_sysmessage = "{user_message}\n\n"
 
@@ -157,7 +165,7 @@ def map_llmname_input_format(llm_name, user_message, system_message=None):
 
     if 'vicuna' in llm_name and system_message is not None:
         template = format_vicuna_1_1
-    if 'vicuna' in llm_name and system_message is None:
+    elif 'vicuna' in llm_name and system_message is None:
         template = format_vicuna_1_1_no_sysmessage
     
     elif 'alpaca' in llm_name and system_message is not None:
@@ -179,9 +187,9 @@ def map_llmname_input_format(llm_name, user_message, system_message=None):
         raise ValueError(f'Unknown llm_name: {llm_name}')
 
     if system_message is not None:
-        template.format(system_message=system_message, user_message=user_message)
+        template = template.format(system_message=system_message, user_message=user_message)
     else:
-        template.format(user_message=user_message)
+        template = template.format(user_message=user_message)
     
     return template
 
@@ -229,7 +237,7 @@ def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFra
     return dset
 
 def perplexity_for_category(
-    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False):
+    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False, category_token_len=1):
 
     """Calculate the perplexity of the final token for a given set of sentences"""
 
@@ -304,9 +312,9 @@ def perplexity_for_category(
         shift_attention_mask_batch = attn_mask[..., 1:]
 
         # Slice to get only the last positions which is the category label:
-        shift_logits = shift_logits[..., -1:, :]
-        shift_labels = shift_labels[..., -1:]
-        shift_attention_mask_batch = shift_attention_mask_batch[..., -1:]
+        shift_logits = shift_logits[..., -category_token_len:, :]
+        shift_labels = shift_labels[..., -category_token_len:]
+        shift_attention_mask_batch = shift_attention_mask_batch[..., -category_token_len:]
 
         if deepspeed_compat is False:
             shift_logits = shift_logits.contiguous()
@@ -338,7 +346,6 @@ def perplexity_to_normalised_probability( perplexities: dict[str,float]) -> dict
     return probs
 
 
-
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int,
                  ensemble_size:int, 
@@ -356,15 +363,17 @@ class PromptBuilder():
         self.k_shot = k_shot    # Number of examples to use as context for each prompt
         self.ensemble_size = ensemble_size # Number of different prompts to use per prediction
         self.examples_dset = examples_dset
-        self.effect_type = effect_type
+        self.effect_type = '' if effect_type == 'arbitrary' else effect_type 
         self.relationship = relationship
         random.seed(seed)
         # when arbitrary is subbed into the prompt template, it will result in a double space in the prompt. We use .replace("  ", " ") to remove this
 
 
     def __call__(self, batch:list[dict]) -> list[list[str]]:
-        
-        # Each element in batch has the same template
+        """
+        Given a batch of examples, this function returns a list of prompts for each example in the batch
+        """
+
         # First we generate an ensemble of templates to be filled in for each element in the batch
         if self.prompt_style == 'yes_no':
             templates = self._yes_no_template()
@@ -451,8 +460,10 @@ class PromptBuilder():
         return templates
 
     def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> list[list[str]]:
-        
+        """Fill in the template with the target and k_shot context"""
+
         li_li_prompts = []
+
         # for each row in batch
         for row in batch:
             
@@ -460,14 +471,14 @@ class PromptBuilder():
             prompt = None
             # for each member of the ensemble (note each ensemble member has a different prompt template)
             for ens_idx in range(self.ensemble_size):
-                # Fill in the k_shot context with random extracts from dataset
-                ## sample k items from our train set into a format dict for the template
+                # This indented code section fills in the k_shot context with random extracts from dataset
+
+                # sample k items from our train set into a format dict for the template
                 if self.relationship == 'budgetitem_to_indicator':
                     format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
                 elif self.relationship == 'indicator_to_indicator':
                     format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
                     
-
                 ## filling context examples in template and target info
                 if self.relationship == 'budgetitem_to_indicator':
                     prompt = templates[ens_idx].format(
@@ -506,14 +517,14 @@ class PromptBuilder():
                     
                     # Creating the open ended answer version of the examples
                     if self.relationship == 'budgetitem_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type) for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type) for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type).replace('  ',' ') for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type).replace('  ',' ') for d in neg_examples_sample ]
                     elif self.relationship == 'indicator_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type) for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type) for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx]['Yes'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type.replace('  ',' ')) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx]['No'].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type).replace('  ',' ') for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
-                    li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(e) + list(neg_examples_open_ended_answer) ))
+                    li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
                     random.shuffle(li_examples)
 
                     examples_sample, examples_open_ended_answer = zip(*li_examples)
