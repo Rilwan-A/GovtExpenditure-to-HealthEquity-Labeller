@@ -26,15 +26,19 @@ li_prompts_yes_no_template = [
     
 ]
 li_prompts_openend_template = [    
-    'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
-    
+
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
 
-    'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
+    'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
+
+    'Does local government spending on \"{budget_item}\" {effect_type} relate to the level of \"{indicator}\"?'
+
+ 
+    # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
     
-    'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
-    
+    # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?'
 ]
+
 li_prompts_openend_template_open_response =[
     {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
 
@@ -43,12 +47,12 @@ li_prompts_openend_template_open_response =[
     {'Yes':'The state of \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_type} related to local government spending on \"{budget_item}\".'},
 
     {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} improve the level of \"{indicator}\".'},
-
-
 ]
 
-open_response_cats = { 'A':'Relationship Exists', 'B':'No Relationship Exists', 'C':'Inconclusive' }
-li_prompts_categorise_answer: list[str] = [
+open_response_cats = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
+
+# V2 encourages the response the have the category letter as a response 
+li_prompts_categorise_answer_v1: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
 
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
@@ -57,14 +61,32 @@ li_prompts_categorise_answer: list[str] = [
 
     # "Please evaluate the statement provided, which discusses a potential causal link between local government spending on a specific budget item and a socio-economic or health indicator. Based on the information in the statement, classify the relationship into one of the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should be the letter that best represents your classification."
 
-    f"Please evaluate the statement provided, which discusses a potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. Classify the statement into one of the following categories: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}. Please provide your answer as a single letter (A, B, or C) that best fits your classification. \nStatement: {'{statement}'}"
+    f"The statement below expresses an opinion on whether local government spending on a 'specific budget item' is related to a 'socio-economic/health indicator'. Classify the statement's opinion into one of the following categories and respond only with the letter of the selected category: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}.\nStatement: {'{statement}'}\nASSISTANT:"
+]
+# V2 encourages the response the have the category name as a response
+li_prompts_categorise_answer_v2: list[str] = [
+    # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
+
+    # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
+
+    # "Please choose the letter that accurately classifies the assertion made in the statement regarding the potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. The statement will be presented to you, and you must select one of the three categories provided: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should consist of the letter that corresponds to the most suitable classification."
+
+    # "Please evaluate the statement provided, which discusses a potential causal link between local government spending on a specific budget item and a socio-economic or health indicator. Based on the information in the statement, classify the relationship into one of the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should be the letter that best represents your classification."
+
+    # f"Please evaluate the statement provided, which discusses a potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. Classify the statement into one of the following categories: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}. Please provide your answer as the category that best fits your classification. \nStatement: {'{statement}'}",
+
+    f"The statement below expresses an opinion on whether local government spending on a 'specific budget item' is related to a 'socio-economic/health indicator'. Classify the statement's opinion into one of the following categories and respond only with the selected category: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}.\nStatement: {'{statement}'}\nASSISTANT:"
+
+
+
 ]
 
 budgetitem_to_indicator_prompts = {
     'li_prompts_yes_no_template':li_prompts_yes_no_template,
     'li_prompts_openend_template':li_prompts_openend_template,
     'li_prompts_openend_template_open_response':li_prompts_openend_template_open_response,
-    'li_prompts_categorise_answer':li_prompts_categorise_answer
+    'li_prompts_categorise_answer_v1':li_prompts_categorise_answer_v1,
+    'li_prompts_categorise_answer_v2':li_prompts_categorise_answer_v2
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
 #endregion
@@ -119,9 +141,9 @@ map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_p
 # endregion
 
 # region SystemMessages
-system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_directly = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_indirectly = 'You are an analyst tasked with answering questions about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_directly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_indirectly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,

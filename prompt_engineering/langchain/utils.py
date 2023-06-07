@@ -191,7 +191,7 @@ class PredictionGenerator():
         """This method prompts the llm to make an output constrained to categorising the response to either affirmation or negation, then uses rules to  parse the output"""
 
         # Template to prompt language llm to simplify the answer to a Yes/No output
-        li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer']
+        li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer_v2']
         template = copy.deepcopy( random.choice(li_template) )     
 
         
@@ -216,10 +216,10 @@ class PredictionGenerator():
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             
             generation_params = {
-                'num_beams':3,
+                # 'num_beams':3,
                 'num_return_sequences':1,
                 'early_stopping':True,
-                'max_new_tokens': 10,
+                'max_new_tokens': 20,
             }
 
             self.llm.pipeline._forward_params =  generation_params
@@ -233,17 +233,13 @@ class PredictionGenerator():
             
             #TODO: responses such as 'there is no clear relationship between local .. and  ...'  are classified as 'Nan' instead of No 
             #NOTE: Model keeps outputting the whole category name not just the first letter, how to fix
-            outputs = self.llm.generate( prompts= li_prompts_fmtd )
+            outputs = self.llm.generate( prompts=li_prompts_fmtd )
 
             li_preds_str: list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
 
         else:
             raise ValueError(f"llm type {type(self.llm)} not recognized")
 
-        # Parse Yes/No/Na from the prediction
-        # li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
-        
-        # li_preds:list[dict[str,float]] = [ {'Yes':1.0,'No':0.0, 'NA':0.0 } if 'affirm' in pred.lower() else {'Yes':0.0,'No':1.0, 'NA':0.0 } if 'negat' in pred.lower() else {'Yes':0.0,'No':0.0, 'NA':1.0 } for pred in li_preds_str]
 
         def parse_outp_from_catpred(pred:str)->dict[str,float]:
             # Prompt tries to coerce model to answer with category letter, so first we check if model instead output category name
@@ -259,16 +255,8 @@ class PredictionGenerator():
                 outp = {'Yes':0.0,'No':1.0, 'NA':0.0 }
             elif open_response_cats['A'].lower() in pred_lower:
                 outp = {'Yes':1.0,'No':0.0, 'NA':0.0 }
-
-            # Categorize using Letter for Category
-            # The order of elifs is important here - as the category letter C is a substring of the category names for A and B
-            elif 'B' in pred:
-                outp = {'Yes':0.0,'No':1.0, 'NA':0.0 }
-            elif 'A' in pred:
-                outp = {'Yes':1.0,'No':0.0, 'NA':0.0 }
-            elif 'C' in pred:
-                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }            
-
+            else:
+                outp = {'Yes':0.0,'No':0.0, 'NA':1.0 }
 
             return outp
             
@@ -287,7 +275,7 @@ class PredictionGenerator():
         #   - Finally, return the probabilities as a distribution over the Yes/No/NA categories
 
 
-        li_templates = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer']
+        li_templates = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_answer_v1']
         template = copy.deepcopy( random.choice(li_templates) )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]

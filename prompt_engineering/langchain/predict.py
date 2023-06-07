@@ -47,6 +47,7 @@ from prompt_engineering.my_logger import setup_logging_predict
 
 def main(
     llm_name:str,
+    exp_name:str,
     finetuned:bool,
 
     predict_b2i:bool,
@@ -169,6 +170,7 @@ def main(
         logging.info("\tSaving Output")
         experiment_config = {
                             "llm_name": llm_name,
+                            "exp_name": exp_name,
                             'codebase': 'langchain',
                             "finetuned": finetuned,
                             "prompt_style": prompt_style,
@@ -188,11 +190,11 @@ def main(
         dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
         os.makedirs(dir_experiments, exist_ok=True )
 
-        existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(dir_experiments) if x.startswith('exp_') ]
+        existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(dir_experiments) if x.startswith(f'exp_{exp_name}') ]
         lowest_available_number = min(set(range(1000)) - set(existing_numbers))
         experiment_number = lowest_available_number
 
-        save_dir = os.path.join(dir_experiments, f"exp_{experiment_number:03d}" )
+        save_dir = os.path.join(dir_experiments, f"exp_{exp_name}_{experiment_number:03d}" )
         os.makedirs(save_dir, exist_ok=True )
         
         with open(os.path.join(save_dir, 'config.json'), 'w') as f:
@@ -480,6 +482,8 @@ def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
+    parser.add_argument('--exp_name', type=str, default='mpt7b', required=True )
+
     
     parser.add_argument('--predict_b2i', action='store_true', default=True, help='Indicates whether to predict budgetitem to indicator' )
     parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
