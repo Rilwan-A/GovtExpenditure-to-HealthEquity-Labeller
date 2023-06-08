@@ -25,7 +25,6 @@ import json as json
 
 # Testing models to see how well they aligned to expert's annotations of the SPOT dataset with yes_no prompt style w/ rule based parsing and binary weight edge value 
 
-# from .utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
 from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
 import csv
@@ -159,10 +158,12 @@ def main(
     # run predictions
     logging.info("\tRunning Predictions")
     (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
-        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i) = (None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, logging) # type: ignore #ignore
+        li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, 
+        li_prompt_ensemble_fmtd_b2i) = (None, None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, logging) # type: ignore #ignore
         
     (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
-         li_pred_ensemble_parsed_i2i, li_pred_agg_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, logging) #type: ignore 
+         li_pred_ensemble_parsed_i2i, li_pred_agg_i2i,
+         li_prompt_ensemble_fmtd_i2i) = (None, None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, logging) #type: ignore 
     logging.info("\tPredictions Complete")
 
     # saving to file
@@ -202,10 +203,10 @@ def main(
 
         #unbatching data
         if predict_b2i: 
-            save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
+            save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_prompt_ensemble_fmtd_b2i, li_pred_ensemble_b2i, li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
         
         if predict_i2i: 
-            save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
+            save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_prompt_ensemble_fmtd_i2i, li_pred_ensemble_i2i, li_pred_ensemble_parsed_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
         logging.info("\tOutput Saved")
 
@@ -398,10 +399,11 @@ def predict_batches(prompt_builder:PromptBuilder,
                         prediction_generator:PredictionGenerator, 
                         li_record:list[dict[str,str]],
                         batch_size=2,
-                        logger=None ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str]]:
+                        logger=None ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
+    li_prompt_ensemble_fmtd = []
     li_pred_ensemble = []
     li_pred_ensemble_parsed = []
     li_pred_agg = []
@@ -416,7 +418,7 @@ def predict_batches(prompt_builder:PromptBuilder,
         batch_prompt_ensembles = prompt_builder(batch)
         
         # Generate predictions
-        batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+        batch_li_prompts_fmtd, batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
 
         # Aggregate ensembles into predictions
         batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
@@ -424,15 +426,17 @@ def predict_batches(prompt_builder:PromptBuilder,
 
         # Extract predictions from the generated text
         li_prompt_ensemble.extend(batch_prompt_ensembles)  # type: ignore
+        li_prompt_ensemble_fmtd.extend(batch_li_prompts_fmtd) # type: ignore
         li_pred_ensemble.extend( batch_pred_ensembles ) # type: ignore
         li_pred_ensemble_parsed.extend( batch_pred_ensembles_parsed ) # type: ignore
         li_pred_agg.extend(batch_pred_agg) # type: ignore
     
-    return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg
+    return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd
 
 def save_experiment( 
                     li_record:list[dict[str,str]],
                     li_prompt_ensemble:list[list[str]],
+                    li_prompt_ensemble_fmtd:list[list[str]],
                     li_pred_ensemble:list[list[str]],
                     li_pred_ensemble_parsed:list[list[str]],
                     li_pred_agg,
@@ -445,8 +449,8 @@ def save_experiment(
     if relationship == 'budgetitem_to_indicator':
         df = pd.DataFrame({ 'budget_item': [ d['budget_item'] for d in li_record],
                            'indicator': [ d['indicator'] for d in li_record],
-                        'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
-                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+                        'pred_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
+                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed), 'prompts_fmtd':encode(li_prompt_ensemble_fmtd) })
         if 'label' in li_record[0].keys():
             df['label'] = [ d['label'] for d in li_record]
             # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
@@ -458,7 +462,7 @@ def save_experiment(
                            'indicator_2': [ d['indicator_2'] for d in li_record],
                         #    'label': [ d['label'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
-                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed)})
+                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed), 'prompts_fmtd':encode(li_prompt_ensemble_fmtd)})
         if 'label' in li_record[0].keys():
             df['label'] = [ d['label'] for d in li_record]
             # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'

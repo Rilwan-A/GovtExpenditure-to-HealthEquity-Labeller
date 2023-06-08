@@ -8,8 +8,10 @@ from langchain.schema import (
     SystemMessage
 )
 from prompt_engineering.utils_prompteng import (map_relationship_system_prompt, map_relationship_promptsmap, 
-                                                map_relationship_sysprompt_categoriseanswer, perplexity_for_category, map_llmname_input_format, 
-                                                perplexity_to_normalised_probability, open_response_cats)
+                                                map_relationship_sysprompt_categoriseanswer, perplexity_for_category,
+                                                map_llmname_input_format, perplexity_to_normalised_probability,
+                                                  open_response_cats, joint_probabilities_for_category, nomalized_probabilities,
+                                                   open_response_labels )
 import random
 
 import copy
@@ -88,11 +90,12 @@ class PredictionGenerator():
                 
         self.effect_type = effect_type
 
-    def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[dict[str,int|float]]] ]:
+    def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
         
         # Generate predictions
         li_li_preds : list[list[str]] = []
+        li_li_prompts_fmtd : list[list[str]] = []
             
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
             
@@ -117,7 +120,6 @@ class PredictionGenerator():
             }
             self.llm.pipeline._forward_params =  generation_params
 
-
             for li_prompts in li_li_prompts:
                 
                 # Formatting prompts to adhere to format required by Base Language Model
@@ -127,13 +129,12 @@ class PredictionGenerator():
                         system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]
                         ) for prompt in li_prompts ]
 
-                # prompts_fmtd = [ map_relationship_system_prompt[self.relationship][self.effect_type] + '\n' + prompt for prompt in li_prompts ]
-
                 outputs = self.llm.generate(
                     prompts=li_prompts_fmtd)
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
             
+                li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         else:
             raise ValueError(f"llm type {type(self.llm)} not recognized")
@@ -152,7 +153,7 @@ class PredictionGenerator():
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
-        return li_li_preds, li_li_preds_parsed
+        return li_li_prompts_fmtd, li_li_preds, li_li_preds_parsed
 
     def parse_outp_rules(self, li_predictions:list[str]) -> list[dict[str,float]] :
         
@@ -287,29 +288,49 @@ class PredictionGenerator():
                                         system_message = map_relationship_sysprompt_categoriseanswer[self.relationship] )
                                     for prompt in li_filledtemplate ] #Added some base model formatting
 
-        # For each fill template, create 3 filled versions with each of the possible answers
+        # For each template, create a set of 3 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
-        answers = [' A', ' B', ' C' ]
-        li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
-        li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
+        answers = list(  open_response_cats.keys() )
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
+        # li_filledtemplates_with_answers = sum(li_li_filledtemplates_with_answers,[])
 
-        # Get the perplexity of each of the filled templates
-        # return a flattened set of perplexities
-        li_perplexity = perplexity_for_category(
-            li_filledtemplates_with_answers, 
-            self.llm.pipeline.model, 
-            self.llm.pipeline.tokenizer,
-            batch_size=6, 
-            deepspeed_compat = self.deepspeed_compat,
-            category_token_len=len(answers[0]) ) 
+        # Deprecated@2023-07-06
+        # For each filled template set calculate the perplexity of each template
+        # li_li_perplexity = []
+        # for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
+        #     li_perplexity = perplexity_for_category(
+        #     li_filledtemplates_with_answers, 
+        #     self.llm.pipeline.model, 
+        #     self.llm.pipeline.tokenizer,
+        #     batch_size=3, 
+        #     deepspeed_compat = self.deepspeed_compat,
+        #     category_token_len=1 ) 
+        #     li_li_perplexity.append(li_perplexity)
         
-        # Convert flattened set of perplexities into a list of list with each sublist having 3 perplexities for A, B, C
-        li_map_perplexity = [ { answer:li_perplexity[idx + answers.index(answer)] for answer in answers  } for idx in range(0,len(li_perplexity),len(answers)) ]
+        # # Convert set of perplexities into a list of list with each sublist having 3 perplexities for A, B, C
+        # li_map_perplexity = [ { answer:li_perplexity[idx] for idx, answer in enumerate(answers)  } for li_perplexity in li_li_perplexity ]
 
         # Convert this to normalised probabilities
-        li_map_probabilities = [  perplexity_to_normalised_probability(map_perplexities) for map_perplexities in li_map_perplexity ]
+        # li_map_probabilities = [  perplexity_to_normalised_probability(map_perplexities) for map_perplexities in li_map_perplexity ]
 
-        return li_map_probabilities
+        # For each filled template set calcualte the relative probability of each answer
+        li_li_probability = []
+        for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
+            li_probability = joint_probabilities_for_category(
+                li_filledtemplates_with_answers, 
+                self.llm.pipeline.model, 
+                self.llm.pipeline.tokenizer,
+                batch_size=len(open_response_cats.keys()), 
+                deepspeed_compat = self.deepspeed_compat,
+                category_token_len=1 ) 
+            li_li_probability.append(li_probability)
+        
+        # Convert set of perplexities into a list of list with each sublist having 3 perplexities for A, B, C
+        li_map_probability = [ { open_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
+
+        # Convert this to normalised probabilities
+        li_map_probability = [  nomalized_probabilities(map_perplexities) for map_perplexities in li_map_probability ]
+        return li_map_probability
         
     def aggregate_predictions(self, li_li_predictions:list[list[dict[str,int|float]]] )->  list[float | dict[str,float] ] :
         

@@ -14,13 +14,13 @@ map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
 li_prompts_yes_no_template = [    
-    "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
+    # "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
     
-    'Give me a yes or no answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
+    # 'Give me a yes or no answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
-    'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
+    # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
 
-    'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
+    # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
     
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
@@ -29,9 +29,9 @@ li_prompts_openend_template = [
 
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
 
-    'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
+    # 'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
 
-    'Does local government spending on \"{budget_item}\" {effect_type} relate to the level of \"{indicator}\"?'
+    # 'Does local government spending on \"{budget_item}\" {effect_type} relate to the level of \"{indicator}\"?'
 
  
     # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
@@ -40,16 +40,21 @@ li_prompts_openend_template = [
 ]
 
 li_prompts_openend_template_open_response =[
-    {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
+    # {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
 
     {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} affect \"{indicator}\".'},
 
-    {'Yes':'The state of \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_type} related to local government spending on \"{budget_item}\".'},
+    # {'Yes':'The state of \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_type} related to local government spending on \"{budget_item}\".'},
 
-    {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} improve the level of \"{indicator}\".'},
+    # {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} improve the level of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} improve the level of \"{indicator}\".'},
 ]
 
+
+
 open_response_cats = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
+open_response_labels = { 'A':'Yes', 'B':'No', 'C':'NA'}
+# open_response_cats = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
+
 
 # V2 encourages the response the have the category letter as a response 
 li_prompts_categorise_answer_v1: list[str] = [
@@ -61,8 +66,11 @@ li_prompts_categorise_answer_v1: list[str] = [
 
     # "Please evaluate the statement provided, which discusses a potential causal link between local government spending on a specific budget item and a socio-economic or health indicator. Based on the information in the statement, classify the relationship into one of the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should be the letter that best represents your classification."
 
-    f"The statement below expresses an opinion on whether local government spending on a 'specific budget item' is related to a 'socio-economic/health indicator'. Classify the statement's opinion into one of the following categories and respond only with the letter of the selected category: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}.\nStatement: {'{statement}'}\nASSISTANT:"
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter of the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}',
+
+    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter (A, B or C) of the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
 ]
+
 # V2 encourages the response the have the category name as a response
 li_prompts_categorise_answer_v2: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
@@ -75,10 +83,9 @@ li_prompts_categorise_answer_v2: list[str] = [
 
     # f"Please evaluate the statement provided, which discusses a potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. Classify the statement into one of the following categories: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}. Please provide your answer as the category that best fits your classification. \nStatement: {'{statement}'}",
 
-    f"The statement below expresses an opinion on whether local government spending on a 'specific budget item' is related to a 'socio-economic/health indicator'. Classify the statement's opinion into one of the following categories and respond only with the selected category: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}.\nStatement: {'{statement}'}\nASSISTANT:"
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
 
-
-
+    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
 ]
 
 budgetitem_to_indicator_prompts = {
@@ -140,22 +147,35 @@ indicator_to_indicator_prompts = {
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
 
+
 # region SystemMessages
-system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_directly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_indirectly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the budget item and socio-economic/health indicator will be presented within quotation marks.'
+# system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+# system_prompt_b2i_directly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+# system_prompt_b2i_indirectly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+
+system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering a question about whether a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_directly = 'You are an analyst tasked with answering a question about whether a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_indirectly = 'You are an analyst tasked with answering a question about whether a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+
+
+# system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
     'yes_no':'Answer the following question with a yes or no.',
     'open':'Use your expertise to answer the following question with a one sentence answer.',
+    # 'open':'Please use your expertise to answer the following question with a one sentence answer.',
+    # "open": "Please draw upon your specialized knowledge and provide a concise and unequivocal response to the forthcoming inquiry."
+
 }
+
 system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
 map_system_prompts_i2i = {
     'indirectly':system_prompt_i2i,
-    'directly':'',
-    'arbitrary':'',
+    'directly':system_prompt_i2i,
+    'arbitrary':system_prompt_i2i,
     'yes_no':'Please provide a Yes or No answer the following question.',
     'open':'Please use your expertise to answer the following question with a very short one sentence answer.',
 }
@@ -262,6 +282,10 @@ def perplexity_for_category(
     data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False, category_token_len=1):
 
     """Calculate the perplexity of the final token for a given set of sentences"""
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
+
+    assert isinstance(model, PreTrainedModel)
+    assert isinstance(tokenizer, PreTrainedTokenizerBase)
 
     model = model
     tokenizer = tokenizer
@@ -352,6 +376,111 @@ def perplexity_for_category(
 
     return ppls
 
+def joint_probabilities_for_category(
+    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False, category_token_len=1):
+
+
+    """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
+        NOTE: by design the category responses must all be the same length, ideally 1 token length.
+
+        NOTE: However the function is currently written to work on sequencs longer than 1 token, but this is not recommended.
+    """
+
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
+    from torch.nn.functional import log_softmax
+
+    assert isinstance(model, PreTrainedModel)
+    assert isinstance(tokenizer, PreTrainedTokenizerBase)
+    assert category_token_len == 1, "Currently only supports category tokens of length 1"
+
+    model = model
+    tokenizer = tokenizer
+
+    if tokenizer.pad_token is None and batch_size > 1:
+        existing_special_tokens = list(tokenizer.special_tokens_map_extended.values())
+        assert (
+            len(existing_special_tokens) > 0
+        ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
+        tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
+
+    if add_start_token and max_length:
+        assert (
+            tokenizer.bos_token is not None
+        ), "Input model must already have a BOS token if using add_start_token=True. Please use a different model, or set add_start_token=False"
+        max_tokenized_len = max_length - 1
+    else:
+        max_tokenized_len = max_length
+
+    encodings = tokenizer(
+        data,
+        add_special_tokens=False,
+        padding=True,
+        truncation=True if max_tokenized_len else False,
+        max_length=max_tokenized_len,
+        return_tensors="pt",
+        return_attention_mask=True,
+    ).to(model.device)
+
+    encoded_texts = encodings["input_ids"]
+    attn_masks = encodings["attention_mask"]
+
+    if add_start_token:
+        assert torch.all(torch.ge(attn_masks.sum(1), 1)), "Each input text must be at least one token long."
+    else:
+        assert torch.all(
+            torch.ge(attn_masks.sum(1), 2)
+        ), "When add_start_token=False, each input text must be at least two tokens long. Run with add_start_token=True if inputting strings of only one token, and remove all empty input strings."
+
+    joint_probs = []
+
+    for start_index in range(0, len(encoded_texts), batch_size):
+        end_index = min(start_index + batch_size, len(encoded_texts))
+        encoded_batch = encoded_texts[start_index:end_index]
+        attn_mask = attn_masks[start_index:end_index]
+
+        if add_start_token:
+            bos_tokens_tensor = torch.tensor([[tokenizer.bos_token_id]] * encoded_batch.size(dim=0)).to(model.device)
+            encoded_batch = torch.cat([bos_tokens_tensor, encoded_batch], dim=1)
+            attn_mask = torch.cat(
+                [torch.ones(bos_tokens_tensor.size(), dtype=torch.int64).to(model.device), attn_mask], dim=1
+            )
+
+        labels = encoded_batch
+
+        with torch.no_grad() if not deepspeed_compat else nullcontext():
+            out_logits = model(encoded_batch, attention_mask=attn_mask).logits
+
+        shift_logits = out_logits[..., :-1, :]
+        shift_labels = labels[..., 1:]
+        shift_attention_mask_batch = attn_mask[..., 1:]
+
+        shift_logits = shift_logits[..., -category_token_len:, :]
+        shift_labels = shift_labels[..., -category_token_len:]
+        shift_attention_mask_batch = shift_attention_mask_batch[..., -category_token_len:]
+
+        if deepspeed_compat is False:
+            shift_logits = shift_logits.contiguous()
+            shift_labels = shift_labels.contiguous()
+            shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
+
+
+        # Calculate probabilities from logits
+        log_probs  = log_softmax(shift_logits, dim=-1)
+
+        # Use gather to select the log probabilities for the actual tokens
+        gathered_log_probs = log_probs.gather(-1, shift_labels.unsqueeze(-1)).squeeze(-1)
+
+        gathered_log_probs = gathered_log_probs * shift_attention_mask_batch
+
+        # Sum the log probabilities for the actual tokens to get the joint log probability
+        joint_log_prob_batch = gathered_log_probs.sum(dim=-1)
+
+        joint_prob_batch = torch.exp(joint_log_prob_batch)
+
+        joint_probs += joint_prob_batch.tolist()
+
+    return joint_probs
+
 def perplexity_to_normalised_probability( perplexities: dict[str,float]) -> dict[str,float]:
 
     """Converts a dictionary of perplexity scores to normalised probabilities"""
@@ -367,6 +496,15 @@ def perplexity_to_normalised_probability( perplexities: dict[str,float]) -> dict
 
     return probs
 
+def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
+    
+        """Normalises a dictionary of probabilities"""
+        # Normalise probabilities
+        total = sum(probs.values())
+        for k,v in probs.items():
+            probs[k] = v/total
+    
+        return probs
 
 class PromptBuilder():
     def __init__(self, prompt_style:str, k_shot:int,
