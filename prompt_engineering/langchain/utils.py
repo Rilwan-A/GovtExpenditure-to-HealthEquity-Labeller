@@ -64,12 +64,13 @@ class PredictionGenerator():
         if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'categories_perplexity': 
             raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
         
-        if parse_style == 'categories_perplexity': 
+        if parse_style in ['categories_perplexity', 'perplexity']: 
             assert local_or_remote == 'local', "Can not get model logits scores from remote models"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['distribution'] and parse_style != 'categories_perplexity': 
-            if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
+        if edge_value in ['distribution']:
+            if parse_style not in ['categories_perplexity', 'perplexity'] :
+                if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
                                                          To use ensemble size 1, please use parse_style='categories_perplexity'.\
                                                          Alternatively use ensemble size > 1, ")
             
@@ -86,6 +87,16 @@ class PredictionGenerator():
 
         self.generation_params = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
+        if prompt_style == 'yes_no':
+            self.generation_params[k] = 10
+        elif prompt_style == 'open':
+            self.generation_params[k] = 100
+        elif prompt_style == 'categorise':
+            self.generation_params[k] = 10
+        elif prompt_style == 'cot':
+            self.generation_params[k] = 100
+
+
         self.generation_params[k]= 10 if prompt_style == 'yes_no' else 100 if prompt_style == 'open' else None
                 
         self.effect_type = effect_type
