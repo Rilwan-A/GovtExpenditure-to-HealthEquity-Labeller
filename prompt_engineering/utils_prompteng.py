@@ -14,18 +14,18 @@ map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
 li_prompts_yes_no_template = [    
+    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
+
     # "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
     
     # 'Give me a yes or no answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
     
     # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
 
-    # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',
-    
-    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
-    
+    # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',    
 ]
-li_prompts_openend_template = [    
+
+li_prompts_open_template = [    
 
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
 
@@ -33,16 +33,17 @@ li_prompts_openend_template = [
 
     # 'Does local government spending on \"{budget_item}\" {effect_type} relate to the level of \"{indicator}\"?'
 
- 
     # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
     
     # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?'
 ]
 
-li_prompts_openend_template_open_response =[
-    # {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
+li_prompts_open_template_open_response =[
 
     {'Yes':'Local government spending on \"{budget_item}\" does {effect_type} affect \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" does not {effect_type} affect \"{indicator}\".'},
+
+    # {'Yes':'Local government spending on \"{budget_item}\" is {effect_type} related to the state of \"{indicator}\".', 'No':'Local government spending on \"{budget_item}\" is not {effect_type} related to the state of \"{indicator}\".'},
+
 
     # {'Yes':'The state of \"{indicator}\" is {effect_type} related to local government spending on \"{budget_item}\".', 'No':'The state of \"{indicator}\" is not {effect_type} related to local government spending on \"{budget_item}\".'},
 
@@ -51,13 +52,17 @@ li_prompts_openend_template_open_response =[
 
 
 
-open_response_cats = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
-open_response_labels = { 'A':'Yes', 'B':'No', 'C':'NA'}
+# open_response_cats = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
+# open_response_labels = { 'A':'Yes', 'B':'No', 'C':'NA'}
 # open_response_cats = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
+
+open_response_cats = { '1':'Government Budget Item Does Affect Indicator', '2':'Government Budget Item Does Not Affect Indicator' }
+# NOTE: using full label showed promise
+open_response_labels = { '1':'Yes', '2':'No'}
 
 
 # V2 encourages the response the have the category letter as a response 
-li_prompts_categorise_answer_v1: list[str] = [
+li_prompts_categories_answer_v1: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
 
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
@@ -68,11 +73,15 @@ li_prompts_categorise_answer_v1: list[str] = [
 
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter of the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}',
 
-    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter (A, B or C) of the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter (A, B or C) of the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
+    # NOTE: All the above prompts included a NA category e.g. if the model was not sure. The issue was that the NA category always attracted too much weight during prediction so we removed it.
+    # NOTE: All the above prompts included a letters for the category labels, issue with this is that when using perplexity method then the perplexity of category labels can also include probability of the model produce open answers that start with label lettter.
+
+    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
 ]
 
 # V2 encourages the response the have the category name as a response
-li_prompts_categorise_answer_v2: list[str] = [
+li_prompts_categories_answer_v2: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
 
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
@@ -85,15 +94,17 @@ li_prompts_categorise_answer_v2: list[str] = [
 
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
 
-    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
+
+    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the selected category: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
 ]
 
 budgetitem_to_indicator_prompts = {
     'li_prompts_yes_no_template':li_prompts_yes_no_template,
-    'li_prompts_openend_template':li_prompts_openend_template,
-    'li_prompts_openend_template_open_response':li_prompts_openend_template_open_response,
-    'li_prompts_categorise_answer_v1':li_prompts_categorise_answer_v1,
-    'li_prompts_categorise_answer_v2':li_prompts_categorise_answer_v2
+    'li_prompts_open_template':li_prompts_open_template,
+    'li_prompts_open_template_open_response':li_prompts_open_template_open_response,
+    'li_prompts_categories_answer_v1':li_prompts_categories_answer_v1,
+    'li_prompts_categories_answer_v2':li_prompts_categories_answer_v2
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
 #endregion
@@ -111,9 +122,9 @@ li_prompts_yes_no_template_i2i = [
     'Answer the following question with yes or no: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ] 
-li_prompts_categorise_answer_i2i = [
+li_prompts_categories_answer_i2i = [
 ]
-li_prompts_openend_template_i2i = [
+li_prompts_open_template_i2i = [
     'Does the level of \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?',
 
     'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?',
@@ -125,7 +136,7 @@ li_prompts_openend_template_i2i = [
     'Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
 ]
-li_prompts_openend_template_open_response_i2i = [
+li_prompts_open_template_open_response_i2i = [
     {'Yes':'The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_type} influential to the state of \"{indicator2}\".'},
 
     {'Yes':'Local government spending on improving the level of \"{indicator1}\" does {effect_type} affect the level of \"{indicator2}\".', 'No':'Local government spending on improving the level of \"{indicator1}\" does not {effect_type} affect the level of \"{indicator2}\".'},
@@ -140,38 +151,28 @@ li_prompts_openend_template_open_response_i2i = [
 
 indicator_to_indicator_prompts = {
     'li_prompts_yes_no_template_i2i':li_prompts_yes_no_template_i2i,
-    'li_prompts_openend_template_i2i':li_prompts_openend_template_i2i,
-    'li_prompts_openend_template_open_response_i2i':li_prompts_openend_template_open_response_i2i,
-    'li_prompts_categorise_answer_i2i':li_prompts_categorise_answer_i2i
+    'li_prompts_open_template_i2i':li_prompts_open_template_i2i,
+    'li_prompts_open_template_open_response_i2i':li_prompts_open_template_open_response_i2i,
+    'li_prompts_categories_answer_i2i':li_prompts_categories_answer_i2i
 }
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
 
-
 # region SystemMessages
-# system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-# system_prompt_b2i_directly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-# system_prompt_b2i_indirectly = 'You are an analyst tasked with answering a question about whether there is a causal relationship between a specific "government budget item" and a particular "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-
-system_prompt_b2i_arbitrary = 'You are an analyst tasked with answering a question about whether a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_directly = 'You are an analyst tasked with answering a question about whether a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_indirectly = 'You are an analyst tasked with answering a question about whether a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-
-
-# system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
 
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
     'yes_no':'Answer the following question with a yes or no.',
-    'open':'Use your expertise to answer the following question with a one sentence answer.',
-    # 'open':'Please use your expertise to answer the following question with a one sentence answer.',
-    # "open": "Please draw upon your specialized knowledge and provide a concise and unequivocal response to the forthcoming inquiry."
-
+    'open':'Please, use your expertise to answer the following question with a conclusive, one sentence answer.'
 }
 
-system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+
 map_system_prompts_i2i = {
     'indirectly':system_prompt_i2i,
     'directly':system_prompt_i2i,
@@ -179,6 +180,7 @@ map_system_prompts_i2i = {
     'yes_no':'Please provide a Yes or No answer the following question.',
     'open':'Please use your expertise to answer the following question with a very short one sentence answer.',
 }
+
 map_relationship_system_prompt = {
     'budgetitem_to_indicator':map_system_prompts_b2i,
     'indicator_to_indicator':map_system_prompts_i2i
@@ -187,7 +189,7 @@ map_relationship_system_prompt = {
 system_prompt_parse_outp_categories_rules_b2i = None
 system_prompt_parse_outp_categories_rules_i2i = None
 
-map_relationship_sysprompt_categoriseanswer = {
+map_relationship_sysprompt_categoriesanswer = {
     'budgetitem_to_indicator':system_prompt_parse_outp_categories_rules_b2i,
     'indicator_to_indicator':system_prompt_parse_outp_categories_rules_i2i
 }
@@ -539,6 +541,8 @@ class PromptBuilder():
             templates = self._yes_no_template()
         elif self.prompt_style == 'open':
             templates = self._open_template()
+        elif self.prompt_style == 'categorise':
+            templates = self._categorise_template()
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
 
@@ -590,7 +594,7 @@ class PromptBuilder():
         # For each member of the ensemble we then extend the prompt to have self.k_shots context
         # This output leaves gaps for budget_items, indicators, and responses ot be filled in 
 
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template']
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_open_template']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
         
         for ens_idx in range(self.ensemble_size):
@@ -618,6 +622,9 @@ class PromptBuilder():
             templates[ens_idx] = prompt
 
         return templates
+
+    def _categorise_template(self)  -> list[str]:
+        
 
     def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> list[list[str]]:
         """Fill in the template with the target and k_shot context"""
@@ -658,7 +665,7 @@ class PromptBuilder():
         return li_li_prompts
 
     def fill_template_open(self, templates:list[str], batch:list[dict])->list[list[str]]:
-        li_answer_templates = map_relationship_promptsmap[self.relationship]['li_prompts_openend_template_open_response']
+        li_answer_templates = map_relationship_promptsmap[self.relationship]['li_prompts_open_template_open_response']
         template_responses = copy.deepcopy( sample(li_answer_templates, self.ensemble_size)  )
 
         li_li_prompts = []

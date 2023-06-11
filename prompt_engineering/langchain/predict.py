@@ -81,6 +81,16 @@ def main(
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
     
+    if prompt_style == 'yes_no':
+        assert parse_style == 'rules'
+    if prompt_style == 'open':
+        assert parse_style in ['categories_perplexity', 'categories_rules']
+        
+    if prompt_style == 'categorise':
+        assert parse_style == 'perplexity'
+    if prompt_style == 'cot':
+        assert parse_style == 'categories_perplexity'
+
     # Setup Logging
     logging = setup_logging_predict(llm_name)
 
@@ -493,8 +503,12 @@ def parse_args():
     parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
-    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
-    parser.add_argument('--parse_style', type=str, choices=['rules','categories_perplexity', 'categories_rules' ], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    
+    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot' ], default='open', help='Style of prompt' )
+
+
+    parser.add_argument('--parse_style', type=str, choices=['rules','categories_perplexity', 'categories_rules', 'perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
+
     parser.add_argument('--ensemble_size', type=int, default=2 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
