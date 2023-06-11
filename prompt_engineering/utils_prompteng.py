@@ -51,7 +51,7 @@ li_prompts_open_template_open_response =[
 ]
 
 
-
+# region Prompts for the open prompt style methodology
 # open_response_cats = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
 # open_response_labels = { 'A':'Yes', 'B':'No', 'C':'NA'}
 # open_response_cats = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
@@ -98,18 +98,23 @@ li_prompts_categories_answer_v2: list[str] = [
 
     f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the selected category: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
 ]
+# endregion
 
-# Prompts for the category prompt style methodology
-categorise_cats = { '1':'Government Budget Item Does Affect Indicator' , '2':'Government Budget Item Does Not Affect Indicator'  }
+# region Prompts for the category prompt style methodology
+categorise_cats = { '1':'Government Budget Item Does Affect Indicator' , '2':'Government Budget Item Does Not Affect Indicator' }
 categorise_response_labels = { '1':'Yes', '2':'No' }
 
 li_prompts_categorise_template: list[str] = [
     f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {categorise_cats["1"]}, 2) {categorise_cats["2"]}.'
 ]
+# endregion
 
+# region Prompts for the cot prompt style methodology
 li_prompts_cot_categorise_template: list[str] = [
-    "Please choose the letter that accurately classifies the assertion made in the statement regarding the potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. The statement will be presented to you, and you must select one of the three categories provided: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should consist of the letter that corresponds to the most suitable classification.",
+    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
 ]
+
+
 
 budgetitem_to_indicator_prompts = {
     'li_prompts_yes_no_template':li_prompts_yes_no_template,
@@ -118,6 +123,7 @@ budgetitem_to_indicator_prompts = {
     'li_prompts_open_template_open_response':li_prompts_open_template_open_response,
     'li_prompts_categories_answer_v1':li_prompts_categories_answer_v1,
     'li_prompts_categories_answer_v2':li_prompts_categories_answer_v2,
+    
 
     'li_prompts_categorise_template':li_prompts_categorise_template,
     
@@ -186,7 +192,10 @@ map_system_prompts_b2i = {
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
     'yes_no':'Answer the following question with a yes or no.',
-    'open':'Please, use your expertise to answer the following question with a conclusive, one sentence answer.'
+    'open':'Please use your expertise to answer the following question with a conclusive, one sentence answer.',
+    'categorise':'',
+    'cot':'Please use your expertise to provide a detailed four sentence answer to the following question.'
+
 }
 
 
@@ -533,10 +542,14 @@ class PromptBuilder():
                  relationship:str="budgetitem_to_indicator",
                 seed:int=10  ) -> None:
         
-        
+        assert prompt_style in ['yes_no','open','categorise','cot']
         assert effect_type in [ 'arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
+
+        if prompt_style == 'cot':
+            assert self.k_shot == 0, "K-shot must be 0 for cot prompts"
+
 
         self.prompt_style = prompt_style
         self.k_shot = k_shot    # Number of examples to use as context for each prompt
@@ -560,6 +573,8 @@ class PromptBuilder():
             templates = self._open_template()
         elif self.prompt_style == 'categorise':
             templates = self._categorise_template()
+        elif self.prompt_style == 'cot':
+            templates: list[str] = self._cot_template()
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
 
@@ -670,6 +685,22 @@ class PromptBuilder():
             templates[ens_idx] = prompt
         return templates
     
+    def _cot_template(self)  -> list[str]:
+
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_cot_categorise_template']
+        templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
+
+        for ens_idx in range(self.ensemble_size):
+
+            if self.relationship == 'budgetitem_to_indicator':
+                prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+            
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ')
+                        
+            templates[ens_idx] = prompt
+        return templates
+
     def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> list[list[str]]:
         """Fill in the template with the target and k_shot context"""
 
@@ -783,7 +814,7 @@ class PromptBuilder():
                 if self.relationship == 'budgetitem_to_indicator':
                     format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":categorise_response_labels_inverted[d['label']] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
                 elif self.relationship == 'indicator_to_indicator':
-                    raise NotImplementedError, "Categorise response not implemented for indicator_to_indicator"
+                    raise NotImplementedError("Categorise response not implemented for indicator_to_indicator")
                     format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
                     
                 ## filling context examples in template and target info
@@ -796,6 +827,37 @@ class PromptBuilder():
                     prompt = templates[ens_idx].format(
                         target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
                         **format_dict
+                    )
+                li_prompts.append(prompt)
+
+            # Add prompt to list
+            li_li_prompts.append(li_prompts)
+        
+        return li_li_prompts
+
+    def fill_template_cot(self, templates:list[str], batch:list[dict])->list[list[str]]:
+
+        li_li_prompts = []
+
+        # for each row in batch
+        for row in batch:
+            
+            li_prompts = []
+            prompt = None
+            # for each member of the ensemble (note each ensemble member has a different prompt template)
+            
+            for ens_idx in range(self.ensemble_size):
+                    
+                ## filling context examples in template and target info
+                if self.relationship == 'budgetitem_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                        
+                    )
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                        
                     )
                 li_prompts.append(prompt)
 
