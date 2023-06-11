@@ -20,122 +20,96 @@ fi
 if [[ $num_devices -eq 2 ]]; then
   # If two numbers are entered
   (
-    export CUDA_VISIBLE_DEVICES=${devices[0]}
-    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style yes_no \
-        --parse_style rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-        --batch_size 48 --save_output
 
-    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style open \
-        --parse_style categories_rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-        --batch_size 48 --save_output
-
-    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style open \
-        --parse_style categories_perplexity --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-        --batch_size 24 --save_output
-
-    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style yes_no \
-        --parse_style rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-        --batch_size 24 --save_output
-
-    python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style open \
-        --parse_style categories_rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-        --batch_size 8 --save_output
 
   ) &
 
   (
     export CUDA_VISIBLE_DEVICES=${devices[1]}
 
-    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style open \
-        --parse_style categories_perplexity --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
+
+  ) &
+else
+    # If one number is entered
+    export CUDA_VISIBLE_DEVICES=${devices[0]}
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style yes_no \
+        --parse_style rules --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
         --batch_size 48 --save_output
 
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style open \
+        --parse_style categories_rules --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 48 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style open \
+        --parse_style categories_perplexity --effect_type directly --edge_value distribution \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 48 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style categorise \
+        --parse_style perplexity --effect_type directly --edge_value distribution \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 48 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style cot \
+        --parse_style categories_perplexity --effect_type directly --edge_value distribution \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 48 --save_output
+    
+
     python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style open \
-        --parse_style categories_rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
+        --parse_style categories_perplexity --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
         --batch_size 24 --save_output
 
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style yes_no \
+        --parse_style rules --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 24 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style open \
+        --parse_style categories_rules --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 24 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name vic7b --prompt_style categorise \
+        --parse_style perplexity --effect_type directly --edge_value distribution \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 48 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style cot \
+        --parse_style categories_perplexity --effect_type directly --edge_value distribution \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 48 --save_output
+
     python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style open \
-        --parse_style categories_perplexity --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
+        --parse_style categories_rules --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 8 --save_output
+
+    python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style open \
+        --parse_style categories_perplexity --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
         --batch_size 8 --save_output
 
     python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style yes_no \
-        --parse_style rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-        --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-        --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
+        --parse_style rules --effect_type directly --edge_value binary_weight \
+        --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
+        --k_shot_example_dset_name_b2i spot --local_or_remote local \
         --batch_size 8 --save_output
-  ) &
-else
-  # If one number is entered
-  export CUDA_VISIBLE_DEVICES=${devices[0]}
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style yes_no \
-      --parse_style rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 48 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style open \
-      --parse_style categories_rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 48 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style open \
-      --parse_style categories_perplexity --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 24 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style yes_no \
-      --parse_style rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 24 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style open \
-      --parse_style categories_rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 8 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/vicuna-7B-1.1-HF --exp_name vic7b --prompt_style open \
-      --parse_style categories_perplexity --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 48 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name TheBloke/wizard-vicuna-13B-HF --exp_name wizvic13b --prompt_style open \
-      --parse_style categories_rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 24 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style open \
-      --parse_style categories_perplexity --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 8 --save_output
-
-  python3 ./prompt_engineering/langchain/predict.py --llm_name timdettmers/guanaco-33b-merged --exp_name guanco33b --prompt_style yes_no \
-      --parse_style rules --ensemble_size 1 --effect_type directly --edge_value binary_weight \
-      --input_file ./data/spot/spot_indicator_mapping_table_test.csv --k_shot_b2i 0 --k_shot_i2i 0 \
-      --k_shot_example_dset_name_b2i spot --k_shot_example_dset_name_i2i None --local_or_remote local \
-      --batch_size 8 --save_output
 
 fi

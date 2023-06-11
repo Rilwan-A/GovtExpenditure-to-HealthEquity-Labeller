@@ -307,7 +307,6 @@ def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
     """
     
     # Check json is valid
-    random.seed(data_load_seed)
     expected_keys = ['budget_item','indicator']
     
     # Load data
@@ -335,7 +334,6 @@ def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
         # set_budget_items = sorted(set(li_budget_items))
         # set_indicator = sorted(set(li_indicator))
 
-
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
         raise NotImplementedError("UploadedFile not implemented yet")
@@ -350,6 +348,7 @@ def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
     li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'label':label  } for budget_item, indicator, label in zip( li_budget_items, li_indicator, li_labels) ] 
     
     if max_dset_size is not None:
+        random.seed(data_load_seed)
         li_record_b2i = random.sample(li_record_b2i, max_dset_size)
     
     return li_record_b2i # type: ignore
@@ -509,7 +508,7 @@ def parse_args():
 
     parser.add_argument('--parse_style', type=str, choices=['rules','categories_perplexity', 'categories_rules', 'perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
 
-    parser.add_argument('--ensemble_size', type=int, default=2 )
+    parser.add_argument('--ensemble_size', type=int, default=1 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
 

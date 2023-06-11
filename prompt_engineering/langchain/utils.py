@@ -90,7 +90,7 @@ class PredictionGenerator():
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str):
         generation_params = {}
-        k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
+        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_length'
         if prompt_style == 'yes_no':
             generation_params[k] = 10
         elif prompt_style == 'open':
@@ -98,7 +98,7 @@ class PredictionGenerator():
         elif prompt_style == 'categorise':
             generation_params[k] = 10
         elif prompt_style == 'cot':
-            generation_params[k] = 200
+            generation_params[k] = 250
         
         return generation_params
 
@@ -123,7 +123,7 @@ class PredictionGenerator():
                         HumanMessage(content=prompt) ]
                         for prompt in li_prompts]
                 
-                outputs = self.llm.generate(batch_messages, **generation_params)
+                outputs = self.llm.generate(batch_messages, **generation_params, )
                 li_preds: list[str] = [ chatgen.text for chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
@@ -142,7 +142,8 @@ class PredictionGenerator():
                         ) for prompt in li_prompts ]
 
                 outputs = self.llm.generate(
-                    prompts=li_prompts_fmtd)
+                    prompts=li_prompts_fmtd,
+                    stop = ['\n\n'] )
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
             
@@ -331,7 +332,7 @@ class PredictionGenerator():
         li_filledtemplate = [
                 map_llmname_input_format(self.llm_name,
                                         user_message = prompt, 
-                                        system_message = None )
+                                        system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] ).replace('  ',' ') )
                                     for prompt in li_predictions ] #Added some base model formatting
 
         # For each template, create a set of 3 filled templates with each of the possible answers
