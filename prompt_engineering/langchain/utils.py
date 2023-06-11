@@ -17,7 +17,7 @@ import random
 import copy
 import numpy as np
 import pandas as pd
-
+from functools import lru_cache
 
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
@@ -84,22 +84,23 @@ class PredictionGenerator():
         self.edge_value   = edge_value
         self.local_or_remote = local_or_remote
         self.deepspeed_compat = deepspeed_compat
+      
+        self.effect_type = effect_type
 
-        self.generation_params = {}
+    @lru_cache(maxsize=2)
+    def get_generation_params(self, prompt_style:str):
+        generation_params = {}
         k = isinstance(llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(llm, langchain.chat_models.ChatOpenAI)*'max_length'
         if prompt_style == 'yes_no':
-            self.generation_params[k] = 10
+            generation_params[k] = 10
         elif prompt_style == 'open':
-            self.generation_params[k] = 100
+            generation_params[k] = 100
         elif prompt_style == 'categorise':
-            self.generation_params[k] = 10
+            generation_params[k] = 10
         elif prompt_style == 'cot':
-            self.generation_params[k] = 100
-
-
-        self.generation_params[k]= 10 if prompt_style == 'yes_no' else 100 if prompt_style == 'open' else None
-                
-        self.effect_type = effect_type
+            generation_params[k] = 150
+        
+        return generation_params
 
     def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
@@ -110,9 +111,7 @@ class PredictionGenerator():
             
         if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
             
-            generation_params = {
-                'max_length': 10 if self.prompt_style == 'yes_no' else 100 if self.prompt_style == 'open' else None,
-            }
+            self.get_generation_params(self.prompt_style)
 
             for li_prompts in li_li_prompts:
                 batch_messages = [
@@ -126,10 +125,8 @@ class PredictionGenerator():
         
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
-            generation_params = {
-                'max_new_tokens': 10 if self.prompt_style == 'yes_no' else 100 if self.prompt_style == 'open' else None,
-            }
-            self.llm.pipeline._forward_params =  generation_params
+            
+            self.llm.pipeline._forward_params =  self.get_generation_params(self.prompt_style)
 
             for li_prompts in li_li_prompts:
                 
