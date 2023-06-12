@@ -52,10 +52,6 @@ class PromptEngineeringLM(pl.LightningModule):
         self.val_task = val_task
         self.optimizer = kwargs.get('optimizer', 'auto')
         self.lr = kwargs.get('lr', 1e-6)
-        self.freeze_layers = kwargs.get('freeze_layers', 0)
-
-        # Freeze the first 21 layers
-        self.freeze_layers_fn()
 
         if self.val_task == 'spot_alignment':
 
@@ -452,7 +448,6 @@ class PromptEngineeringLM(pl.LightningModule):
 
         return args
 
-
 class DataModule(pl.LightningDataModule):
 
     def __init__(self, nn_name, dir_data, batch_size, batch_size_inf, val_task, num_workers=4):
@@ -526,7 +521,6 @@ class DataModule(pl.LightningDataModule):
 
         args = parser.parse_known_args()[0]
         return args
-
 
 class SpotDataset(TorchDataset):
     def __init__(self, data):
