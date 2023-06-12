@@ -224,14 +224,17 @@ class PredictionGenerator():
         # Generate prediction
         if isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
             generation_params = self.get_generation_params(self.prompt_style)
+            system_message = map_relationship_sysprompt_categoriesanswer[self.relationship]
+            system_message = system_message if system_message is not None else ''
+
             for k,v in generation_params.items():
                 setattr(self.llm, k, v)
+            
             batch_messages = [
-                [ SystemMessage(content=map_relationship_sysprompt_categoriesanswer[self.relationship] ),
+                [ SystemMessage(content=system_message),
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
-            
-            outputs = self.llm.generate(batch_messages, generation_params)
+            outputs = self.llm.generate(batch_messages)
             li_preds_str:list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
 
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
