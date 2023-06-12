@@ -282,12 +282,11 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
             llm = ChatOpenAI(
                 client=openai.ChatCompletion,
                 model_name=llm_name,
-                openai_api_key=api_key,
-                max_tokens = 5 if prompt_style == 'yes_no' else 50 )    #ignore: type        
+                openai_api_key=api_key )    #ignore: type        
         
         elif llm_name in HUGGINGFACE_MODELS:
             llm = HuggingFaceHub(
-                    repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } ) #type: ignore
+                    repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'do_sample':False } ) #type: ignore
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for remote use")
 

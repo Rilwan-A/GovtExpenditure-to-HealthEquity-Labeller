@@ -93,15 +93,11 @@ li_prompts_categories_answer_v2: list[str] = [
 
     # f"Please evaluate the statement provided, which discusses a potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. Classify the statement into one of the following categories: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}. Please provide your answer as the category that best fits your classification. \nStatement: {'{statement}'}",
 
-<<<<<<< HEAD
-    f"The statement below expresses an opinion on whether local government spending on a 'specific budget item' is related to a 'socio-economic/health indicator'. Classify the statement's opinion into one of the following categories and respond only with the selected category: A) {open_response_cats['A']}, B) {open_response_cats['B']}, or C) {open_response_cats['C']}.\nStatement: {'{statement}'}\nASSISTANT:"
-=======
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
 
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the selected category: A) {open_response_cats["A"]}, B) {open_response_cats["B"]}, or C) {open_response_cats["C"]}.\nStatement: {"{statement}"}'
 
     f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the selected category: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
->>>>>>> origin/main
 ]
 # endregion
 

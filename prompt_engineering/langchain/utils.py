@@ -40,7 +40,7 @@ MAP_LOAD_IN_NBIT = {
 
 }
 
-OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']
+OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
 ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
@@ -90,7 +90,7 @@ class PredictionGenerator():
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str):
         generation_params = {}
-        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_length'
+        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens'
         if prompt_style == 'yes_no':
             generation_params[k] = 10
         elif prompt_style == 'open':
@@ -113,18 +113,22 @@ class PredictionGenerator():
             # Case: prompt_style == 'cateogrise' so we do not need to generate predictions just insert answers and compare perplexities
             li_li_preds = li_li_prompts 
 
-        elif isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
+        elif isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
             
             generation_params = self.get_generation_params(self.prompt_style)
+            
+            for k,v in generation_params.items():
+                setattr(self.llm, k, v)
 
             for li_prompts in li_li_prompts:
                 batch_messages = [
-                    [ SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]  ),
+                    [ SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]),
                         HumanMessage(content=prompt) ]
                         for prompt in li_prompts]
                 
-                outputs = self.llm.generate(batch_messages, **generation_params, )
-                li_preds: list[str] = [ chatgen.text for chatgen in outputs.generations ]
+                
+                outputs = self.llm.generate(batch_messages )
+                li_preds: list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
@@ -215,18 +219,17 @@ class PredictionGenerator():
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
         
         # Generate prediction
-        if isinstance(self.llm, langchain.chat_models.base.BaseChatModel): #type: ignore
-            generation_params = {
-                'max_length': 10,
-            }
-                        
+        if isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
+            generation_params = self.get_generation_params(self.prompt_style)
+            for k,v in generation_params.items():
+                setattr(self.llm, k, v)
             batch_messages = [
                 [ SystemMessage(content=map_relationship_sysprompt_categoriesanswer[self.relationship] ),
                     HumanMessage(content=prompt) ]
                     for prompt in li_filledtemplate]
             
-            outputs = self.llm.generate(batch_messages, **generation_params)
-            li_preds_str:list[str] = [ chatgen.text for chatgen in outputs.generations ]
+            outputs = self.llm.generate(batch_messages, generation_params)
+            li_preds_str:list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
 
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             
