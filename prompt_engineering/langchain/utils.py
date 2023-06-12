@@ -237,6 +237,9 @@ class PredictionGenerator():
             outputs = self.llm.generate(batch_messages)
             li_preds_str:list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
 
+            # NOTE: sleep added to avoid API rate limits
+            sleep(20)
+
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             
             generation_params = {
