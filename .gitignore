@@ -37,7 +37,7 @@ data
 **/**.yml
 **/**.yaml
 **/**.png
-**/**.jsson
+**/**.json
 
 # VSCode settings
 **/**workspace
