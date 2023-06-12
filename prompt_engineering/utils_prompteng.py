@@ -237,6 +237,8 @@ format_mpt_no_sysmessage = "{user_message}\n\n"
 def map_llmname_input_format(llm_name, user_message, system_message=None):
 
     assert user_message is not None
+    
+    llm_name = llm_name.lower()
 
     if 'vicuna' in llm_name and system_message is not None:
         template = format_vicuna_1_1
