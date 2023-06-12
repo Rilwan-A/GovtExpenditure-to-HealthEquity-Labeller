@@ -136,7 +136,7 @@ def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--nn_name', type=str, 
-                        default='TheBloke/wizard-vicuna-13B-HF'
+                        default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF'
                          
                           )
     

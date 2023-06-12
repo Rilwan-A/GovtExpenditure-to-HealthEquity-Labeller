@@ -432,6 +432,7 @@ def predict_batches(prompt_builder:PromptBuilder,
         batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
 
 
+
         # Extract predictions from the generated text
         li_prompt_ensemble.extend(batch_prompt_ensembles)  # type: ignore
         li_prompt_ensemble_fmtd.extend(batch_li_prompts_fmtd) # type: ignore
@@ -442,27 +443,32 @@ def predict_batches(prompt_builder:PromptBuilder,
     return li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd
 
 def save_experiment( 
-                    li_record:list[dict[str,str]],
-                    li_prompt_ensemble:list[list[str]],
-                    li_prompt_ensemble_fmtd:list[list[str]],
-                    li_pred_ensemble:list[list[str]],
-                    li_pred_ensemble_parsed:list[list[str]],
-                    li_pred_agg,
-                    relationship:str='budgetitem_to_indicator',
-                    save_dir:str='experiments' ):
+    li_record:list[dict[str,str]],
+    li_prompt_ensemble:list[list[str]],
+    li_prompt_ensemble_fmtd:list[list[str]],
+    li_pred_ensemble:list[list[str]],
+    li_pred_ensemble_parsed:list[list[str]],
+    li_pred_agg,
+    relationship:str='budgetitem_to_indicator',
+    save_dir:str='experiments' ):
     
     # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
     encode = lambda _list: [ json.dumps(val) for val in _list]
     
+    li_prompt_ensemble_fmtd = li_prompt_ensemble_fmtd if len(li_prompt_ensemble_fmtd) > 0 else [None]*len(li_prompt_ensemble)
     if relationship == 'budgetitem_to_indicator':
-        df = pd.DataFrame({ 'budget_item': [ d['budget_item'] for d in li_record],
-                           'indicator': [ d['indicator'] for d in li_record],
-                        'pred_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
-                       'predictions':encode(li_pred_ensemble), 'predictions_parsed':encode(li_pred_ensemble_parsed), 'prompts_fmtd':encode(li_prompt_ensemble_fmtd) })
+        df = pd.DataFrame({ 
+                        'budget_item': [ d['budget_item'] for d in li_record],
+                       'indicator': [ d['indicator'] for d in li_record],
+                       'pred_aggregated':li_pred_agg, 
+                       'prompts':encode(li_prompt_ensemble), 
+                       'predictions':encode(li_pred_ensemble), 
+                       'predictions_parsed':encode(li_pred_ensemble_parsed),
+                       'prompts_fmtd':encode(li_prompt_ensemble_fmtd) })
         if 'label' in li_record[0].keys():
             df['label'] = [ d['label'] for d in li_record]
             # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
-            df = df[['budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']]
+            df = df[['budget_item', 'indicator', 'label', 'pred_aggregated', 'prompts', 'predictions', 'predictions_parsed', 'prompts_fmtd']]
 
 
     elif relationship == 'indicator_to_indicator':

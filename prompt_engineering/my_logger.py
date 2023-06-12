@@ -1,5 +1,5 @@
 import logging
-import os
+import os, sys
 from datetime import datetime
 
 def setup_logging(filename):
@@ -23,5 +23,8 @@ def setup_logging_predict( llm_name ):
     log_filename = f'{llm_name}_{dt_string}.log'
 
     logging = setup_logging(log_filename)
+
+    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
+
     return logging
 

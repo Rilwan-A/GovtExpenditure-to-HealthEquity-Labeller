@@ -1,3 +1,4 @@
+from time import sleep
 import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
@@ -23,7 +24,7 @@ from functools import lru_cache
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
 
-    'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF',  'timdettmers/guanaco-33b-merged',
+    'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF', 'TheBloke/Wizard-Vicuna-13B-Uncensored-HF', 'timdettmers/guanaco-33b-merged',
 
     'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g'  ,'TheBloke/guanaco-65B-GPTQ'
     ]
@@ -32,8 +33,9 @@ MAP_LOAD_IN_NBIT = {
     
     'mosaicml/mpt-7b-chat': 8,
 
-    'TheBloke/vicuna-7B-1.1-HF':4,
+    'TheBloke/vicuna-7B-1.1-HF':8,
     'TheBloke/wizard-vicuna-13B-HF':4,
+    'TheBloke/Wizard-Vicuna-13B-Uncensored-HF':4,
 
     'timdettmers/guanaco-33b-merged':4,
     'TheBloke/guanaco-65B-HF':4,
@@ -98,7 +100,7 @@ class PredictionGenerator():
         elif prompt_style == 'categorise':
             generation_params[k] = 10
         elif prompt_style == 'cot':
-            generation_params[k] = 250
+            generation_params[k] = 210
         
         return generation_params
 
@@ -121,6 +123,7 @@ class PredictionGenerator():
                 setattr(self.llm, k, v)
 
             for li_prompts in li_li_prompts:
+                sleep(20)
                 batch_messages = [
                     [ SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]),
                         HumanMessage(content=prompt) ]
@@ -418,11 +421,15 @@ class PredictionGenerator():
                 return {'Yes':avg_relative_yes, 'No':avg_relative_no, 'NA':avg_relative_na}
             
             li_pred_agg = [ avg_relative_y(li_dict_pred) for li_dict_pred in li_li_predictions ]
-        
+
+            li_pred_agg = [{key: round(value, 4) for key, value in nested_dict.items()} for nested_dict in li_pred_agg]
+
         else:
             raise NotImplementedError(f"Aggregation method {self.edge_value} not implemented")
         
         return li_pred_agg #type: ignore
+
+
 
 def load_annotated_examples(k_shot_example_dset_name:str|None, 
                             relationship_type:str='budgetitem_to_indicator') -> list[dict[str,str]] | None:
