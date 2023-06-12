@@ -20,14 +20,11 @@ import pandas as pd
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
-
     'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF',  'timdettmers/guanaco-33b-merged',
-
     'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g'  ,'TheBloke/guanaco-65B-GPTQ'
     ]
 
 MAP_LOAD_IN_NBIT = {
-    
     'mosaicml/mpt-7b-chat': 8,
 
     'TheBloke/vicuna-7B-1.1-HF':4,
@@ -35,7 +32,6 @@ MAP_LOAD_IN_NBIT = {
 
     'timdettmers/guanaco-33b-merged':4,
     'TheBloke/guanaco-65B-HF':4,
-
 }
 
 OPENAI_MODELS = ['gpt-3.5-turbo-030', 'gpt-4']

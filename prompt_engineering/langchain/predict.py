@@ -269,14 +269,15 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
         if llm_name in OPENAI_MODELS:
             
             llm = ChatOpenAI(
-                client=openai.ChatCompletion,
                 model_name=llm_name,
                 openai_api_key=api_key,
-                max_tokens = 5 if prompt_style == 'yes_no' else 50 )    #ignore: type        
+                max_tokens = 7 if prompt_style == 'yes_no' else 50 )    #ignore: type        
         
         elif llm_name in HUGGINGFACE_MODELS:
             llm = HuggingFaceHub(
-                    repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100, 'do_sample':False } ) #type: ignore
+                    repo_id=llm_name, huggingfacehub_api_token=api_key, 
+                    model_kwargs={ 'max_new_tokens': 5 if prompt_style == 'yes_no' else 100,
+                                   'do_sample':False } ) #type: ignore
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for remote use")
 
@@ -323,7 +324,6 @@ def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
 
         # set_budget_items = sorted(set(li_budget_items))
         # set_indicator = sorted(set(li_indicator))
-
 
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
@@ -489,7 +489,7 @@ def parse_args():
     parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
-    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='open', help='Style of prompt' )
+    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open' ], default='yes_no', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rules','categories_perplexity', 'categories_rules' ], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
     parser.add_argument('--ensemble_size', type=int, default=2 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
