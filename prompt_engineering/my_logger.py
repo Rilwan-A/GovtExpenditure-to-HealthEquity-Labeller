@@ -28,3 +28,18 @@ def setup_logging_predict( llm_name ):
 
     return logging
 
+
+def setup_logging_preprocess( dset_name, llm_name ):
+    now = datetime.now()
+    dt_string = now.strftime("%Y%m%d_%H%M%S")
+
+    llm_name = ''.join(llm_name.split('/')[1:])
+
+    log_filename = f'pprcs_{dset_name}_{llm_name}_{dt_string}.log'
+
+    logging = setup_logging(log_filename)
+
+    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
+
+    return logging
+

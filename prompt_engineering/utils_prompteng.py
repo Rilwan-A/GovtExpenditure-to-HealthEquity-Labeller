@@ -227,14 +227,14 @@ map_relationship_sysprompt_categoriesanswer = {
 # endregion
 
 # region BaseModelFormat - The format required by the underlying language model
-format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
-format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT:"
+format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT: "
+format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT: "
 format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
 format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
 format_mpt = "{system_message}\n\n{user_message}\n\n"
 format_mpt_no_sysmessage = "{user_message}\n\n"
 
-def map_llmname_input_format(llm_name, user_message, system_message=None):
+def map_llmname_input_format(llm_name, user_message, system_message=None, response=None):
 
     assert user_message is not None
     
@@ -267,7 +267,11 @@ def map_llmname_input_format(llm_name, user_message, system_message=None):
         template = template.format(system_message=system_message, user_message=user_message)
     else:
         template = template.format(user_message=user_message)
-    
+
+    # Adding response
+    if response is not None:
+        template += response
+
     return template
 
 # endregion

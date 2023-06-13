@@ -1,20 +1,17 @@
+
 import os
-import sys
-sys.path.append(os.getcwd())
 os.environ['TOKENIZERS_PARALLELISM'] = "false"
 
-import deepspeed
 import bitsandbytes as bnb
 
 from sklearn.metrics import accuracy_score
 from argparse import Namespace
-from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
+
 from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import glob
 from torch.utils.data import DataLoader, Dataset as TorchDataset
 import yaml
-import ujson as json
 from datasets import Dataset  # type: ignore
 import torch
 from argparse import ArgumentParser
@@ -23,26 +20,40 @@ import lightning.pytorch as pl
 import transformers
 from sklearn.metrics import precision_recall_fscore_support
 
-from prompt_engineering.huggingface.predict import parse_args as parse_args_spot_alignment
-from prompt_engineering.huggingface.predict import load_dataset as load_dataset_spot_alignment
 from prompt_engineering.huggingface.predict import PromptBuilder, PredictionGenerator
 from prompt_engineering.huggingface.predict import step as val_step_spot_alignment_inner
 
-# We also advise users to use the nested quantization technique. This saves more memory at no additional performance - 
-# from our empirical observations, this enables fine-tuning llama-13b model on an NVIDIA-T4 16GB with a sequence length of 1024,
-#  batch size of 1 and gradient accumulation steps of 4.
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
-# from lightning.pytorch.plugins.training_type import DeepSpeedPlugin
+from peft import get_peft_config, get_peft_model, LoraConfig, TaskType
+from transformers import PagedAdamW8bit
+
+from langchain.utils import HUGGINGFACE_MODELS
+
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    print(
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
+    )
+
 class PromptEngineeringLM(pl.LightningModule):
     """LightningModule for prompt engineering LM training and evaluation."""
     def __init__(self,
                  model,
                  tokenizer,
-                 val_task,
+                 val_task:list[str],
                  **kwargs
                  ):
         super().__init__()
-        # self.nn_name = nn_name
+        # self.model_id = model_id
 
         # NOTE: Model should be able to be loaded locally, if it is already trained
         self.model = model
@@ -52,38 +63,28 @@ class PromptEngineeringLM(pl.LightningModule):
         self.val_task = val_task
         self.optimizer = kwargs.get('optimizer', 'auto')
         self.lr = kwargs.get('lr', 1e-6)
-        self.freeze_layers = kwargs.get('freeze_layers', 0)
 
-        # Freeze the first 21 layers
-        self.freeze_layers_fn()
+        # if 'spot_alignment' in self.val_task:
 
-        if self.val_task == 'spot_alignment':
+        #     self.validation_step_outputs = []
 
-            self.validation_step_outputs = []
+        #     # load in train dataset for prompt builder
+        #     train_dset_records = load_dataset_spot_alignment('spot')[
+        #         0].to_dict('records')
 
-            # load in train dataset for prompt builder
-            train_dset_records = load_dataset_spot_alignment('spot')[
-                0].to_dict('records')
+        #     # load in kwargs for PromptBuilder and PredictionGenerator
+        #     # spot_alignment_kwargs = parse_args_spot_alignment()
 
-            # load in kwargs for PromptBuilder and PredictionGenerator
-            spot_alignment_kwargs = parse_args_spot_alignment()
+        #     prompt_style = spot_alignment_kwargs.prompt_style
+        #     k_shot = spot_alignment_kwargs.k_shot
+        #     ensemble_size = spot_alignment_kwargs.ensemble_size
+        #     aggregation_method = spot_alignment_kwargs.aggregation_method
+        #     parse_output_method = spot_alignment_kwargs.parse_output_method
 
-            prompt_style = spot_alignment_kwargs.prompt_style
-            k_shot = spot_alignment_kwargs.k_shot
-            ensemble_size = spot_alignment_kwargs.ensemble_size
-            aggregation_method = spot_alignment_kwargs.aggregation_method
-            parse_output_method = spot_alignment_kwargs.parse_output_method
-
-            self.prompt_builder = PromptBuilder(
-                prompt_style, k_shot, ensemble_size, train_dset_records, 'indirectly', self.tokenizer)
-            self.prediction_generator = PredictionGenerator(
-                self.model, self.tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=True)
-
-    def freeze_layers_fn(self):
-        for idx, layer in enumerate(self.model.transformer.h):
-            if idx < self.freeze_layers:
-                for param in layer.parameters():
-                    param.requires_grad = False
+        #     self.prompt_builder = PromptBuilder(
+        #         prompt_style, k_shot, ensemble_size, train_dset_records, 'indirectly', self.tokenizer)
+        #     self.prediction_generator = PredictionGenerator(
+        #         self.model, self.tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=True)
 
     def forward(self, input_ids, attention_mask, **kwargs):
         return self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
@@ -179,34 +180,18 @@ class PromptEngineeringLM(pl.LightningModule):
     def configure_optimizers(self):
         # optimal params for Adafactor https://github.com/huggingface/transformers/pull/10526#issuecomment-804652154
 
-        if self.optimizer == 'Adafactor':
-            optimizer = transformers.Adafactor(self.trainer.model.model.parameters(), scale_parameter=False,
-                                               relative_step=False, warmup_init=False, lr=self.lr,
-                                               weight_decay=0.01)  # works better for bigger models
-            lr_scheduler = transformers.get_linear_schedule_with_warmup(optimizer, num_warmup_steps=200,
-                                                                        num_training_steps=1000)
-            return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_loss'}
-
-        elif self.optimizer == 'Adam8bit':
+        if self.optimizer == 'Adam8bit':
             optimizer = bnb.optim.Adam8bit(
                     self.trainer.model.model.parameters(), 
-                    lr=self.lr, betas=(0.9, 0.995)
+                    lr=self.lr, betas=(0.9, 0.995),
+                    eps=1e-9, weight_decay=0.0,
                     )
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
-
-        elif self.optimizer == 'DeepSpeedCPUAdam':
-            # crate a Adam optimizer from deepspeed library 
-            optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(self.trainer.model.model.parameters(),
-                                                             lr=self.lr, betas=(0.9, 0.995),
-                                                             fp32_optimizer_states=False)
+        
+        elif self.optimizer == 'Adam8bitPaged':
+            optimizer = PagedAdamW8bit(self.parameters(), lr=1e-3)
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
-        elif self.optimizer == 'Adam':
-            # crate a Adam optimizer from deepspeed library 
-            optimizer = deepspeed.ops.adam.FusedAdam(self.trainer.model.model.parameters(), 
-                                                     lr=self.lr,
-                                                     betas=(0.9, 0.995))
-            return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
         else:
             raise ValueError(f'optimizer {self.optimizer} not recognized')
@@ -214,11 +199,37 @@ class PromptEngineeringLM(pl.LightningModule):
     @staticmethod
     def train_model(config_trainer, config_data, config_model):
 
-        model = transformers.AutoModelForCausalLM.from_pretrained(config_trainer.nn_name,
-                                                                  load_in_8bit=False)
+        # Creating Model
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16)
+        
 
+        model = transformers.AutoModelForCausalLM.from_pretrained(config_trainer.model_id,
+                                                                  quantization_config=bnb_config,
+                                                                  device_map={'':0}
+                                                                  )
+        
+        # Implementing Lora version
+        peft_config = LoraConfig(
+            task_type=TaskType.SEQ_2_SEQ_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1
+        )
+        peft_config = LoraConfig(
+            r=8, 
+            lora_alpha=32, 
+            target_modules=["query_key_value"], 
+            lora_dropout=0.1, 
+            bias="none", 
+            task_type="CAUSAL_LM"
+        )
+        model = get_peft_model(model, peft_config)
+        print_trainable_parameters(model)
+
+        # Creating Tokenizer
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config_trainer.nn_name)
+            config_trainer.model_id)
 
         # Create data module
         data_module = DataModule(**vars(config_data))
@@ -236,52 +247,11 @@ class PromptEngineeringLM(pl.LightningModule):
             auto_insert_metric_name=True,
             save_weights_only=True,
             save_top_k=1))
-        callbacks.append(EarlyStopping(monitor="val_loss", patience=8))
+        callbacks.append(EarlyStopping(monitor="val_loss", patience=config_trainer.patience))
 
         # setting up strategy
         strategy = config_trainer.strategy
-        ds_config = {
-                    # "optimizer": {
-                    #     "type": "AdamW",
-                    #     "params": {
-                    #         "lr": "auto",
-                    #         "betas": "auto",
-                    #         "eps": "auto",
-                    #         "weight_decay": "auto"
-                    #            }
-                    #        },
-                    # "scheduler": {
-                    #     "type": "WarmupLR",
-                    #     "params": {
-                    #         "last_batch_iteration": -1,
-                    #         "warmup_min_lr": 0,
-                    #         "warmup_max_lr": 3e-5,
-                    #         "warmup_num_steps": 100,
-                    #         },
-                    #     },
-                    "zero_optimization": {
-                        "stage": 3,
-                        "offload_optimizer": {
-                            "device": "cpu",
-                            "pin_memory": True
-                        },
-                        "offload_param": {
-                            "device": "cpu",
-                            "pin_memory": True
-                        },
 
-                        "overlap_comm": True,
-                        "contiguous_gradients": True,
-                        "sub_group_size": 1e9,
-                        "reduce_bucket_size": 2e8,
-                        "stage3_prefetch_bucket_size": "auto",
-                        "stage3_param_persistence_threshold": "auto",
-                        "stage3_max_live_parameters": 1e9,
-                        "stage3_max_reuse_distance": 1e9,
-                        "stage3_gather_16bit_weights_on_model_save": False
-                    }
-                }
-        strategy = DeepSpeedStrategy(config=ds_config)
 
         # Create trainer
         trainer = pl.Trainer(
@@ -297,16 +267,16 @@ class PromptEngineeringLM(pl.LightningModule):
             logger=pl_loggers.TensorBoardLogger(
                 save_dir=config_trainer.dir_ckpt),
             
-            # precision= '16-mixed',
-            precision= 'bf16',
+            precision= 32,
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
-            max_epochs=2 if config_trainer.debugging else config_trainer.2e-5	,
+            max_epochs=2 if config_trainer.debugging else config_trainer.max_epochs,
             num_sanity_val_steps=4,
             
             limit_train_batches=2 if config_trainer.debugging else None,
             limit_val_batches=1 if config_trainer.debugging else None,
             log_every_n_steps=1 if config_trainer.debugging else 10,
+            
             val_check_interval=config_trainer.val_check_interval
             )
 
@@ -323,21 +293,6 @@ class PromptEngineeringLM(pl.LightningModule):
             trainer.checkpoint_callback.dirpath, 'config_data.yaml'), 'w'))  # type: ignore
         yaml.dump(vars(config_model), open(os.path.join(
             trainer.checkpoint_callback.dirpath, 'config_model.yaml'), 'w'))  # type: ignore
-
-        # Only run on main thread
-        if trainer.global_rank == 0:
-            from deepspeed.utils import zero_to_fp32
-            import shutil
-            # Run the to_fp32.py script to convert the model to fp32
-            best_model_dir = trainer.checkpoint_callback.best_model_path
-            output_file = os.path.join(os.path.dirname(best_model_dir), 'pytorch_model.bin')
-            zero_to_fp32.convert_zero_checkpoint_to_fp32_state_dict(best_model_dir, output_file)
-                    
-            # Then Delete the ckpt files saved by DeepSpeed to save memory
-            shutil.rmtree(os.path.join(best_model_dir), ignore_errors=True)
-
-            # Clear Trash Bin on linux computer
-            os.system('rm -rf ~/.local/share/Trash/*')
     
     @staticmethod
     def test_model(config_trainer, config_data, config_model=None):
@@ -384,7 +339,7 @@ class PromptEngineeringLM(pl.LightningModule):
                                                                   device_map="auto")
 
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config_trainer.nn_name)
+            config_trainer.model_id)
 
         # Making training module
         lightning_module = PromptEngineeringLM(
@@ -400,7 +355,6 @@ class PromptEngineeringLM(pl.LightningModule):
             default_root_dir=dir_model_version,
             logger=False,
             # precision=16,
-            # native_amp=True
         )
 
         # Test the Trainer
@@ -414,63 +368,75 @@ class PromptEngineeringLM(pl.LightningModule):
 
         parser = ArgumentParser(parents=[parent_parser] if parent_parser else None, add_help=True, allow_abbrev=False)
 
-        # parser = subparsers.add_parser('trainer', add_help=True, allow_abbrev=False)
-
         parser.add_argument('--exp_name', type=str, default='debug')
-        parser.add_argument('--nn_name', type=str,
-                            default='EleutherAI/gpt-j-6B')
-        parser.add_argument('--freeze_layers',type=int, default=0)
+        parser.add_argument('--model_id', type=str, default='mosaicml/mpt-7b-chat', choices=HUGGINGFACE_MODELS )
+
+        parser.add_argument('--test_only', action='store_true', help='Include flag to test only')
+        parser.add_argument('--debugging', action='store_true')
+        
 
         parser.add_argument(
             '--dir_ckpt', type=str, default='prompt_engineering/finetune/ckpt', required=True)
+     
+        parser.add_argument('--optimizer', type=str,
+                            choices=['Adam8bitPaged', 'Adam8bit'], 
+                            default='Adam8bitPaged')
+        parser.add_argument('--lr', type=float, default=1e-5)
 
+        
+
+        parser.add_argument('--devices', type=int, default=1)
+        parser.add_argument('--accelerator', type=str, default='gpu', choices=['gpu'])
         parser.add_argument('--strategy', type=str, default='auto',
                             choices=['auto', 'ddp', 'fsdp', 'deepspeed_stage_2', 'deepspeed_stage_2_offload',
-                                     'deepspeed_stage_3', 'deepspeed_stage_3_offload'])
+                                     'deepspeed_stage_3', 'deepspeed_stage_3_offload'])        
+        parser.add_argument('--patience', type=int, default=4)
+        parser.add_argument('--accumulate_grad_batches', type=int, default=4)
 
-        parser.add_argument('--optimizer', type=str,
-                            choices=['Adafactor', 'OneBitAdam', 'DeepSpeedCPUAdam', 'Adam8bit', 'Adam', 'Adamw' ,'ZeroOneAdam'], 
-                            default='Adafactor')
-        parser.add_argument('--lr', type=float, default=1e-5)
-        parser.add_argument('--accelerator', type=str, default='auto')
-        parser.add_argument('--devices', type=int, default=1)
-        parser.add_argument('--accumulate_grad_batches', type=int, default=1)
-
-        parser.add_argument('--max_epochs', type=int, default=3)
-        parser.add_argument('--val_check_interval', type=int,  default=1.0)
-
-        # let user pass in a multiple values for a argument called early_stopping_metrics
-        parser.add_argument('--test_only', action='store_true',
-                            help='Include flag to test only')
-        
-        parser.add_argument('--debugging', action='store_true')
-
-        parser.add_argument(
-            '--val_task', type=str, choices=['next_token', 'spot_alignment'], default='next_token')
+        parser.add_argument('--max_epochs', type=int, default=10)
+        parser.add_argument('--val_check_interval', type=int,  default=100 )
+    
 
         args = parser.parse_known_args()[0]
 
         return args
 
-
 class DataModule(pl.LightningDataModule):
 
-    def __init__(self, nn_name, dir_data, batch_size, batch_size_inf, val_task, num_workers=4):
+    def __init__(self, model_id, dir_data, batch_size, batch_size_inf, train_dset_names, val_task, num_workers=4):
         super().__init__()
-        self.nn_name = nn_name
+        self.model_id = model_id
         self.dir_data = dir_data
         self.num_workers = num_workers
 
         self.batch_size = batch_size
         self.batch_size_inf = batch_size_inf
 
-        self.val_task = val_task
+        self.train_dsets_names:list[str] = train_dset_names
+        self.val_task:list[str] = val_task
 
     def train_dataloader(self):
+        # Load each of the datasets listed in self.train_dsets_names
+        
+        datasets = []
 
-        dataset = Dataset.load_from_disk(os.path.join(
-            self.dir_data, f"{self.nn_name.replace('/','_')}/train.arrow"))
-        # dataset = dataset.to_iterable_dataset(num_shards=self.num_workers*2)
+        if 'research_paper' in self.train_dsets_names:
+            dataset = Dataset.load_from_disk(os.path.join(
+                self.dir_data, f"researchpaper_{self.model_id.replace('/','_')}/train.arrow"))
+            datasets.append(dataset)
+            # NOTE: we assume that we do not have to use a chat style 
+
+        if 'wizardLM_instuct_70k_unfiltered' in self.train_dsets_names:
+            # list of dictionaries
+            # instruction
+            # output
+
+        if 'spot' in self.train_dsets_names:
+
+        # Concatenate all the datasets in a proportion based on their relative sizes
+        # TODO: ensure that concatenation is done based on a specified proportion and add seeding
+        dataset = concatenate_datasets(datasets)
+
         dataloader = DataLoader(dataset, batch_size=self.batch_size,
                                 shuffle=True, num_workers=self.num_workers, 
                                 pin_memory=False, drop_last=False
@@ -478,16 +444,19 @@ class DataModule(pl.LightningDataModule):
         return dataloader
 
     def val_dataloader(self):
-        if self.val_task == 'next_token':
+        dataloaders = []
+
+        if 'next_token' in self.val_task:
             dataset = Dataset.load_from_disk(
-                os.path.join(self.dir_data, f"{self.nn_name.replace('/','_')}/val.arrow")).with_format("torch")
+                os.path.join(self.dir_data, f"{self.model_id.replace('/','_')}/val.arrow")).with_format("torch")
 
             # dataset = dataset.to_dataset() to_iterable_dataset(num_shards=self.num_workers*2)
             dataloader = DataLoader(dataset, batch_size=self.batch_size_inf,
                                     shuffle=False, num_workers=self.num_workers,
                                     pin_memory=False)
+            dataloaders.append(dataloader)
 
-        elif self.val_task == 'spot_alignment':
+        if 'spot_alignment' in self.val_task :
             test_records = load_dataset_spot_alignment(
                 'spot')[1].to_dict('records')
 
@@ -500,10 +469,11 @@ class DataModule(pl.LightningDataModule):
                                     pin_memory=False,
                                     collate_fn=SpotDataset.collate_fn,
                                     drop_last=False)
+            dataloaders.append(dataloader)
         else:
             raise ValueError(f"val_task {self.val_task} not recognized")
 
-        return dataloader
+        return dataloaders
 
     def test_dataloader(self) -> DataLoader:
         raise NotImplementedError
@@ -514,20 +484,25 @@ class DataModule(pl.LightningDataModule):
         parser = ArgumentParser(parents=[parent_parser] if parent_parser else None, add_help=True, allow_abbrev=False)
 
         
-        parser.add_argument('--nn_name', type=str, default='EleutherAI/gpt-j-6B')
-        parser.add_argument('--dir_data', type=str, default='./data/finetune/preprocessed/')
+        parser.add_argument('--model_id', type=str, default='EleutherAI/gpt-j-6B')
+        parser.add_argument('--dir_data', type=str, default='./data/finetune/')
 
         parser.add_argument('--num_workers', type=int, default=0)
 
         parser.add_argument('--batch_size', type=int, default=1)
         parser.add_argument('--batch_size_inf', type=int, default=2)
 
-        parser.add_argument('--val_task', type=str, choices=['next_token', 'spot_alignment'], default='next_token')
+        parser.add_argument('--train_dset_names', type=str, nargs='*', choices=[ 'research_paper', 'wizardLM_instruct_70k_unfiltered', 'spot' ], default=['research_paper', 'wizardLM_instruct_70k_unfiltered'] )
+                            
+        parser.add_argument('--val_task', type=str, nargs='*', choices=['next_token', 'spot_alignment'], default=['next_token'])
 
         args = parser.parse_known_args()[0]
         return args
 
-
+class ResearchPaperDataset(TorchDataset):
+    
+class WizardLMDataset(TorchDataset):
+    
 class SpotDataset(TorchDataset):
     def __init__(self, data):
         self.data = data

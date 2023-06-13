@@ -315,7 +315,7 @@ class PredictionGenerator():
         # For each template, create a set of 3 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         answers = list(  open_response_cats.keys() )
-        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
 
 
         # For each filled template set calcualte the relative probability of each answer
