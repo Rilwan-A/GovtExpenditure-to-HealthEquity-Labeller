@@ -62,6 +62,9 @@ def main(
         remove_columns=dataset_dict.column_names['train']
     )
     
+    # Filter based on language
+    dataset_dict = dataset_dict.map( lambda batch: filter_on_language(batch, languages_to_include), batched=True, batch_size=500, 
+                                    remove_columns=dataset_dict.column_names['train'] )
 
     # Loop over dataset applying tokenizer to each row
     dataset_dict = dataset_dict.map( lambda batch: map_tokenize(batch, tokenizer, max_len=max_tokens_per_chunk), batched=True, batch_size=500
@@ -149,8 +152,17 @@ def split_paragraphs(input_text:str="", min_words_per_chunk:int=10):
 
     return split_text
 
-def filter_on_language(batch, languages_to_include:list[str]='en'):
-    pass
+def filter_on_language(batch, languages_to_include:list[str]=['en']):
+
+    inp_batch_text = batch['text']
+    outp_batch_text = []
+
+    for text in inp_batch_text:
+        lang = detect(text)
+        if lang in languages_to_include:
+            outp_batch_text.append(None)
+    
+    return {'text':outp_batch_text}
 
 def map_tokenize(batch, tokenizer, max_len:int):
     # Tokenize each row of the dataset

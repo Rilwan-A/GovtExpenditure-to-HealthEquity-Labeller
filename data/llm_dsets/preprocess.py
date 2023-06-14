@@ -87,7 +87,6 @@ def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
 
     return outp
 
-
 def create_labels_with_mask(batch, tokenizer):
     """Create labels and mask for masked language modeling.
         labels will mask all non output tokens.
