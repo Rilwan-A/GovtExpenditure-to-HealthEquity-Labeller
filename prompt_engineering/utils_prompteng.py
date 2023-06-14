@@ -234,6 +234,7 @@ format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
 format_mpt = "{system_message}\n\n{user_message}\n\n"
 format_mpt_no_sysmessage = "{user_message}\n\n"
 
+
 def map_llmname_input_format(llm_name, user_message, system_message=None, response=None):
 
     assert user_message is not None
@@ -260,6 +261,12 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
     elif 'mpt' in llm_name and system_message is None:
         template = format_mpt_no_sysmessage
     
+    elif 'dummy' in llm_name and system_message is not None:
+        template = format_mpt
+    elif 'dummy' in llm_name and system_message is None:
+        template = format_mpt_no_sysmessage
+
+
     else:
         raise ValueError(f'Unknown llm_name: {llm_name}')
 
