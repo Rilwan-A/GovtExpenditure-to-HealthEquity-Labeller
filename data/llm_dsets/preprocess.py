@@ -9,6 +9,42 @@ from prompt_engineering.utils_prompteng import map_llmname_input_format
 from prompt_engineering.my_logger import setup_logging_preprocess
 
 
+
+
+def main(model_id, json_file, max_len=None):
+
+    # Setup logging
+    logging = setup_logging_preprocess( json_file, model_id )
+
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer.pad_token = tokenizer.eos_token
+
+    # Load data from JSON file
+    raw_dataset = load_dataset('json', data_files=os.path.join('data','llm_dsets',json_file) )
+
+    # Shuffle and split data
+    raw_dataset = raw_dataset.shuffle()
+    dataset_dict = raw_dataset['train'].train_test_split(train_size=0.8)
+
+    # Process and tokenize data
+    for dataset in dataset_dict.values():
+        # Apply custom function to each data instance
+        dataset = dataset.map(lambda batch: format_for_lm(batch, model_id, json_file), batched=False)
+
+        # Tokenize data and create labels
+        dataset = dataset.map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_len), batched=False  )
+
+    # Save data to arrow files
+    dir_ = './data/finetune'
+    os.makedirs(dir_, exist_ok=True)
+    
+    fn = json_file.split('.')[0]
+    dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_train.arrow'))
+    dataset_dict['test'].save_to_disk(os.path.join(dir_, f'{fn}_test.arrow'))
+
+    logging.info('Finished Preprocessing Data')
+
 def format_for_lm(data, llm_name, json_file):
     """Apply the function 'map_llmname_input_format' to each data instance.
         This formats the data in the way that the LLM was trained on. (for chat/instruct LLMs)
@@ -62,49 +98,8 @@ def create_labels_with_mask(batch, tokenizer):
     labels = [-100]*len(batch['input_ids'])
     labels[-tknzd_output_len:] = batch['input_ids'][-tknzd_output_len:]
     labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
-    batch['labels'] = labels
-
-    batch = {
-        'input_ids': batch['input_ids'],
-        'attention_mask': batch['attention_mask'],
-        'labels': batch['labels']
-    }
-    return batch
-
-
-def main(model_id, json_file, max_len=None):
-
-    # Setup logging
-    logging = setup_logging_preprocess( json_file, model_id )
-
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    tokenizer.pad_token = tokenizer.eos_token
-
-    # Load data from JSON file
-    raw_dataset = load_dataset('json', data_files=os.path.join('data','llm_dsets',json_file) )
-
-    # Shuffle and split data
-    raw_dataset = raw_dataset.shuffle()
-    dataset_dict = raw_dataset['train'].select(range(10)).train_test_split(train_size=0.8)
-
-    # Process and tokenize data
-    for dataset in dataset_dict.values():
-        # Apply custom function to each data instance
-        dataset = dataset.map(lambda batch: format_for_lm(batch, model_id, json_file), batched=False)
-
-        # Tokenize data and create labels
-        dataset = dataset.map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_len), batched=False  )
-
-    # Save data to arrow files
-    dir_ = './data/finetune'
-    os.makedirs(dir_, exist_ok=True)
-    
-    fn = json_file.split('.')[0]
-    dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_train.arrow'))
-    dataset_dict['test'].save_to_disk(os.path.join(dir_, f'{fn}_test.arrow'))
-
-    logging.info('Finished Preprocessing Data')
+        
+    return {'labels':labels}
 
 def parse_args():
     
