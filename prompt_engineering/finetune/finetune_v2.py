@@ -70,6 +70,23 @@ class PromptEngineeringLM(pl.LightningModule):
     
         if 'spot_alignment' in self.val_tasks:
             self.val_step_outputs_spotalign = []
+            self.prompt_builder_b2i = PromptBuilder( 'yes_no', k_shot_b2i=0,
+                                            ensemble_size=0, annotated_examples_b2i=0, 
+                                            effect_type='directly',
+                                            relationship='budgetitem_to_indicator',
+                                            seed=self.seed)
+        
+
+            self.prediction_generator_b2i = PredictionGenerator(self.model,
+                                                            self.model,
+                                                            prompt_style='yes_no',
+                                                            ensemble_size=0,
+                                                            edge_value="distribution",
+                                                            parse_style='rules',
+                                                            relationship='budgetitem_to_indicator',
+                                                            local_or_remote='local',
+                                                            effect_type='directly'
+                                                            )
 
 
     def forward(self, **kwargs):
@@ -438,6 +455,7 @@ class DataModule(pl.LightningDataModule):
         
         return dataloader
 
+
     def val_dataloader(self):
         # The validation datasets loaded is dependent on the val_tasks specified
         # If 'next_token' task is specified then we load each dataset specified in self.train_dsets_names and eval using loglikelihood on next token
@@ -522,29 +540,6 @@ class DataModule(pl.LightningDataModule):
         args = parser.parse_known_args()[0]
         return args
 
-class SpotDataset(TorchDataset):
-    # Creates text versions testing whether or not a budget item is related to a given indicator
-
-    def __init__(self, fp, llm, llm_name, seed=10):
-        
-
-        self.dset_records = prepare_data_b2i(fp, data_load_seed=seed)
-
-
-
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, index):
-        # Get an item from the data list
-        item = self.data[index]
-
-        return item
-
-    @staticmethod
-    def collate_fn(batch):
-        return batch
 
 class PairedEarlyStopping(EarlyStopping):
 
