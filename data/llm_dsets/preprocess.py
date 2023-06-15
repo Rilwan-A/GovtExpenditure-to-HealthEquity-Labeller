@@ -40,8 +40,8 @@ def main(model_id, json_file, max_len=None):
     os.makedirs(dir_, exist_ok=True)
     
     fn = json_file.split('.')[0]
-    dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_train.arrow'))
-    dataset_dict['test'].save_to_disk(os.path.join(dir_, f'{fn}_test.arrow'))
+    dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_{model_id.replace("/","_")}_train.arrow'))
+    dataset_dict['test'].save_to_disk(os.path.join(dir_, f'{fn}_{model_id.replace("/","_")}_test.arrow'))
 
     logging.info('Finished Preprocessing Data')
 
@@ -105,7 +105,7 @@ def parse_args():
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--model_id', type=str, default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF', choices = HUGGINGFACE_MODELS+['julien-c/dummy-unknown'] )
     
-    parser.add_argument('--json_file', type=str, default='wLM70k_nofilt.json', choices=['wLM70k_nofilt.json' ])
+    parser.add_argument('--json_file', type=str, default='wLM70k_nofilt.json', choices=['wLM70k_nofilt.json'])
 
     parser.add_argument('--max_len', type=int, default=350)
 

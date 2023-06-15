@@ -75,17 +75,17 @@ def main(
 
     # Save Dataset in torch format
     dataset_train = dataset_dict['train']
-    dataset_val = dataset_dict['test']
+    dataset_test = dataset_dict['test']
 
     dataset_train.set_format(type='torch', columns=["text", "input_ids", "attention_mask"] )
-    dataset_val.set_format(type='torch', columns=["text", "input_ids", "attention_mask"] )
+    dataset_test.set_format(type='torch', columns=["text", "input_ids", "attention_mask"] )
     
     # Saving to disk
     dir_ = f'./data/finetune'
     os.makedirs(dir_, exist_ok=True)
 
-    dataset_train.save_to_disk( dir_+f'rp_{model_id.replace("/","_")}_train.arrow') 
-    dataset_val.save_to_disk( dir_+f'rp_{model_id.replace("/","_")}_val.arrow') 
+    dataset_train.save_to_disk( os.path.join(dir_,f'rp_{model_id.replace("/","_")}_train.arrow')) 
+    dataset_test.save_to_disk( os.path.join(dir_,f'rp_{model_id.replace("/","_")}_test.arrow'))
 
     logging.info('Finished Preprocessing Data')
     

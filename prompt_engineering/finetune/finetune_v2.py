@@ -1,7 +1,5 @@
-
 import os
 os.environ['TOKENIZERS_PARALLELISM'] = "false"
-
 import bitsandbytes as bnb
 
 from sklearn.metrics import accuracy_score
@@ -20,8 +18,11 @@ import lightning.pytorch as pl
 import transformers
 from sklearn.metrics import precision_recall_fscore_support
 
-from prompt_engineering.huggingface.predict import PromptBuilder, PredictionGenerator
-from prompt_engineering.huggingface.predict import step as val_step_spot_alignment_inner
+
+from prompt_engineering.huggingface.predict import step as val_step_spot_alignment_inner, predict_batches
+
+from prompt_engineering.langchain.utils import PredictionGenerator
+from prompt_engineering.langchain.utils import PromptBuilder
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -29,6 +30,10 @@ from peft import get_peft_config, get_peft_model, LoraConfig, TaskType
 from transformers import PagedAdamW8bit
 
 from langchain.utils import HUGGINGFACE_MODELS
+from datasets import interleave_datasets, load_dataset
+
+from prompt_engineering.langchain.predict import prepare_data_b2i
+
 
 def print_trainable_parameters(model):
     """
@@ -49,7 +54,7 @@ class PromptEngineeringLM(pl.LightningModule):
     def __init__(self,
                  model,
                  tokenizer,
-                 val_task:list[str],
+                 val_tasks:list[str],
                  **kwargs
                  ):
         super().__init__()
@@ -60,41 +65,21 @@ class PromptEngineeringLM(pl.LightningModule):
         self.tokenizer = tokenizer
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        self.val_task = val_task
+        self.val_tasks = val_tasks
         self.optimizer = kwargs.get('optimizer', 'auto')
         self.lr = kwargs.get('lr', 1e-6)
 
-        # if 'spot_alignment' in self.val_task:
+    
+        if 'spot_alignment' in self.val_tasks:
+            self.val_step_outputs_spotalign = []
 
-        #     self.validation_step_outputs = []
 
-        #     # load in train dataset for prompt builder
-        #     train_dset_records = load_dataset_spot_alignment('spot')[
-        #         0].to_dict('records')
-
-        #     # load in kwargs for PromptBuilder and PredictionGenerator
-        #     # spot_alignment_kwargs = parse_args_spot_alignment()
-
-        #     prompt_style = spot_alignment_kwargs.prompt_style
-        #     k_shot = spot_alignment_kwargs.k_shot
-        #     ensemble_size = spot_alignment_kwargs.ensemble_size
-        #     aggregation_method = spot_alignment_kwargs.aggregation_method
-        #     parse_output_method = spot_alignment_kwargs.parse_output_method
-
-        #     self.prompt_builder = PromptBuilder(
-        #         prompt_style, k_shot, ensemble_size, train_dset_records, 'indirectly', self.tokenizer)
-        #     self.prediction_generator = PredictionGenerator(
-        #         self.model, self.tokenizer, prompt_style, ensemble_size, aggregation_method, parse_output_method, deepspeed_compat=True)
-
-    def forward(self, input_ids, attention_mask, **kwargs):
-        return self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+    def forward(self, **kwargs):
+        return self.model( input_ids=kwargs['input_ids'], attention_mask=kwargs['attention_mask'], labels=kwargs.get('labels') )
 
     def training_step(self, batch, batch_idx):
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
 
-        outputs = self(input_ids, attention_mask, labels=input_ids,
-                       output_hidden_states=False, output_attentions=False)
+        outputs = self( **batch, output_hidden_states=False, output_attentions=False)
 
         loss = outputs.loss
         self.log('train_loss', loss, on_step=True,
@@ -102,81 +87,87 @@ class PromptEngineeringLM(pl.LightningModule):
                 sync_dist=False, rank_zero_only=True)
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        if self.val_task == 'next_token':
-            outp = self.validation_step_next_token(batch, batch_idx)
-        elif self.val_task == 'spot_alignment':
-            outp = self.validation_step_spot_alignment(batch, batch_idx)
+    def validation_step(self, batch, batch_idx, dataloader_idx=None):
+
+        if self.val_tasks[dataloader_idx] == 'next_token':
+            input_ids = batch['input_ids']
+            attention_mask = batch['attention_mask']
+            labels = batch['labels']
+
+            with torch.no_grad():
+                outputs = self(input_ids, attention_mask, labels=labels,
+                            output_hidden_states=False, output_attentions=False)
+            loss = outputs.loss
+            self.log('val_nt/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+
+            outp = None
+
+        elif self.val_tasks[dataloader_idx]  == 'spot_alignment':
+            # batch will be a list of dicts with keys: budget_item,id,indicator,type,label
+            
+            li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd = predict_batches(
+                li_record = batch,
+                prompt_builder=self.prompt_builder,
+                prediction_generator=self.prediction_generator,
+                batch_size=len(batch) )
+
+            # Convert the li_pred_agg, which is a list of agg
+            li_pred_agg = [ next( (k for k,v in d.items() if v==1) ) for d in li_pred_agg]
+
+            outp = {'pred_agg': li_pred_agg,
+                'label': [d['label'] for d in batch]}
+
+            
+            self.val_step_outputs_spotalign.append(outp)
+
+            outp = None
         else:
-            raise ValueError(f'val_task {self.val_task} not recognized')
+            raise ValueError(f'val_task {self.val_tasks} is not recognized')
 
         return outp
 
     def on_validation_epoch_end(self):
 
-        if self.val_task == 'spot_alignment':
-            self.validation_epoch_end_spot_alignment()
-            self.validation_step_outputs.clear()
+        if 'spot_alignment' in self.val_tasks:
+            preds_agg = sum([d['pred_agg'] for d in self.val_step_outputs_spotalign], [])
+            labels = sum([d['label'] for d in self.val_step_outputs_spotalign], [])
+
+            # compute metrics between binary labels and predictions
+            (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None)
+            
+            acc = accuracy_score(labels, preds_agg)
+
+
+            self.log('val_loss', acc, on_step=False, on_epoch=True,
+                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+            
+            # Logging General Metrics
+            self.log('val_spot/acc', acc, on_step=False, on_epoch=True,
+                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+            
+            # Logging positive class metrics
+            self.log('val_spot/f1/pos', f1_yes, on_step=False, on_epoch=True,
+                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+            self.log('val_spot/prec/pos', prec_yes, on_step=False, on_epoch=True,
+                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
+            self.log('val_spot/rec/pos', recall_yes, on_step=False, on_epoch=True,
+                    prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
+
+            # Logging negative class metrics
+            self.log('val_spot/f1/neg', f1_no, on_step=False, on_epoch=True,
+                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+            self.log('val_spot/prec/neg', prec_no, on_step=False, on_epoch=True,
+                    prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
+            self.log('val_spot/rec/neg', recall_no, on_step=False, on_epoch=True,
+                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
+
+            self.val_step_outputs_spotalign.clear()
+            
         else:
             pass
-    
-    def validation_step_next_token(self, batch, batch_idx):
-
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
-
-        with torch.no_grad():
-            outputs = self(input_ids, attention_mask, labels=input_ids,
-                           output_hidden_states=False, output_attentions=False)
-        loss = outputs.loss
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-
-        return loss
-
-    def validation_step_spot_alignment(self, batch, batch_idx):
-
-        batch_prompt_ensembles, batch_pred_ensembles, batch_pred_ensembles_parsed, batch_pred_agg = val_step_spot_alignment_inner(
-            batch, self.prompt_builder, self.prediction_generator)
-
-        outp = {'pred_agg': batch_pred_agg,
-                'label': [d['label'] for d in batch]}
-
-        self.validation_step_outputs.append(outp)
-
+        
         return None
-
-    def validation_epoch_end_spot_alignment(self):          
-        
-        outputs = self.validation_step_outputs
-
-        preds_agg = sum([d['pred_agg'] for d in outputs], [])
-        labels = sum([d['label'] for d in outputs], [])
-
-        # compute metrics between binary labels and predictions
-        (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None)
-        
-        acc = accuracy_score(labels, preds_agg)
-
-        self.log('val_loss', acc, on_step=False, on_epoch=True,
-                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
-        
-        self.log('val_acc', acc, on_step=False, on_epoch=True,
-                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
-        
-        self.log('val_f1/pos', f1_yes, on_step=False, on_epoch=True,
-                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
-        self.log('val_prec/pos', prec_yes, on_step=False, on_epoch=True,
-                prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-        self.log('val_rec/pos', recall_yes, on_step=False, on_epoch=True,
-                prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
-
-        self.log('val_f1/neg', f1_no, on_step=False, on_epoch=True,
-                prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
-        self.log('val_prec/neg', prec_no, on_step=False, on_epoch=True,
-                prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
-        self.log('val_rec/neg', recall_no, on_step=False, on_epoch=True,
-                prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-
+    
     def configure_optimizers(self):
         # optimal params for Adafactor https://github.com/huggingface/transformers/pull/10526#issuecomment-804652154
 
@@ -184,12 +175,12 @@ class PromptEngineeringLM(pl.LightningModule):
             optimizer = bnb.optim.Adam8bit(
                     self.trainer.model.model.parameters(), 
                     lr=self.lr, betas=(0.9, 0.995),
-                    eps=1e-9, weight_decay=0.0,
+                    eps=1e-9,
                     )
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
         
         elif self.optimizer == 'Adam8bitPaged':
-            optimizer = PagedAdamW8bit(self.parameters(), lr=1e-3)
+            optimizer = PagedAdamW8bit(self.parameters(), lr=self.lr)
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
 
@@ -209,7 +200,8 @@ class PromptEngineeringLM(pl.LightningModule):
 
         model = transformers.AutoModelForCausalLM.from_pretrained(config_trainer.model_id,
                                                                   quantization_config=bnb_config,
-                                                                  device_map={'':0}
+                                                                  device_map={'':0},
+                                                                #   device_map = 'auto'
                                                                   )
         
         # Implementing Lora version
@@ -247,7 +239,9 @@ class PromptEngineeringLM(pl.LightningModule):
             auto_insert_metric_name=True,
             save_weights_only=True,
             save_top_k=1))
-        callbacks.append(EarlyStopping(monitor="val_loss", patience=config_trainer.patience))
+        callbacks.append(PairedEarlyStopping(patience=config_trainer.patience, 
+                                             monitor_1='val_nt/loss',
+                                             monitor='val_spot/acc'))
 
         # setting up strategy
         strategy = config_trainer.strategy
@@ -403,7 +397,9 @@ class PromptEngineeringLM(pl.LightningModule):
 
 class DataModule(pl.LightningDataModule):
 
-    def __init__(self, model_id, dir_data, batch_size, batch_size_inf, train_dset_names, val_task, num_workers=4):
+    def __init__(self, model_id, dir_data, batch_size, 
+                    batch_size_inf, train_dset_names, val_tasks,
+                    num_workers=4, seed=10):
         super().__init__()
         self.model_id = model_id
         self.dir_data = dir_data
@@ -413,7 +409,8 @@ class DataModule(pl.LightningDataModule):
         self.batch_size_inf = batch_size_inf
 
         self.train_dsets_names:list[str] = train_dset_names
-        self.val_task:list[str] = val_task
+        self.val_tasks:list[str] = val_tasks
+        self.seed = seed
 
     def train_dataloader(self):
         # Load each of the datasets listed in self.train_dsets_names
@@ -422,31 +419,35 @@ class DataModule(pl.LightningDataModule):
 
         if 'research_paper' in self.train_dsets_names:
             dataset = Dataset.load_from_disk(os.path.join(
-                self.dir_data, f"researchpaper_{self.model_id.replace('/','_')}/train.arrow"))
+                self.dir_data, f"rp_{self.model_id.replace('/','_')}_train.arrow"))
             datasets.append(dataset)
             # NOTE: we assume that we do not have to use a chat style 
 
-        if 'wizardLM_instuct_70k_unfiltered' in self.train_dsets_names:
-            # list of dictionaries
-            # instruction
-            # output
+        if 'wizardLM_instruct_70k' in self.train_dsets_names:
+            dataset = Dataset.load_from_disk(os.path.join(
+                self.dir_data, f"wLM70k_nofilt_{self.model_id.replace('/','_')}_train.arrow"))
+            datasets.append(dataset)
 
-        if 'spot' in self.train_dsets_names:
-
-        # Concatenate all the datasets in a proportion based on their relative sizes
-        # TODO: ensure that concatenation is done based on a specified proportion and add seeding
-        dataset = concatenate_datasets(datasets)
+        # datasets interleave two datasets in a 2:1 proportion
+        if len(datasets) > 1:
+            dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=10)
+        else:
+            dataset = datasets[0]
 
         dataloader = DataLoader(dataset, batch_size=self.batch_size,
                                 shuffle=True, num_workers=self.num_workers, 
-                                pin_memory=False, drop_last=False
-                                )
+                                pin_memory=False, drop_last=False)
+        
         return dataloader
 
     def val_dataloader(self):
-        dataloaders = []
+        # The validation datasets loaded is dependent on the val_tasks specified
+        # If 'next_token' task is specified then we load each dataset specified in self.train_dsets_names and eval using loglikelihood on next token
+        # If 'spot_alignment' task is specified then we load the spot dataset and evaluate the model's ability to produce predictions aligning with the spot dataset
 
-        if 'next_token' in self.val_task:
+        dataloaders = []
+        
+        if 'next_token' in self.val_tasks:
             dataset = Dataset.load_from_disk(
                 os.path.join(self.dir_data, f"{self.model_id.replace('/','_')}/val.arrow")).with_format("torch")
 
@@ -456,22 +457,46 @@ class DataModule(pl.LightningDataModule):
                                     pin_memory=False)
             dataloaders.append(dataloader)
 
-        if 'spot_alignment' in self.val_task :
-            test_records = load_dataset_spot_alignment(
-                'spot')[1].to_dict('records')
+            datasets = []
+            # Add each of the datasets listed in self.train_dsets_names
+            if 'research_paper' in self.train_dsets_names:
+                dataset = Dataset.load_from_disk(os.path.join(
+                    self.dir_data, f"rp_{self.model_id.replace('/','_')}_test.arrow"))
+                datasets.append(dataset)
+                # NOTE: we assume that we do not have to use a chat style 
 
-            # initialize pytorch dataset from records
-            test_dset = SpotDataset(test_records)
+            if 'wizardLM_instruct_70k' in self.train_dsets_names:
+                dataset = Dataset.load_from_disk(os.path.join(
+                    self.dir_data, f"wLM70k_nofilt_{self.model_id.replace('/','_')}_test.arrow"))
+                datasets.append(dataset)
+                
+                        # datasets interleave two datasets in a 2:1 proportion
+            
+            # Combine into one dataset
+            if len(datasets) > 1:
+                dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=10)
+            else:
+                dataset = datasets[0]
+            
+            dataloader_nexttoken = DataLoader(dataset, batch_size=self.batch_size,
+                        shuffle=True, num_workers=self.num_workers, 
+                        pin_memory=False, drop_last=False)
+            
+            dataloaders.append(dataloader_nexttoken)
+            
+        if 'spot_alignment' in self.val_tasks :
 
-            dataloader = DataLoader(test_dset, batch_size=self.batch_size_inf,
+            dset_records = prepare_data_b2i(fp='./data/spot_indicator_mapping_table_test.csv', data_load_seed=self.seed)
+            
+            dataloader_spotalign = DataLoader(dset_records, batch_size=self.batch_size_inf,
                                     shuffle=False,
                                     num_workers=self.num_workers,
                                     pin_memory=False,
-                                    collate_fn=SpotDataset.collate_fn,
+                                    collate_fn= lambda batch: batch,
                                     drop_last=False)
-            dataloaders.append(dataloader)
+            dataloaders.append(dataloader_spotalign)
         else:
-            raise ValueError(f"val_task {self.val_task} not recognized")
+            raise ValueError(f"val_tasks {self.val_tasks} not recognized")
 
         return dataloaders
 
@@ -492,24 +517,23 @@ class DataModule(pl.LightningDataModule):
         parser.add_argument('--batch_size', type=int, default=1)
         parser.add_argument('--batch_size_inf', type=int, default=2)
 
-        parser.add_argument('--train_dset_names', type=str, nargs='*', choices=[ 'research_paper', 'wizardLM_instruct_70k_unfiltered', 'spot' ], default=['research_paper', 'wizardLM_instruct_70k_unfiltered'] )
+        parser.add_argument('--train_dset_names', type=str, nargs='*', choices=[ 'research_paper', 'wizardLM_instruct_70k', 'spot' ], default=['research_paper', 'wizardLM_instruct_70k'] )
                             
-        parser.add_argument('--val_task', type=str, nargs='*', choices=['next_token', 'spot_alignment'], default=['next_token'])
+        parser.add_argument('--val_tasks', type=str, nargs='*', choices=['next_token', 'spot_alignment'], default=['next_token'])
 
         args = parser.parse_known_args()[0]
         return args
 
-class ResearchPaperDataset(TorchDataset):
-    
-class WizardLMDataset(TorchDataset):
-    
 class SpotDataset(TorchDataset):
-    def __init__(self, data):
-        self.data = data
+    # Creates text versions testing whether or not a budget item is related to a given indicator
 
-        for idx in range(len(self.data)):
-            _ = self.data[idx].pop('id')
-            _ = self.data[idx].pop('type')
+    def __init__(self, fp, llm, llm_name, seed=10):
+        
+
+        self.dset_records = prepare_data_b2i(fp, data_load_seed=seed)
+
+
+
 
     def __len__(self):
         return len(self.data)
@@ -523,6 +547,56 @@ class SpotDataset(TorchDataset):
     @staticmethod
     def collate_fn(batch):
         return batch
+
+class PairedEarlyStopping(EarlyStopping):
+
+    def __init__(self, patience: int, verbose: bool = False, monitor_1: str = 'val_nt/loss', monitor_2: str = 'val_spot/acc', mode: str = 'min'):
+        super().__init__(monitor=monitor_1, patience=patience, verbose=verbose, mode=mode)
+        self.monitor_2 = monitor_2
+        self.patience = patience
+        self.wait_count_1 = 0
+        self.wait_count_2 = 0
+        self.best_score_1 = None
+        self.best_score_2 = None
+
+    def _validate_condition_metric(self, logs):
+        current_1 = logs.get(self.monitor)
+        current_2 = logs.get(self.monitor_2)
+        
+        if current_1 is None or current_2 is None:
+            return False
+        
+        if self.best_score_1 is None or self.best_score_2 is None:
+            self.best_score_1 = current_1
+            self.best_score_2 = current_2
+            self.wait_count = 0
+            return False
+
+        cond_1 = ( self.mode == "min" and (current_1 < self.best_score_1) ) or (self.mode == "max" and (current_1 > self.best_score_1))
+        cond_2 = ( self.mode == "min" and (current_2 < self.best_score_2) ) or (self.mode == "max" and (current_2 > self.best_score_2))
+
+        if cond_1:
+            self.best_score_1 = current_1
+            self.wait_count_1 = 0
+        else:
+            self.wait_count_1 += 1
+
+        if cond_2:
+            self.best_score_2 = current_2
+            self.wait_count_2 = 0
+        else:
+            self.wait_count_2 += 1
+
+            
+        return ( self.wait_count_1 >= self.patience) or ( self.wait_count_2 >= self.patience)
+
+    def on_validation_end(self, trainer, pl_module):
+        logs = trainer.callback_metrics
+        if self._validate_condition_metric(logs):
+            self.stopped_epoch = trainer.current_epoch
+            trainer.should_stop = True
+            if self.verbose:
+                print(f'\nEpoch {self.stopped_epoch}: early stopping triggered.')
 
 if __name__ == "__main__":
     parent_parser = ArgumentParser(allow_abbrev=False, add_help=False)

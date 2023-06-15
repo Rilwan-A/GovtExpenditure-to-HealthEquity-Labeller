@@ -517,7 +517,7 @@ def parse_args():
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
 
-    parser.add_argument('--input_file', type=str, default='input.json', help='Path to the file containing the input data' )
+    parser.add_argument('--input_file', type=str, default='"./data/spot/spot_indicator_mapping_table_test.csv"', help='Path to the file containing the input data' )
 
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
