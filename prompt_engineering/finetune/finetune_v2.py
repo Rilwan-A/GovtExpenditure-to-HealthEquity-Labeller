@@ -19,10 +19,8 @@ import transformers
 from sklearn.metrics import precision_recall_fscore_support
 
 
-from prompt_engineering.huggingface.predict import step as val_step_spot_alignment_inner, predict_batches
 
-from prompt_engineering.langchain.utils import PredictionGenerator
-from prompt_engineering.langchain.utils import PromptBuilder
+from prompt_engineering.langchain.utils import PredictionGenerator, PromptBuilder
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -32,7 +30,7 @@ from transformers import PagedAdamW8bit
 from langchain.utils import HUGGINGFACE_MODELS
 from datasets import interleave_datasets, load_dataset
 
-from prompt_engineering.langchain.predict import prepare_data_b2i
+from prompt_engineering.langchain.predict import prepare_data_b2i, predict_batches
 
 
 def print_trainable_parameters(model):

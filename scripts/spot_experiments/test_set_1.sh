@@ -217,5 +217,6 @@ else
         --parse_style categories_perplexity --effect_type directly --edge_value distribution \
         --input_file ./data/spot/spot_indicator_mapping_table_test.csv \
         --k_shot_example_dset_name_b2i spot --local_or_remote local \
+        --batch_size 6 --save_output
 
 fi
