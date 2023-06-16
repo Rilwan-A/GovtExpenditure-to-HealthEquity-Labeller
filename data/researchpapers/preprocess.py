@@ -12,8 +12,9 @@ import regex as re
 from more_itertools import windowed
 from datasets import Dataset
 from typing import Dict
-from langdetect import detect
+from langdetect import detect, LangDetectException
 from datasets import Features, Value
+
 
 from prompt_engineering.my_logger import setup_logging_preprocess
 
@@ -153,14 +154,21 @@ def split_paragraphs(input_text:str="", min_words_per_chunk:int=10):
     return split_text
 
 def filter_on_language(batch, languages_to_include:list[str]=['en']):
+    """
+    Filter out text that is not in the languages_to_include list
+    Also removes text where the language can not be discerned; usually implies gibberish
+    """
 
     inp_batch_text = batch['text']
     outp_batch_text = []
 
     for text in inp_batch_text:
-        lang = detect(text)
-        if lang in languages_to_include:
-            outp_batch_text.append(None)
+        try:
+            lang = detect(text)
+            if lang in languages_to_include:
+                outp_batch_text.append(text)
+        except LangDetectException as e:
+            pass
     
     return {'text':outp_batch_text}
 
@@ -195,10 +203,10 @@ def parse_args():
                         default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF')
     
     # mosaicml/mpt-7b-chat', 'JosephusCheung/Guanaco','TheBloke/stable-vicuna-7B-HF','TheBloke/stable-vicuna-13B-HF'
-    parser.add_argument('--max_tokens_per_chunk',type=int, default=200 )
-    parser.add_argument('--min_tokens_per_chunk',type=int, default=30)
+    parser.add_argument('--max_tokens_per_chunk',type=int, default=500 )
+    parser.add_argument('--min_tokens_per_chunk',type=int, default=100)
     
-    parser.add_argument('--languages_to_include', nargs='+', default=['en'], choices=['en','es'] ,help='List of languages to filter for')
+    parser.add_argument('--languages_to_include', nargs='+', default=['en'], choices=['en','es'], help='List of languages to filter for')
 
     parser.add_argument('--prop_chunk_overlap',type=float, default=0.35, help='Number of tokens to overlap between chunks')
 

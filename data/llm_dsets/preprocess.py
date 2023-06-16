@@ -1,6 +1,4 @@
 import os
-import sys
-sys.path.append(os.getcwd())
 from transformers import AutoTokenizer
 from datasets import load_dataset, Dataset, DatasetDict
 from argparse import ArgumentParser
@@ -28,12 +26,12 @@ def main(model_id, json_file, max_len=None):
     dataset_dict = raw_dataset['train'].train_test_split(train_size=0.8)
 
     # Process and tokenize data
-    for dataset in dataset_dict.values():
+    for key in dataset_dict:
         # Apply custom function to each data instance
-        dataset = dataset.map(lambda batch: format_for_lm(batch, model_id, json_file), batched=False)
+        dataset_dict[key] = dataset_dict[key].map(lambda batch: format_for_lm(batch, model_id, json_file), batched=False)
 
         # Tokenize data and create labels
-        dataset = dataset.map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_len), batched=False  )
+        dataset_dict[key] = dataset_dict[key].map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_len), batched=False  )
 
     # Save data to arrow files
     dir_ = './data/finetune'
@@ -72,18 +70,26 @@ def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
     output_end_char_pos = output_start_char_pos + len(batch['output'])
 
     # Find the token start index and token end index that map to the start and end character position of the 'output'
-    output_start_token_index = next(i for i, (start_pos, end_pos) in enumerate(outp['offset_mapping']) if start_pos <= output_start_char_pos < end_pos)
-    output_end_token_index = next(i for i, (start_pos, end_pos) in enumerate(outp['offset_mapping']) if start_pos < output_end_char_pos <= end_pos)
+    try:
+        output_start_token_index = next(i for i, (start_pos, end_pos) in enumerate(outp['offset_mapping']) if start_pos <= output_start_char_pos < end_pos)
+    except StopIteration:
+        output_start_token_index = len(outp['input_ids'])
+
+    try:
+        output_end_token_index = next(i for i, (start_pos, end_pos) in enumerate(outp['offset_mapping']) if start_pos < output_end_char_pos <= end_pos)
+    except StopIteration:
+        output_end_token_index =len(outp['input_ids'])
 
     # Replace the labels from token start index to token end index with the corresponding 'input_ids'
     # We do + 1 to account for the eos_token that needs to be predicted
-    labels[output_start_token_index:(output_end_token_index+1)+1] = outp['input_ids'][output_start_token_index:(output_end_token_index+1)+1 ]
+    labels[output_start_token_index:(output_end_token_index+1)+1] = outp['input_ids'][output_start_token_index:(output_end_token_index+1)+1]
 
     labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
 
     outp['labels'] = labels
 
-    outp.update(batch)
+    outp.pop('offset_mapping')
+    # outp.update(batch)
 
     return outp
 
@@ -103,7 +109,7 @@ def create_labels_with_mask(batch, tokenizer):
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--model_id', type=str, default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF', choices = HUGGINGFACE_MODELS+['julien-c/dummy-unknown'] )
+    parser.add_argument('--model_id', type=str, default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF', choices = HUGGINGFACE_MODELS )
     
     parser.add_argument('--json_file', type=str, default='wLM70k_nofilt.json', choices=['wLM70k_nofilt.json'])
 
