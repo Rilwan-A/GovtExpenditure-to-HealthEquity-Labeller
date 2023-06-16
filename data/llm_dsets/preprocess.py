@@ -2,6 +2,7 @@ import os
 from transformers import AutoTokenizer
 from datasets import load_dataset, Dataset, DatasetDict
 from argparse import ArgumentParser
+
 from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
 from prompt_engineering.utils_prompteng import map_llmname_input_format
 from prompt_engineering.my_logger import setup_logging_preprocess
@@ -9,7 +10,7 @@ from prompt_engineering.my_logger import setup_logging_preprocess
 
 
 
-def main(model_id, json_file, max_len=None):
+def main(model_id, json_file, max_tokens_per_chunk=None):
 
     # Setup logging
     logging = setup_logging_preprocess( json_file, model_id )
@@ -31,7 +32,7 @@ def main(model_id, json_file, max_len=None):
         dataset_dict[key] = dataset_dict[key].map(lambda batch: format_for_lm(batch, model_id, json_file), batched=False)
 
         # Tokenize data and create labels
-        dataset_dict[key] = dataset_dict[key].map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_len), batched=False  )
+        dataset_dict[key] = dataset_dict[key].map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_tokens_per_chunk), batched=False  )
 
     # Save data to arrow files
     dir_ = './data/finetune'
@@ -54,13 +55,13 @@ def format_for_lm(data, llm_name, json_file):
         response = data['output']
 
     
-    data['text'] = map_llmname_input_format(llm_name, system_message=system_message, user_message=user_message, response=response)
+    text = map_llmname_input_format(llm_name, system_message=system_message, user_message=user_message, response=response)
 
-    return data
+    return {'text':text}
 
 def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
     # Tokenize each row of the dataset
-    outp = tokenizer(batch['text'], truncation=True, padding='max_length', max_length=max_len, return_offsets_mapping=True)
+    outp = tokenizer(batch['text'], truncation=True, padding='max_length', max_length=max_len, return_offsets_mapping=True )
     
     # Create labels for masked language modeling
     labels = [-100] * len(outp['input_ids']) # Initialize labels with -100
@@ -113,7 +114,7 @@ def parse_args():
     
     parser.add_argument('--json_file', type=str, default='wLM70k_nofilt.json', choices=['wLM70k_nofilt.json'])
 
-    parser.add_argument('--max_len', type=int, default=350)
+    parser.add_argument('--max_tokens_per_chunk', type=int, default=350)
 
     args = parser.parse_known_args()[0]
 
@@ -122,8 +123,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    model_id = args.model_id
-    json_file = args.json_file
-    max_len = args.max_len
 
-    main(model_id, json_file)
+
+    main(**vars(args))
+

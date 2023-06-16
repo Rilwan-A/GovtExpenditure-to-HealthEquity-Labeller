@@ -4,7 +4,8 @@ sys.path.append(os.getcwd())
 
 from argparse import ArgumentParser
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
-
+from torch.cuda import empty_cache
+import gc
 import glob
 import gzip as gz
 
@@ -15,8 +16,9 @@ from typing import Dict
 from langdetect import detect, LangDetectException
 from datasets import Features, Value
 
-
 from prompt_engineering.my_logger import setup_logging_preprocess
+from prompt_engineering.langchain.predict import load_llm
+from prompt_engineering.utils_prompteng import map_llmname_input_format
 
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 
@@ -43,6 +45,9 @@ def main(
     # Convert data to huggingface dataset    
     dataset = Dataset.from_generator( dataset_generator, gen_kwargs={'data_dir':data_dir} )
 
+    # select 10 samples for debugging
+    dataset = dataset.select(range(10))
+
     dataset_dict = dataset.train_test_split( test_size=0.2, shuffle=True)
 
     # Compute average number of tokens in 200 words from a sample of your data
@@ -66,6 +71,16 @@ def main(
     # Filter based on language
     dataset_dict = dataset_dict.map( lambda batch: filter_on_language(batch, languages_to_include), batched=True, batch_size=500, 
                                     remove_columns=dataset_dict.column_names['train'] )
+    
+    # Fixing lack of spaces between parts of text
+    llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local' )
+    llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk
+    dataset_dict = dataset_dict.map( lambda batch: split_combined_words(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)
+    # release the memory used by the llm
+    del llm
+    gc.collect()
+    empty_cache()
+
 
     # Loop over dataset applying tokenizer to each row
     dataset_dict = dataset_dict.map( lambda batch: map_tokenize(batch, tokenizer, max_len=max_tokens_per_chunk), batched=True, batch_size=500
@@ -98,9 +113,6 @@ def dataset_generator(data_dir:str):
 
     for fp in gen_fp:
 
-        # with gz.open(fp, "rb") as f:
-            # text = f.read()
-            # text = text.decode('utf-8')
         with open(fp, "r") as f:
             text = f.read()
             yield {'text':text}
@@ -172,6 +184,38 @@ def filter_on_language(batch, languages_to_include:list[str]=['en']):
     
     return {'text':outp_batch_text}
 
+def split_combined_words(batch, llm):
+    """ Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
+
+    
+    li_split_text = []
+
+    user_message = 'Please identify and rectify any grammatical errors in the text after Text:, without making further modifications or substantial changes. Begin your response with the phrase, "Corrected Text:". \nText: '
+    li_prompts_fmtd = [
+        map_llmname_input_format(llm.model_name_or_path, 
+                                                user_message = user_message + text,
+                                                system_message = None) for text in batch['text']
+    ]
+
+    outputs = llm.generate(
+                prompts =li_prompts_fmtd,
+                stop = ['\n\n'] 
+    )
+
+    # remove any double spaces on ends
+    li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
+
+    for text in li_preds:
+        # Check if text starts with 'Corrected Text:'
+        if not text.startswith('Corrected Text:'):
+            continue
+
+        # strip all text before and including 'Corrected Text:',
+        text = text.split('Corrected Text:')[-1]
+        li_split_text.append(text)
+
+    return {'text':li_split_text}
+
 def map_tokenize(batch, tokenizer, max_len:int):
     # Tokenize each row of the dataset
     # batch['text'] is a list of strings
@@ -184,17 +228,17 @@ def create_labels_with_mask(batch, tokenizer):
 
     # Create labels for each token
 
-    batch['labels'] = [-100]*len(batch['input_ids']) 
+    labels = [-100]*len(batch['input_ids']) 
 
     if tokenizer.eos_token_id in batch['input_ids']:
         eos_token_idx = batch['input_ids'].index(tokenizer.eos_token_id) 
-        batch['labels'][:eos_token_idx+1] = batch['input_ids'][:eos_token_idx+1]  # set labels to input_ids
-        batch['labels'] = batch['labels'][1:] + [-100]  # shift labels to the left, append -100 to the end
+        labels[:eos_token_idx+1] = batch['input_ids'][:eos_token_idx+1]  # set labels to input_ids
+        labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
     else:
-        batch['labels'] = batch['input_ids']
-        batch['labels'] = batch['labels'][1:] + [-100]  # shift labels to the left, append -100 to the end
+        labels = batch['input_ids']
+        labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
 
-    return batch
+    return {'labels':labels}
 
 def parse_args():
     
@@ -208,7 +252,7 @@ def parse_args():
     
     parser.add_argument('--languages_to_include', nargs='+', default=['en'], choices=['en','es'], help='List of languages to filter for')
 
-    parser.add_argument('--prop_chunk_overlap',type=float, default=0.35, help='Number of tokens to overlap between chunks')
+    parser.add_argument('--prop_chunk_overlap', type=float, default=0.35, help='Number of tokens to overlap between chunks')
 
     args = parser.parse_known_args()[0]
 

@@ -18,7 +18,6 @@ sys.path.append(os.getcwd())
 from argparse import ArgumentParser
 
 import pandas as pd
-from collections import defaultdict
 
 from functools import reduce
 import json as json
@@ -27,7 +26,6 @@ import json as json
 
 from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
-import csv
 from prompt_engineering.langchain.utils import load_annotated_examples
 
 from  langchain.chat_models import ChatOpenAI
@@ -99,7 +97,7 @@ def main(
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
+        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -234,7 +232,7 @@ def main(
         'li_pred_agg_i2i': li_pred_agg_i2i,
     }
        
-def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_key:str|None=None, prompt_style:str='yes_no'):
+def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', api_key:str|None=None):
     
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
@@ -266,17 +264,13 @@ def load_llm( llm_name:str, finetuned:bool, local_or_remote:str='remote', api_ke
                 model_id=model_id,
                 task="text-generation",
                 model_kwargs={'trust_remote_code':True,
-                            # 'load_in_8bit':MAP_LOAD_IN_8BIT[llm_name],
-                                # '_no_split_modules':[], 
-                                'quantization_config':quant_config 
+                                'quantization_config':quant_config
                                 })
 
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
         
     elif local_or_remote == 'remote':
-        #NOTE: max_tokens is currently dependent on prompt_style, it maybe should be depndent on parse_style
-
         if llm_name in OPENAI_MODELS:
             
             llm = ChatOpenAI(

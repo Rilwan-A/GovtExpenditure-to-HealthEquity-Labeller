@@ -23,10 +23,7 @@ from functools import lru_cache
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
-
     'mosaicml/mpt-7b-chat', 'TheBloke/vicuna-7B-1.1-HF', 'TheBloke/wizard-vicuna-13B-HF', 'TheBloke/Wizard-Vicuna-13B-Uncensored-HF', 'timdettmers/guanaco-33b-merged',
-
-    'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/wizard-vicuna-13B-GPTQ', 'TheBloke/vicuna-13B-1.1-GPTQ-4bit-128g'  ,'TheBloke/guanaco-65B-GPTQ'
     ]
 
 MAP_LOAD_IN_NBIT = {
@@ -137,7 +134,11 @@ class PredictionGenerator():
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
             
-            self.llm.pipeline._forward_params =  self.get_generation_params(self.prompt_style)
+            for k,v in self.get_generation_params(self.prompt_style).items():
+                try:
+                    self.llm.pipeline._forward_params['k'] = v
+                except AttributeError:
+                    self.llm.pipeline._forward_params = {'k':v}
 
             for li_prompts in li_li_prompts:
                 

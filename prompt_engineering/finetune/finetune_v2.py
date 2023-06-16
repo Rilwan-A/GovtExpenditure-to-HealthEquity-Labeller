@@ -1,7 +1,6 @@
 import os
 os.environ['TOKENIZERS_PARALLELISM'] = "false"
 import bitsandbytes as bnb
-
 from sklearn.metrics import accuracy_score
 from argparse import Namespace
 
@@ -18,18 +17,15 @@ import lightning.pytorch as pl
 import transformers
 from sklearn.metrics import precision_recall_fscore_support
 
+from prompt_engineering.langchain.utils import PredictionGenerator
+from prompt_engineering.utils_prompteng import PromptBuilder
 
+from transformers import BitsAndBytesConfig
 
-from prompt_engineering.langchain.utils import PredictionGenerator, PromptBuilder
+from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-
-from peft import get_peft_config, get_peft_model, LoraConfig, TaskType
-from transformers import PagedAdamW8bit
-
-from langchain.utils import HUGGINGFACE_MODELS
+from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
 from datasets import interleave_datasets, load_dataset
-
 from prompt_engineering.langchain.predict import prepare_data_b2i, predict_batches
 
 
@@ -46,6 +42,12 @@ def print_trainable_parameters(model):
     print(
         f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
     )
+
+# TODO: Add the other models to this dict mebe
+map_modelid_targetmodule ={
+    'mosaicml/mpt-7b-chat': ['qkv'] ,
+
+}
 
 class PromptEngineeringLM(pl.LightningModule):
     """LightningModule for prompt engineering LM training and evaluation."""
@@ -66,19 +68,19 @@ class PromptEngineeringLM(pl.LightningModule):
         self.val_tasks = val_tasks
         self.optimizer = kwargs.get('optimizer', 'auto')
         self.lr = kwargs.get('lr', 1e-6)
-
     
         if 'spot_alignment' in self.val_tasks:
             self.val_step_outputs_spotalign = []
-            self.prompt_builder_b2i = PromptBuilder( 'yes_no', k_shot_b2i=0,
-                                            ensemble_size=0, annotated_examples_b2i=0, 
-                                            effect_type='directly',
-                                            relationship='budgetitem_to_indicator',
-                                            seed=self.seed)
-        
-
+            self.prompt_builder_b2i = PromptBuilder( 'yes_no', k_shot=0,
+                                                     ensemble_size=0, 
+                                                     examples_dset=None, 
+                                                     effect_type='directly',
+                                                     relationship='budgetitem_to_indicator',
+                                                     seed=kwargs.get('seed', 10) 
+                                                     )
+    
             self.prediction_generator_b2i = PredictionGenerator(self.model,
-                                                            self.model,
+                                                            self.model.name_or_path,
                                                             prompt_style='yes_no',
                                                             ensemble_size=0,
                                                             edge_value="distribution",
@@ -87,7 +89,6 @@ class PromptEngineeringLM(pl.LightningModule):
                                                             local_or_remote='local',
                                                             effect_type='directly'
                                                             )
-
 
     def forward(self, **kwargs):
         return self.model( input_ids=kwargs['input_ids'], attention_mask=kwargs['attention_mask'], labels=kwargs.get('labels') )
@@ -195,7 +196,7 @@ class PromptEngineeringLM(pl.LightningModule):
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
         
         elif self.optimizer == 'Adam8bitPaged':
-            optimizer = PagedAdamW8bit(self.parameters(), lr=self.lr)
+            optimizer = bnb.optim.PagedAdamW8bit(self.parameters(), lr=self.lr)
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
 
 
@@ -214,23 +215,24 @@ class PromptEngineeringLM(pl.LightningModule):
         
 
         model = transformers.AutoModelForCausalLM.from_pretrained(config_trainer.model_id,
-                                                                  quantization_config=bnb_config,
-                                                                  device_map={'':0},
-                                                                #   device_map = 'auto'
-                                                                  )
+                                                                trust_remote_code=True,
+                                                                quantization_config=bnb_config,
+                                                                # device_map={'':0},  
+                                                                  device_map = 'auto'
+                                                                )
         
         # Implementing Lora version
         peft_config = LoraConfig(
-            task_type=TaskType.SEQ_2_SEQ_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1
-        )
-        peft_config = LoraConfig(
             r=8, 
             lora_alpha=32, 
-            target_modules=["query_key_value"], 
+            target_modules=map_modelid_targetmodule[config_trainer.model_id], 
             lora_dropout=0.1, 
             bias="none", 
             task_type="CAUSAL_LM"
         )
+        # prepare int-8 model for training
+        # model = prepare_model_for_int8_training(model)
+
         model = get_peft_model(model, peft_config)
         print_trainable_parameters(model)
 
@@ -243,7 +245,7 @@ class PromptEngineeringLM(pl.LightningModule):
 
         # Create training module
         lightning_module = PromptEngineeringLM(
-            model, tokenizer, **vars(config_trainer))
+            model, tokenizer, val_tasks=config_data.val_tasks, **vars(config_trainer))
 
         # Trainer Callbacks
         callbacks = []
@@ -256,7 +258,7 @@ class PromptEngineeringLM(pl.LightningModule):
             save_top_k=1))
         callbacks.append(PairedEarlyStopping(patience=config_trainer.patience, 
                                              monitor_1='val_nt/loss',
-                                             monitor='val_spot/acc'))
+                                             monitor_2='val_spot/acc'))
 
         # setting up strategy
         strategy = config_trainer.strategy
@@ -282,8 +284,8 @@ class PromptEngineeringLM(pl.LightningModule):
             max_epochs=2 if config_trainer.debugging else config_trainer.max_epochs,
             num_sanity_val_steps=4,
             
-            limit_train_batches=2 if config_trainer.debugging else None,
-            limit_val_batches=1 if config_trainer.debugging else None,
+            limit_train_batches=4 if config_trainer.debugging else None,
+            limit_val_batches=4 if config_trainer.debugging else None,
             log_every_n_steps=1 if config_trainer.debugging else 10,
             
             val_check_interval=config_trainer.val_check_interval
@@ -384,8 +386,7 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--debugging', action='store_true')
         
 
-        parser.add_argument(
-            '--dir_ckpt', type=str, default='prompt_engineering/finetune/ckpt', required=True)
+        parser.add_argument('--dir_ckpt', type=str, default='./prompt_engineering/finetune/ckpt')
      
         parser.add_argument('--optimizer', type=str,
                             choices=['Adam8bitPaged', 'Adam8bit'], 
@@ -400,12 +401,11 @@ class PromptEngineeringLM(pl.LightningModule):
                             choices=['auto', 'ddp', 'fsdp', 'deepspeed_stage_2', 'deepspeed_stage_2_offload',
                                      'deepspeed_stage_3', 'deepspeed_stage_3_offload'])        
         parser.add_argument('--patience', type=int, default=4)
+        
         parser.add_argument('--accumulate_grad_batches', type=int, default=4)
-
-        parser.add_argument('--max_epochs', type=int, default=10)
+        parser.add_argument('--max_epochs', type=int, default=2)
         parser.add_argument('--val_check_interval', type=int,  default=100 )
     
-
         args = parser.parse_known_args()[0]
 
         return args
@@ -455,7 +455,6 @@ class DataModule(pl.LightningDataModule):
         
         return dataloader
 
-
     def val_dataloader(self):
         # The validation datasets loaded is dependent on the val_tasks specified
         # If 'next_token' task is specified then we load each dataset specified in self.train_dsets_names and eval using loglikelihood on next token
@@ -464,33 +463,24 @@ class DataModule(pl.LightningDataModule):
         dataloaders = []
         
         if 'next_token' in self.val_tasks:
-            dataset = Dataset.load_from_disk(
-                os.path.join(self.dir_data, f"{self.model_id.replace('/','_')}/val.arrow")).with_format("torch")
-
-            # dataset = dataset.to_dataset() to_iterable_dataset(num_shards=self.num_workers*2)
-            dataloader = DataLoader(dataset, batch_size=self.batch_size_inf,
-                                    shuffle=False, num_workers=self.num_workers,
-                                    pin_memory=False)
-            dataloaders.append(dataloader)
 
             datasets = []
             # Add each of the datasets listed in self.train_dsets_names
             if 'research_paper' in self.train_dsets_names:
                 dataset = Dataset.load_from_disk(os.path.join(
-                    self.dir_data, f"rp_{self.model_id.replace('/','_')}_test.arrow"))
+                    self.dir_data,'finetune', f"rp_{self.model_id.replace('/','_')}_test.arrow"))
                 datasets.append(dataset)
                 # NOTE: we assume that we do not have to use a chat style 
 
             if 'wizardLM_instruct_70k' in self.train_dsets_names:
                 dataset = Dataset.load_from_disk(os.path.join(
-                    self.dir_data, f"wLM70k_nofilt_{self.model_id.replace('/','_')}_test.arrow"))
+                    self.dir_data, 'finetune', f"wLM70k_nofilt_{self.model_id.replace('/','_')}_test.arrow"))
                 datasets.append(dataset)
                 
-                        # datasets interleave two datasets in a 2:1 proportion
-            
+            # datasets interleave two datasets in a 2:1 proportion
             # Combine into one dataset
             if len(datasets) > 1:
-                dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=10)
+                dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=self.seed)
             else:
                 dataset = datasets[0]
             
@@ -502,7 +492,7 @@ class DataModule(pl.LightningDataModule):
             
         if 'spot_alignment' in self.val_tasks :
 
-            dset_records = prepare_data_b2i(fp='./data/spot_indicator_mapping_table_test.csv', data_load_seed=self.seed)
+            dset_records = prepare_data_b2i(input_file=os.path.join(self.dir_data,'spot','spot_indicator_mapping_table_test.csv'), data_load_seed=self.seed)
             
             dataloader_spotalign = DataLoader(dset_records, batch_size=self.batch_size_inf,
                                     shuffle=False,
@@ -524,22 +514,20 @@ class DataModule(pl.LightningDataModule):
     def parse_args(parent_parser=None):
         parser = ArgumentParser(parents=[parent_parser] if parent_parser else None, add_help=True, allow_abbrev=False)
 
-        
-        parser.add_argument('--model_id', type=str, default='EleutherAI/gpt-j-6B')
-        parser.add_argument('--dir_data', type=str, default='./data/finetune/')
+        parser.add_argument('--model_id', type=str)
+        parser.add_argument('--dir_data', type=str, default='./data')
 
         parser.add_argument('--num_workers', type=int, default=0)
 
-        parser.add_argument('--batch_size', type=int, default=1)
-        parser.add_argument('--batch_size_inf', type=int, default=2)
+        parser.add_argument('--batch_size', type=int, default=2)
+        parser.add_argument('--batch_size_inf', type=int, default=3)
 
-        parser.add_argument('--train_dset_names', type=str, nargs='*', choices=[ 'research_paper', 'wizardLM_instruct_70k', 'spot' ], default=['research_paper', 'wizardLM_instruct_70k'] )
+        parser.add_argument('--train_dset_names', type=str, nargs='+', choices=[ 'research_paper', 'wizardLM_instruct_70k' ], default=['research_paper', 'wizardLM_instruct_70k'] )
                             
-        parser.add_argument('--val_tasks', type=str, nargs='*', choices=['next_token', 'spot_alignment'], default=['next_token'])
+        parser.add_argument('--val_tasks', type=str, nargs='+', choices=['next_token', 'spot_alignment'], default=['next_token','spot_alignment'])
 
         args = parser.parse_known_args()[0]
         return args
-
 
 class PairedEarlyStopping(EarlyStopping):
 
