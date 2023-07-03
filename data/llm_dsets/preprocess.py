@@ -1,5 +1,5 @@
 import os
-from transformers import AutoTokenizer
+from transformers import BitsAndBytesConfig, AutoTokenizer
 from datasets import load_dataset, Dataset, DatasetDict
 from argparse import ArgumentParser
 
@@ -32,13 +32,22 @@ def main(model_id, json_file, max_tokens_per_chunk=None):
         dataset_dict[key] = dataset_dict[key].map(lambda batch: format_for_lm(batch, model_id, json_file), batched=False)
 
         # Tokenize data and create labels
-        dataset_dict[key] = dataset_dict[key].map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_tokens_per_chunk), batched=False  )
+        dataset_dict[key] = dataset_dict[key].map(lambda batch: tokenize_create_labels(batch, tokenizer, max_len=max_tokens_per_chunk), batched=False)
+
+        # # Filter out instances where all elements of 'labels' are -100
+        # dataset_dict[key] = dataset_dict[key].filter(lambda example: not all(label == -100 for label in example['labels']))
+
 
     # Save data to arrow files
     dir_ = './data/finetune'
     os.makedirs(dir_, exist_ok=True)
     
     fn = json_file.split('.')[0]
+
+    dataset_dict['train'].set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
+    dataset_dict['test'].set_format(type='torch', columns=[ "input_ids", "attention_mask", "labels"] )
+
+    
     dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_{model_id.replace("/","_")}_train.arrow'))
     dataset_dict['test'].save_to_disk(os.path.join(dir_, f'{fn}_{model_id.replace("/","_")}_test.arrow'))
 
@@ -61,13 +70,18 @@ def format_for_lm(data, llm_name, json_file):
 
 def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
     # Tokenize each row of the dataset
+    tokenizer.padding_side = 'right'
+    tokenizer.truncation_side = 'left'
     outp = tokenizer(batch['text'], truncation=True, padding='max_length', max_length=max_len, return_offsets_mapping=True )
     
     # Create labels for masked language modeling
     labels = [-100] * len(outp['input_ids']) # Initialize labels with -100
 
     # Find the start and end character position of the 'output' in the original text
+
     output_start_char_pos = batch['text'].index(batch['output'])
+
+    
     output_end_char_pos = output_start_char_pos + len(batch['output'])
 
     # Find the token start index and token end index that map to the start and end character position of the 'output'
@@ -93,19 +107,6 @@ def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
     # outp.update(batch)
 
     return outp
-
-def create_labels_with_mask(batch, tokenizer):
-    """Create labels and mask for masked language modeling.
-        labels will mask all non output tokens.
-    """
-
-    tknzd_output_len = tokenizer(batch['output'], return_length=True)['length'][0]
-
-    labels = [-100]*len(batch['input_ids'])
-    labels[-tknzd_output_len:] = batch['input_ids'][-tknzd_output_len:]
-    labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
-        
-    return {'labels':labels}
 
 def parse_args():
     

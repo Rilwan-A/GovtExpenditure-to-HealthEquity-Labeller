@@ -29,7 +29,8 @@ def main(
     max_tokens_per_chunk,
     min_tokens_per_chunk,
     prop_chunk_overlap,
-    languages_to_include:list[str]
+    languages_to_include:list[str],
+    split_combined_words:bool,
     ):
 
     # Setting up logging
@@ -73,13 +74,14 @@ def main(
                                     remove_columns=dataset_dict.column_names['train'] )
     
     # Fixing lack of spaces between parts of text
-    llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local' )
-    llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk
-    dataset_dict = dataset_dict.map( lambda batch: split_combined_words(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)
-    # release the memory used by the llm
-    del llm
-    gc.collect()
-    empty_cache()
+    if split_combined_words:
+        llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local' )
+        llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk
+        dataset_dict = dataset_dict.map( lambda batch: split_combined_words(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)
+        # release the memory used by the llm
+        del llm
+        gc.collect()
+        empty_cache()
 
 
     # Loop over dataset applying tokenizer to each row
@@ -93,8 +95,8 @@ def main(
     dataset_train = dataset_dict['train']
     dataset_test = dataset_dict['test']
 
-    dataset_train.set_format(type='torch', columns=["text", "input_ids", "attention_mask"] )
-    dataset_test.set_format(type='torch', columns=["text", "input_ids", "attention_mask"] )
+    dataset_train.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
+    dataset_test.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
     
     # Saving to disk
     dir_ = f'./data/finetune'
@@ -190,7 +192,7 @@ def split_combined_words(batch, llm):
     
     li_split_text = []
 
-    user_message = 'Please identify and rectify any grammatical errors in the text after Text:, without making further modifications or substantial changes. Begin your response with the phrase, "Corrected Text:". \nText: '
+    user_message = 'Please identify and rectify any grammatical errors in the text after "Text:", without making further modifications or substantial changes. Begin your response with the phrase, "Corrected Text:". \nText:'
     li_prompts_fmtd = [
         map_llmname_input_format(llm.model_name_or_path, 
                                                 user_message = user_message + text,
@@ -219,8 +221,9 @@ def split_combined_words(batch, llm):
 def map_tokenize(batch, tokenizer, max_len:int):
     # Tokenize each row of the dataset
     # batch['text'] is a list of strings
-    
-    outp = tokenizer(batch['text'], truncation=True, padding='max_length', max_length=max_len)
+    tokenizer.padding_side = 'right'
+    tokenizer.truncation_side = 'right'
+    outp = tokenizer(batch['text'], truncation=True, padding='max_length', max_length=max_len )
 
     return outp
 
@@ -230,8 +233,11 @@ def create_labels_with_mask(batch, tokenizer):
 
     labels = [-100]*len(batch['input_ids']) 
 
-    if tokenizer.eos_token_id in batch['input_ids']:
-        eos_token_idx = batch['input_ids'].index(tokenizer.eos_token_id) 
+    # Find the index where the first bos appears in the input_ids
+    idx_first_bos = batch['input_ids'].index(tokenizer.bos_token_id)
+
+    if tokenizer.eos_token_id in batch['input_ids'][idx_first_bos:]:
+        eos_token_idx = batch['input_ids'][idx_first_bos:].index(tokenizer.eos_token_id) + idx_first_bos
         labels[:eos_token_idx+1] = batch['input_ids'][:eos_token_idx+1]  # set labels to input_ids
         labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
     else:
@@ -253,6 +259,8 @@ def parse_args():
     parser.add_argument('--languages_to_include', nargs='+', default=['en'], choices=['en','es'], help='List of languages to filter for')
 
     parser.add_argument('--prop_chunk_overlap', type=float, default=0.35, help='Number of tokens to overlap between chunks')
+
+    parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words', default=False)
 
     args = parser.parse_known_args()[0]
 

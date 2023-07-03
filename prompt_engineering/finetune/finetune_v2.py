@@ -15,6 +15,9 @@ from argparse import ArgumentParser
 from lightning.pytorch import loggers as pl_loggers
 import lightning.pytorch as pl
 import transformers
+import logging
+logging.getLogger("transformers").setLevel(logging.CRITICAL)
+
 from sklearn.metrics import precision_recall_fscore_support
 
 from prompt_engineering.langchain.utils import PredictionGenerator
@@ -44,8 +47,9 @@ def print_trainable_parameters(model):
     )
 
 # TODO: Add the other models to this dict mebe
-map_modelid_targetmodule ={
-    'mosaicml/mpt-7b-chat': ['qkv'] ,
+map_modelid_targetmodule = {
+    'mosaicml/mpt-7b-chat': ['kv'] ,
+    'TheBloke/vicuna-7B-1.1-HF': ['k_proj', 'v_proj'] #, 'o_proj']
 
 }
 
@@ -72,7 +76,7 @@ class PromptEngineeringLM(pl.LightningModule):
         if 'spot_alignment' in self.val_tasks:
             self.val_step_outputs_spotalign = []
             self.prompt_builder_b2i = PromptBuilder( 'yes_no', k_shot=0,
-                                                     ensemble_size=0, 
+                                                     ensemble_size=1, 
                                                      examples_dset=None, 
                                                      effect_type='directly',
                                                      relationship='budgetitem_to_indicator',
@@ -87,11 +91,12 @@ class PromptEngineeringLM(pl.LightningModule):
                                                             parse_style='rules',
                                                             relationship='budgetitem_to_indicator',
                                                             local_or_remote='local',
-                                                            effect_type='directly'
+                                                            effect_type='directly',
+                                                            tokenizer=self.tokenizer,
                                                             )
 
     def forward(self, **kwargs):
-        return self.model( input_ids=kwargs['input_ids'], attention_mask=kwargs['attention_mask'], labels=kwargs.get('labels') )
+        return self.model( **kwargs)
 
     def training_step(self, batch, batch_idx):
 
@@ -101,6 +106,10 @@ class PromptEngineeringLM(pl.LightningModule):
         self.log('train_loss', loss, on_step=True,
                  on_epoch=False, prog_bar=True, logger=True,
                 sync_dist=False, rank_zero_only=True)
+        
+        # if a nan in loss then return None so pytorch lightning skips the step
+        if torch.isnan(loss):
+            return None
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
@@ -111,7 +120,7 @@ class PromptEngineeringLM(pl.LightningModule):
             labels = batch['labels']
 
             with torch.no_grad():
-                outputs = self(input_ids, attention_mask, labels=labels,
+                outputs = self(input_ids=input_ids, attention_mask = attention_mask, labels=labels,
                             output_hidden_states=False, output_attentions=False)
             loss = outputs.loss
             self.log('val_nt/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
@@ -123,15 +132,14 @@ class PromptEngineeringLM(pl.LightningModule):
             
             li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd = predict_batches(
                 li_record = batch,
-                prompt_builder=self.prompt_builder,
-                prediction_generator=self.prediction_generator,
+                prompt_builder=self.prompt_builder_b2i,
+                prediction_generator=self.prediction_generator_b2i,
                 batch_size=len(batch) )
 
             # Convert the li_pred_agg, which is a list of agg
             li_pred_agg = [ next( (k for k,v in d.items() if v==1) ) for d in li_pred_agg]
 
-            outp = {'pred_agg': li_pred_agg,
-                'label': [d['label'] for d in batch]}
+            outp = {'pred_agg': li_pred_agg,'label': [d['label'] for d in batch]}
 
             
             self.val_step_outputs_spotalign.append(outp)
@@ -154,7 +162,7 @@ class PromptEngineeringLM(pl.LightningModule):
             acc = accuracy_score(labels, preds_agg)
 
 
-            self.log('val_loss', acc, on_step=False, on_epoch=True,
+            self.log('val_loss', -acc, on_step=False, on_epoch=True,
                     prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
             
             # Logging General Metrics
@@ -190,15 +198,15 @@ class PromptEngineeringLM(pl.LightningModule):
         if self.optimizer == 'Adam8bit':
             optimizer = bnb.optim.Adam8bit(
                     self.trainer.model.model.parameters(), 
-                    lr=self.lr, betas=(0.9, 0.995),
-                    eps=1e-9,
+                    # lr=self.lr, 
+                    # betas=(0.9, 0.995),
+                    # eps=1e-9,
                     )
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
         
         elif self.optimizer == 'Adam8bitPaged':
             optimizer = bnb.optim.PagedAdamW8bit(self.parameters(), lr=self.lr)
             return {'optimizer': optimizer, 'monitor': 'val_loss'}
-
 
         else:
             raise ValueError(f'optimizer {self.optimizer} not recognized')
@@ -213,7 +221,6 @@ class PromptEngineeringLM(pl.LightningModule):
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16)
         
-
         model = transformers.AutoModelForCausalLM.from_pretrained(config_trainer.model_id,
                                                                 trust_remote_code=True,
                                                                 quantization_config=bnb_config,
@@ -238,7 +245,7 @@ class PromptEngineeringLM(pl.LightningModule):
 
         # Creating Tokenizer
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config_trainer.model_id)
+            config_trainer.model_id, use_fast=True, )
 
         # Create data module
         data_module = DataModule(**vars(config_data))
@@ -252,10 +259,10 @@ class PromptEngineeringLM(pl.LightningModule):
         callbacks.append(ModelCheckpoint(
             monitor="val_loss",
             filename='{epoch}-{step}-{val_loss:.3f}',
-            save_last=False,
+            save_last=True,
             auto_insert_metric_name=True,
             save_weights_only=True,
-            save_top_k=1))
+            save_top_k=2))
         callbacks.append(PairedEarlyStopping(patience=config_trainer.patience, 
                                              monitor_1='val_nt/loss',
                                              monitor_2='val_spot/acc'))
@@ -282,9 +289,9 @@ class PromptEngineeringLM(pl.LightningModule):
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
             max_epochs=2 if config_trainer.debugging else config_trainer.max_epochs,
-            num_sanity_val_steps=4,
+            num_sanity_val_steps=0,
             
-            limit_train_batches=4 if config_trainer.debugging else None,
+            limit_train_batches=10 if config_trainer.debugging else None,
             limit_val_batches=4 if config_trainer.debugging else None,
             log_every_n_steps=1 if config_trainer.debugging else 10,
             
@@ -350,7 +357,7 @@ class PromptEngineeringLM(pl.LightningModule):
                                                                   device_map="auto")
 
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config_trainer.model_id)
+            config_trainer.model_id, use_fast=True)
 
         # Making training module
         lightning_module = PromptEngineeringLM(
@@ -390,11 +397,10 @@ class PromptEngineeringLM(pl.LightningModule):
      
         parser.add_argument('--optimizer', type=str,
                             choices=['Adam8bitPaged', 'Adam8bit'], 
-                            default='Adam8bitPaged')
-        parser.add_argument('--lr', type=float, default=1e-5)
+                            default='Adam8bitPaged' )
+        parser.add_argument('--lr', type=float, default=3e-4)
 
         
-
         parser.add_argument('--devices', type=int, default=1)
         parser.add_argument('--accelerator', type=str, default='gpu', choices=['gpu'])
         parser.add_argument('--strategy', type=str, default='auto',
@@ -404,7 +410,7 @@ class PromptEngineeringLM(pl.LightningModule):
         
         parser.add_argument('--accumulate_grad_batches', type=int, default=4)
         parser.add_argument('--max_epochs', type=int, default=2)
-        parser.add_argument('--val_check_interval', type=int,  default=100 )
+        parser.add_argument('--val_check_interval', type=lambda x: float(x) if '.' in x else int(x),  default=1.0 )
     
         args = parser.parse_known_args()[0]
 
@@ -434,18 +440,18 @@ class DataModule(pl.LightningDataModule):
 
         if 'research_paper' in self.train_dsets_names:
             dataset = Dataset.load_from_disk(os.path.join(
-                self.dir_data, f"rp_{self.model_id.replace('/','_')}_train.arrow"))
+                self.dir_data, 'finetune', f"rp_{self.model_id.replace('/','_')}_train.arrow"))
             datasets.append(dataset)
             # NOTE: we assume that we do not have to use a chat style 
 
         if 'wizardLM_instruct_70k' in self.train_dsets_names:
             dataset = Dataset.load_from_disk(os.path.join(
-                self.dir_data, f"wLM70k_nofilt_{self.model_id.replace('/','_')}_train.arrow"))
+                self.dir_data, 'finetune', f"wLM70k_nofilt_{self.model_id.replace('/','_')}_train.arrow"))
             datasets.append(dataset)
 
         # datasets interleave two datasets in a 2:1 proportion
         if len(datasets) > 1:
-            dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=10)
+            dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=self.seed)
         else:
             dataset = datasets[0]
 
@@ -530,15 +536,17 @@ class DataModule(pl.LightningDataModule):
         return args
 
 class PairedEarlyStopping(EarlyStopping):
+    """Early Stopping that requires both metrics to improve over patience steps"""
 
     def __init__(self, patience: int, verbose: bool = False, monitor_1: str = 'val_nt/loss', monitor_2: str = 'val_spot/acc', mode: str = 'min'):
-        super().__init__(monitor=monitor_1, patience=patience, verbose=verbose, mode=mode)
+        super().__init__(monitor=monitor_1, patience=patience, verbose=verbose, mode=mode, check_finite=False)
         self.monitor_2 = monitor_2
         self.patience = patience
         self.wait_count_1 = 0
         self.wait_count_2 = 0
         self.best_score_1 = None
         self.best_score_2 = None
+        self.check_finite = False
 
     def _validate_condition_metric(self, logs):
         current_1 = logs.get(self.monitor)
@@ -568,7 +576,6 @@ class PairedEarlyStopping(EarlyStopping):
         else:
             self.wait_count_2 += 1
 
-            
         return ( self.wait_count_1 >= self.patience) or ( self.wait_count_2 >= self.patience)
 
     def on_validation_end(self, trainer, pl_module):

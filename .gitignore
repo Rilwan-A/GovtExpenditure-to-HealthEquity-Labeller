@@ -36,6 +36,7 @@ temp*
 **/**.parquet
 **/**.arrow
 **/**.pkl
+**yaml
 
 # VSCode settings
 **/**workspace

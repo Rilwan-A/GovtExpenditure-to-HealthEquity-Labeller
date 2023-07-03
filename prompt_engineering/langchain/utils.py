@@ -19,7 +19,10 @@ import copy
 import numpy as np
 import pandas as pd
 from functools import lru_cache
-
+import peft
+import warnings
+import os
+from contextlib import redirect_stdout
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
@@ -57,7 +60,8 @@ class PredictionGenerator():
                   relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
                   deepspeed_compat:bool=False,
-                  effect_type:str='directly' ):
+                  effect_type:str='directly',
+                **kwargs ):
         
         # Can not get model logits scores from ChatOpenAI
         if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'categories_perplexity': 
@@ -75,6 +79,7 @@ class PredictionGenerator():
             
         self.llm = llm
         self.llm_name = llm_name
+        self.tokenizer = kwargs.get('tokenizer', None)
 
         self.prompt_style = prompt_style
         self.ensemble_size = ensemble_size
@@ -89,7 +94,7 @@ class PredictionGenerator():
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str):
         generation_params = {}
-        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens'
+        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
         if prompt_style == 'yes_no':
             generation_params[k] = 10
         elif prompt_style == 'open':
@@ -136,9 +141,9 @@ class PredictionGenerator():
             
             for k,v in self.get_generation_params(self.prompt_style).items():
                 try:
-                    self.llm.pipeline._forward_params['k'] = v
+                    self.llm.pipeline._forward_params[k] = v
                 except AttributeError:
-                    self.llm.pipeline._forward_params = {'k':v}
+                    self.llm.pipeline._forward_params = {k:v}
 
             for li_prompts in li_li_prompts:
                 
@@ -155,6 +160,45 @@ class PredictionGenerator():
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
             
+                li_li_prompts_fmtd.append(li_prompts_fmtd)
+                li_li_preds.append(li_preds)
+        
+        elif  isinstance(self.llm, peft.peft_model.PeftModelForCausalLM): #type: ignore
+            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
+            
+            generation_params = self.get_generation_params(self.prompt_style)
+
+            self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id
+            self.llm.generation_config.bos_token_id = self.tokenizer.bos_token_id
+            self.llm.generation_config.eos_token_id = self.tokenizer.eos_token_id 
+            # if hasattr(self.llm.generation_config, 'max_length'):
+            #     delattr(self.llm.generation_config, 'max_length')
+            self.llm.generation_config.max_length = None
+            self.llm.generation_config.max_new_tokens = generation_params['max_new_tokens'] 
+
+            
+            for li_prompts in li_li_prompts:
+                
+                # Formatting prompts to adhere to format required by Base Language Model
+                li_prompts_fmtd = [
+                    map_llmname_input_format(self.llm_name,
+                        user_message = prompt,
+                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]
+                        ) for prompt in li_prompts ]
+                
+                
+                # Removing trailing space from end: (for some reason a space at the end causes to model to instaly stop generating)
+                li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
+
+                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt')
+                
+                # Ignoring any warning from the model
+                outputs = self.llm.generate(**inputs, **generation_params, generation_config=self.llm.generation_config )
+
+                output_text = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+                li_preds = [ text[ len(prompt): ].strip(' .') for prompt, text in zip(li_prompts_fmtd, output_text) ]  
+
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         else:
