@@ -17,7 +17,7 @@ from langdetect import detect, LangDetectException
 from datasets import Features, Value
 
 from prompt_engineering.my_logger import setup_logging_preprocess
-from prompt_engineering.langchain.predict import load_llm
+from prompt_engineering.langchain.utils import load_llm
 from prompt_engineering.utils_prompteng import map_llmname_input_format
 
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
@@ -31,6 +31,7 @@ def main(
     prop_chunk_overlap,
     languages_to_include:list[str],
     split_combined_words:bool,
+    debugging:bool,
     ):
 
     # Setting up logging
@@ -47,15 +48,19 @@ def main(
     dataset = Dataset.from_generator( dataset_generator, gen_kwargs={'data_dir':data_dir} )
 
     # select 10 samples for debugging
-    dataset = dataset.select(range(10))
+    if debugging:
+        dataset = dataset.select(range(5))
 
     dataset_dict = dataset.train_test_split( test_size=0.2, shuffle=True)
 
     # Compute average number of tokens in 200 words from a sample of your data
-    sample_text = ' '.join(dataset['text'][:200])  # Create a sample text from your data
-    num_tokens_in_sample = len(tokenizer.encode(sample_text))
-    num_words_in_sample = len(sample_text.split())
-    avg_tokens_per_word = num_tokens_in_sample / num_words_in_sample
+    if not debugging:
+        sample_text = ' '.join(dataset['text'][:200])  # Create a sample text from your data
+        num_tokens_in_sample = len(tokenizer.encode(sample_text))
+        num_words_in_sample = len(sample_text.split())
+        avg_tokens_per_word = num_tokens_in_sample / num_words_in_sample
+    else:
+        avg_tokens_per_word = 2.0
 
     # Compute max_tokens_per_chunk based on average tokens per word
     # NOTE: This will underpredict due to the math formulas in the texts
@@ -77,7 +82,8 @@ def main(
     if split_combined_words:
         llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local' )
         llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk
-        dataset_dict = dataset_dict.map( lambda batch: split_combined_words(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)
+        
+        dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)
         # release the memory used by the llm
         del llm
         gc.collect()
@@ -186,21 +192,21 @@ def filter_on_language(batch, languages_to_include:list[str]=['en']):
     
     return {'text':outp_batch_text}
 
-def split_combined_words(batch, llm):
+def fix_text(batch, llm):
     """ Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
 
     
     li_split_text = []
 
-    user_message = 'Please identify and rectify any grammatical errors in the text after "Text:", without making further modifications or substantial changes. Begin your response with the phrase, "Corrected Text:". \nText:'
+    user_message = 'In the following text please fix mistakes where two words have been joined together or mistakes where a space is missing from the start of a sentence. Start the corrected text with the phrase, "Corrected Text:". \nText: '
     li_prompts_fmtd = [
-        map_llmname_input_format(llm.model_name_or_path, 
+        map_llmname_input_format(llm.model_id, 
                                                 user_message = user_message + text,
                                                 system_message = None) for text in batch['text']
     ]
 
     outputs = llm.generate(
-                prompts =li_prompts_fmtd,
+                prompts=li_prompts_fmtd,
                 stop = ['\n\n'] 
     )
 
@@ -209,7 +215,7 @@ def split_combined_words(batch, llm):
 
     for text in li_preds:
         # Check if text starts with 'Corrected Text:'
-        if not text.startswith('Corrected Text:'):
+        if not text.startswith('Corrected Text: '):
             continue
 
         # strip all text before and including 'Corrected Text:',
@@ -261,6 +267,8 @@ def parse_args():
     parser.add_argument('--prop_chunk_overlap', type=float, default=0.35, help='Number of tokens to overlap between chunks')
 
     parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words', default=False)
+
+    parser.add_argument('--debugging', action='store_true', help='Whether to run in debugging mode', default=False)
 
     args = parser.parse_known_args()[0]
 

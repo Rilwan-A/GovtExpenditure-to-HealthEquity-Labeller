@@ -26,7 +26,7 @@ import json as json
 
 from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
-from prompt_engineering.langchain.utils import load_annotated_examples
+from prompt_engineering.langchain.utils import load_annotated_examples, load_llm
 
 from  langchain.chat_models import ChatOpenAI
 from  langchain.llms import HuggingFaceHub
@@ -231,63 +231,6 @@ def main(
         'li_pred_ensemble_parsed_i2i': li_pred_ensemble_parsed_i2i,
         'li_pred_agg_i2i': li_pred_agg_i2i,
     }
-       
-def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', api_key:str|None=None):
-    
-    assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
-    if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
-    if local_or_remote == 'local': assert llm_name not in OPENAI_MODELS, f"llm_name must be a HuggingFace model if local_or_remote is 'local'" 
-    assert llm_name in ALL_MODELS, f"llm_name must be a valid model name, not {llm_name}"
-    # TODO: All models used done on Huggingface Hub
-    # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
-    if local_or_remote == 'local':
-
-        if llm_name in HUGGINGFACE_MODELS:
-            from transformers import BitsAndBytesConfig
-            
-            bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
-            bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
-            quant_config = BitsAndBytesConfig(
-                
-                load_in_8bit=bool_8,
-                llm_int8_has_fp16_weights=bool_8,
-                
-                load_in_4bit=bool_4,
-                bnb_4bit_quant_type="nf4" ,
-                bnb_4bit_use_double_quant=bool_4,
-                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
-            )
-
-            model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
-
-            llm = HuggingFacePipeline.from_model_id(
-                model_id=model_id,
-                task="text-generation",
-                model_kwargs={'trust_remote_code':True,
-                                'quantization_config':quant_config
-                                })
-
-        else:
-            raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
-        
-    elif local_or_remote == 'remote':
-        if llm_name in OPENAI_MODELS:
-            
-            llm = ChatOpenAI(
-                client=openai.ChatCompletion,
-                model_name=llm_name,
-                openai_api_key=api_key )    #ignore: type        
-        
-        elif llm_name in HUGGINGFACE_MODELS:
-            llm = HuggingFaceHub(
-                    repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'do_sample':False } ) #type: ignore
-        else:
-            raise NotImplementedError(f"llm_name {llm_name} is not implemented for remote use")
-
-    else:
-        llm = None
-
-    return llm 
 
 def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
                   logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:

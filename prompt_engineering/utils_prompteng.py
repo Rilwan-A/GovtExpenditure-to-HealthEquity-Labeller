@@ -78,7 +78,9 @@ li_prompts_categories_answer_v1: list[str] = [
     # NOTE: All the above prompts included a NA category e.g. if the model was not sure. The issue was that the NA category always attracted too much weight during prediction so we removed it.
     # NOTE: All the above prompts included a letters for the category labels, issue with this is that when using perplexity method then the perplexity of category labels can also include probability of the model produce open answers that start with label lettter.
 
-    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
+    f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {open_response_cats["1"]}, 2) {open_response_cats["2"]}.\nStatement: {"{statement}"}'
+
 ]
 
 # V2 encourages the response the have the category name as a response
@@ -228,8 +230,8 @@ map_relationship_sysprompt_categoriesanswer = {
 # endregion
 
 # region BaseModelFormat - The format required by the underlying language model
-format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT: "
-format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT: "
+format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
+format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT:"
 format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
 format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
 format_mpt = "{system_message}\n\n{user_message}\n\n"

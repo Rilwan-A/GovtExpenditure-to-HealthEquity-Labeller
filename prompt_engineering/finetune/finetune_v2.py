@@ -103,13 +103,14 @@ class PromptEngineeringLM(pl.LightningModule):
         outputs = self( **batch, output_hidden_states=False, output_attentions=False)
 
         loss = outputs.loss
+        if torch.isnan(loss):
+            return None
         self.log('train_loss', loss, on_step=True,
                  on_epoch=False, prog_bar=True, logger=True,
                 sync_dist=False, rank_zero_only=True)
         
         # if a nan in loss then return None so pytorch lightning skips the step
-        if torch.isnan(loss):
-            return None
+        
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
@@ -123,25 +124,27 @@ class PromptEngineeringLM(pl.LightningModule):
                 outputs = self(input_ids=input_ids, attention_mask = attention_mask, labels=labels,
                             output_hidden_states=False, output_attentions=False)
             loss = outputs.loss
-            self.log('val_nt/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+            if torch.isnan(loss):
+                return None
+            self.log('val_nt/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, add_dataloader_idx=False)
 
             outp = None
 
         elif self.val_tasks[dataloader_idx]  == 'spot_alignment':
             # batch will be a list of dicts with keys: budget_item,id,indicator,type,label
             
-            li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd = predict_batches(
-                li_record = batch,
-                prompt_builder=self.prompt_builder_b2i,
-                prediction_generator=self.prediction_generator_b2i,
-                batch_size=len(batch) )
+            with torch.no_grad():
+                li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd = predict_batches(
+                    li_record = batch,
+                    prompt_builder=self.prompt_builder_b2i,
+                    prediction_generator=self.prediction_generator_b2i,
+                    batch_size=len(batch) )
 
             # Convert the li_pred_agg, which is a list of agg
             li_pred_agg = [ next( (k for k,v in d.items() if v==1) ) for d in li_pred_agg]
 
             outp = {'pred_agg': li_pred_agg,'label': [d['label'] for d in batch]}
 
-            
             self.val_step_outputs_spotalign.append(outp)
 
             outp = None
