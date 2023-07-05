@@ -20,6 +20,10 @@ from prompt_engineering.my_logger import setup_logging_preprocess
 from prompt_engineering.langchain.utils import load_llm
 from prompt_engineering.utils_prompteng import map_llmname_input_format
 
+import multiprocessing as mp
+import math
+import re
+
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 
 # ERRONEOUS_NEWLINES_RE = re.compile(r"\n(?!\u)")  # "\n" followed by any character that is not a unicode character
@@ -41,7 +45,7 @@ def main(
     data_dir = os.path.join( './data/researchpapers/text_format/' )
 
     # Locate tokenizer to use
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
     
     # Convert data to huggingface dataset    
@@ -49,9 +53,9 @@ def main(
 
     # select 10 samples for debugging
     if debugging:
-        dataset = dataset.select(range(5))
+        dataset = dataset.select(range(2))
 
-    dataset_dict = dataset.train_test_split( test_size=0.2, shuffle=True)
+    dataset_dict = dataset.train_test_split( test_size=0.2, shuffle=True if (not debugging) else False)
 
     # Compute average number of tokens in 200 words from a sample of your data
     if not debugging:
@@ -68,14 +72,14 @@ def main(
     min_words_per_chunk = int(min_tokens_per_chunk / avg_tokens_per_word) 
     
     dataset_dict = dataset_dict.map( 
-        lambda batch: break_up_text(batch, max_words_per_chunk, min_words_per_chunk, prop_chunk_overlap), 
+        lambda batch: split_text_parallel(batch, max_words_per_chunk, min_words_per_chunk, prop_chunk_overlap), 
         batched=True,
-        batch_size=300,
+        batch_size=700,
         remove_columns=dataset_dict.column_names['train']
     )
     
     # Filter based on language
-    dataset_dict = dataset_dict.map( lambda batch: filter_on_language(batch, languages_to_include), batched=True, batch_size=500, 
+    dataset_dict = dataset_dict.map( lambda batch: filter_on_language_parallel(batch, languages_to_include), batched=True, batch_size=700, 
                                     remove_columns=dataset_dict.column_names['train'] )
     
     # Fixing lack of spaces between parts of text
@@ -125,7 +129,13 @@ def dataset_generator(data_dir:str):
             text = f.read()
             yield {'text':text}
 
-def break_up_text(dict_text:Dict[str,str], max_words_per_chunk:int=200, min_words_per_chunk:int=10, prop_chunk_overlap:float=0.25):
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+def split_text(dict_text:Dict[str,str], max_words_per_chunk:int=200, min_words_per_chunk:int=10, prop_chunk_overlap:float=0.25):
     
     # Split text into chunks of text with length M
     # One research paper, can now become i>1 input datums
@@ -148,6 +158,43 @@ def break_up_text(dict_text:Dict[str,str], max_words_per_chunk:int=200, min_word
 
     
     return {'text':li_text_chunked}
+
+def split_text_parallel(dict_text: Dict[str, str], max_words_per_chunk: int = 200, min_words_per_chunk: int = 10, prop_chunk_overlap: float = 0.25):
+    
+    
+    procs=min(mp.cpu_count(),6)
+    inp_batch_text = list(chunks(dict_text['text'], math.ceil(len(dict_text['text'])/procs)))
+
+    with mp.Pool( procs ) as p:
+        li_text_chunked = p.starmap(_split_text_parallel, [(texts, max_words_per_chunk, min_words_per_chunk, prop_chunk_overlap) for texts in inp_batch_text])
+
+    # flatten li_text_chunked
+    li_text_chunked = [text for batch in li_text_chunked for text in batch]
+
+
+    return {'text':li_text_chunked}
+
+def _split_text_parallel(texts: str, max_words_per_chunk: int, min_words_per_chunk: int, prop_chunk_overlap: float):
+    
+    outp_batch_text = []
+
+    for text in texts:
+    
+        # First split by paragraph / section
+        text_split: List[str] = split_paragraphs(text, min_words_per_chunk)
+
+        # For each txt in text_split, Splitting based on max_len, with overlap
+        text_split_split = [ list(map( lambda seq:  ' '.join(seq).strip(' '),
+                            windowed( txt.split(' ') , max_words_per_chunk, step=int(max_words_per_chunk*(1-prop_chunk_overlap)),fillvalue='' ) 
+                            ))
+                            for txt in text_split ] 
+        
+        # flatten and add to li_text_chunked
+        text_split = sum(text_split_split, [])
+
+        outp_batch_text.extend(text_split)
+    
+    return outp_batch_text
 
 def split_paragraphs(input_text:str="", min_words_per_chunk:int=10):
     # Split text into paragraphs
@@ -173,6 +220,7 @@ def split_paragraphs(input_text:str="", min_words_per_chunk:int=10):
 
     return split_text
 
+
 def filter_on_language(batch, languages_to_include:list[str]=['en']):
     """
     Filter out text that is not in the languages_to_include list
@@ -192,22 +240,55 @@ def filter_on_language(batch, languages_to_include:list[str]=['en']):
     
     return {'text':outp_batch_text}
 
+def filter_on_language_parallel(batch: Dict[str, list[str]], languages_to_include: list[str] = ['en']):
+    procs=min(mp.cpu_count(),6)
+
+    inp_batch_text = list(chunks(batch['text'], math.ceil(len(batch['text'])/procs)))
+        
+    with mp.Pool( procs ) as p:
+        outp_batches_text = p.starmap(_filter_on_language_parallel, [(texts, languages_to_include) for texts in inp_batch_text])
+
+    # Flatten list of batches
+    outp_batch_text = [text for batch in outp_batches_text for text in batch]
+
+    return {'text': outp_batch_text}
+
+def _filter_on_language_parallel(texts: list[str], languages_to_include: list[str]):
+    outp_batch_text = []
+
+    for text in texts:
+        try:
+            lang = detect(text)
+            if lang in languages_to_include:
+                outp_batch_text.append(text)
+        except LangDetectException:
+            pass
+
+    return outp_batch_text
+
+
 def fix_text(batch, llm):
-    """ Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
+    """ 
+        1) First remove unicode control characters
+        2) Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
 
-    
+    # Part 1)
+    texts = []
+    for text in batch['text']:
+        text = remove_unicode_directionality(text)
+        texts.append(text)
+
+    # Part 2)
     li_split_text = []
-
-    user_message = 'In the following text please fix mistakes where two words have been joined together or mistakes where a space is missing from the start of a sentence. Start the corrected text with the phrase, "Corrected Text:". \nText: '
+    user_message = 'Please fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
     li_prompts_fmtd = [
         map_llmname_input_format(llm.model_id, 
-                                                user_message = user_message + text,
-                                                system_message = None) for text in batch['text']
+                                                user_message = user_message + ' ' + text,
+                                                system_message = None) for text in texts
     ]
 
     outputs = llm.generate(
                 prompts=li_prompts_fmtd,
-                stop = ['\n\n'] 
     )
 
     # remove any double spaces on ends
@@ -215,14 +296,21 @@ def fix_text(batch, llm):
 
     for text in li_preds:
         # Check if text starts with 'Corrected Text:'
-        if not text.startswith('Corrected Text: '):
+        if not text.startswith('Corrected Text:'):
             continue
 
         # strip all text before and including 'Corrected Text:',
         text = text.split('Corrected Text:')[-1]
+        # remove any double spaces / new lines are start or end of text
+        text = text.strip(' \n')
+
         li_split_text.append(text)
 
     return {'text':li_split_text}
+
+def remove_unicode_directionality(s):
+    s = re.sub(r'[\u202B\u202A\u202C]\n?', '', s)
+    return s
 
 def map_tokenize(batch, tokenizer, max_len:int):
     # Tokenize each row of the dataset
