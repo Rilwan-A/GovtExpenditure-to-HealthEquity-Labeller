@@ -121,7 +121,6 @@ class PredictionGenerator():
                   parse_style:str='rules',
                   relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
-                  deepspeed_compat:bool=False,
                   effect_type:str='directly',
                 **kwargs ):
                 
@@ -145,7 +144,6 @@ class PredictionGenerator():
         self.relationship = relationship
         self.edge_value   = edge_value
         self.local_or_remote = local_or_remote
-        self.deepspeed_compat = deepspeed_compat
       
         self.effect_type = effect_type
 
@@ -438,7 +436,6 @@ class PredictionGenerator():
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
                 batch_size=len(open_response_cats.keys()), 
-                deepspeed_compat = self.deepspeed_compat,
                 category_token_len=1 ) 
             li_li_probability.append(li_probability)
         

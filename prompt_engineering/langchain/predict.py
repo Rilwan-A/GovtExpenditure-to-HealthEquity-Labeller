@@ -70,8 +70,6 @@ def main(
 
     batch_size:int=1,
 
-    deepspeed_compat=False,
-
     save_output:bool = False,
 
     debugging:bool= False,
@@ -135,7 +133,6 @@ def main(
                                                         parse_style,
                                                         relationship='budgetitem_to_indicator',
                                                         local_or_remote=local_or_remote,
-                                                        deepspeed_compat=deepspeed_compat,
                                                         effect_type=effect_type
                                                         )
     prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, 
@@ -146,7 +143,6 @@ def main(
                                                         parse_style,
                                                         relationship='indicator_to_indicator',
                                                         local_or_remote=local_or_remote,
-                                                        deepspeed_compat=deepspeed_compat,
                                                         effect_type=effect_type
                                                         )
     logging.info("\tPrediction Generators Created")
@@ -194,7 +190,6 @@ def main(
                             "k_shot_example_dset_name_b2i": k_shot_example_dset_name_b2i,
                             "k_shot_example_dset_name_i2i": k_shot_example_dset_name_i2i,
                             "local_or_remote": local_or_remote,
-                            "deepspeed_compat": deepspeed_compat,
                         }
         
         # Save experiment config

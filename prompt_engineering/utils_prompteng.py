@@ -336,7 +336,7 @@ def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFra
     return dset
 
 def perplexity_for_category(
-    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False, category_token_len=1):
+    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, category_token_len=1):
 
     """Calculate the perplexity of the final token for a given set of sentences"""
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
@@ -407,7 +407,7 @@ def perplexity_for_category(
         labels = encoded_batch
 
         # use a dummy context for now
-        with torch.no_grad() if not deepspeed_compat else nullcontext():
+        with torch.no_grad():
             out_logits = model(encoded_batch, attention_mask=attn_mask).logits
 
         shift_logits = out_logits[..., :-1, :]
@@ -419,10 +419,9 @@ def perplexity_for_category(
         shift_labels = shift_labels[..., -category_token_len:]
         shift_attention_mask_batch = shift_attention_mask_batch[..., -category_token_len:]
 
-        if deepspeed_compat is False:
-            shift_logits = shift_logits.contiguous()
-            shift_labels = shift_labels.contiguous()
-            shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
+        shift_logits = shift_logits.contiguous()
+        shift_labels = shift_labels.contiguous()
+        shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
 
         perplexity_batch = torch.exp(
             (loss_fct(shift_logits.transpose(1, 2), shift_labels) * shift_attention_mask_batch).sum(1)
@@ -434,7 +433,7 @@ def perplexity_for_category(
     return ppls
 
 def joint_probabilities_for_category(
-    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, deepspeed_compat:bool=False, category_token_len=1):
+    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, category_token_len=1):
 
 
     """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
@@ -504,7 +503,7 @@ def joint_probabilities_for_category(
 
         labels = encoded_batch
 
-        with torch.no_grad() if not deepspeed_compat else nullcontext():
+        with torch.no_grad():
             out_logits = model(encoded_batch, attention_mask=attn_mask).logits
 
         shift_logits = out_logits[..., :-1, :]
@@ -515,10 +514,9 @@ def joint_probabilities_for_category(
         shift_labels = shift_labels[..., -category_token_len:]
         shift_attention_mask_batch = shift_attention_mask_batch[..., -category_token_len:]
 
-        if deepspeed_compat is False:
-            shift_logits = shift_logits.contiguous()
-            shift_labels = shift_labels.contiguous()
-            shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
+        shift_logits = shift_logits.contiguous()
+        shift_labels = shift_labels.contiguous()
+        shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
 
 
         # Calculate probabilities from logits
