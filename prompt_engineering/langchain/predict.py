@@ -28,9 +28,7 @@ from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODEL
 
 from prompt_engineering.langchain.utils import load_annotated_examples, load_llm
 
-from  langchain.chat_models import ChatOpenAI
-from  langchain.llms import HuggingFaceHub
-from langchain import HuggingFacePipeline
+
 
 import yaml
 import openai
@@ -65,6 +63,8 @@ def main(
     k_shot_example_dset_name_b2i:str = 'spot',
     k_shot_example_dset_name_i2i:str|None = None,
 
+    unbias_categorisations:bool = False,
+
     local_or_remote:str='remote',
     api_key:str|None = None,
 
@@ -74,20 +74,21 @@ def main(
 
     save_output:bool = False,
 
-    max_dset_size:int|None = None,
+    debugging:bool= False,
     data_load_seed:int = 10):
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
     
     if prompt_style == 'yes_no':
         assert parse_style == 'rules'
-    if prompt_style == 'open':
-        assert parse_style in ['categories_perplexity', 'categories_rules']
-        
-    if prompt_style == 'categorise':
+    elif prompt_style == 'open':
+        assert parse_style =='category_rules
+    elif prompt_style == 'categorise':
         assert parse_style == 'perplexity'
-    if prompt_style == 'cot':
+    elif prompt_style == 'cot_categorise':
         assert parse_style == 'categories_perplexity'
+    else:
+        raise ValueError(f"Invalid prompt_style: {prompt_style}")
 
     # Setup Logging
     logging = setup_logging_predict(llm_name)
@@ -114,7 +115,8 @@ def main(
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type,
                                         relationship='budgetitem_to_indicator',
-                                        seed=data_load_seed)
+                                        seed=data_load_seed,
+                                        )
     
     prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
@@ -152,12 +154,12 @@ def main(
     # prepare data
     logging.info("\tPreparing Data")
     li_record_b2i  = None if predict_b2i is False else prepare_data_b2i(input_file,
-                                                            max_dset_size=max_dset_size,
+                                                            debugging=debugging,
                                                             data_load_seed=data_load_seed,
                                                             logging=logging )
     
     li_record_i2i = None if predict_i2i is False else prepare_data_i2i(input_file,
-                                                            max_dset_size=max_dset_size,
+                                                            debugging=debugging,
                                                             data_load_seed=data_load_seed,
                                                             logging=logging )
     logging.info("\tData Prepared")
@@ -167,11 +169,11 @@ def main(
     logging.info("\tRunning Predictions")
     (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
         li_pred_ensemble_parsed_b2i, li_pred_agg_b2i, 
-        li_prompt_ensemble_fmtd_b2i) = (None, None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, logging) # type: ignore #ignore
+        li_prompt_ensemble_fmtd_b2i) = (None, None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, unbias_categorisations, logging) # type: ignore #ignore
         
     (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
          li_pred_ensemble_parsed_i2i, li_pred_agg_i2i,
-         li_prompt_ensemble_fmtd_i2i) = (None, None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, logging) #type: ignore 
+         li_prompt_ensemble_fmtd_i2i) = (None, None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, unbias_categorisations, logging) #type: ignore 
     logging.info("\tPredictions Complete")
 
     # saving to file
@@ -232,7 +234,7 @@ def main(
         'li_pred_agg_i2i': li_pred_agg_i2i,
     }
 
-def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
+def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, 
                   logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
@@ -283,13 +285,13 @@ def prepare_data_b2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
     # Creating all possible combinations of budget_items and indicators
     li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'label':label  } for budget_item, indicator, label in zip( li_budget_items, li_indicator, li_labels) ] 
     
-    if max_dset_size is not None:
+    if debugging:
         random.seed(data_load_seed)
-        li_record_b2i = random.sample(li_record_b2i, max_dset_size)
+        li_record_b2i = random.sample(li_record_b2i, 3)
     
     return li_record_b2i # type: ignore
 
-def prepare_data_i2i(input_file:str|UploadedFile, max_dset_size=None, data_load_seed=10, 
+def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, 
                   logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
@@ -335,8 +337,8 @@ def prepare_data_i2i(input_file:str|UploadedFile, max_dset_size=None, data_load_
     # Creating all possible combinations of budget_items and indicators
     li_record_i2i = [ {'indicator1':indicator1, 'indicator2':indicator2, 'label':label  } for indicator1, indicator2, label in zip( li_indicator1, li_indicator2, li_labels) ] 
     
-    if max_dset_size is not None:
-        li_record_i2i = random.sample(li_record_i2i, max_dset_size)
+    if debugging:
+        li_record_i2i = random.sample(li_record_i2i, 3)
     
     return li_record_i2i
 
@@ -344,6 +346,7 @@ def predict_batches(prompt_builder:PromptBuilder,
                         prediction_generator:PredictionGenerator, 
                         li_record:list[dict[str,str]],
                         batch_size=2,
+                        unbias_categorisations:bool=False,
                         logger=None ) -> tuple[list[list[str]], list[list[str]], list[list[str]], list[str], list[str]]:
 
     # Creating Predictions for each row in the test set
@@ -364,6 +367,18 @@ def predict_batches(prompt_builder:PromptBuilder,
         
         # Generate predictions
         batch_li_prompts_fmtd, batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+
+        # Generate any predictions with category order reversed
+        if unbias_categorisations:
+            batch_prompt_ensembles_reversed = prompt_builder(batch, reverse_order=True)
+            batch_li_prompts_fmtd_reversed, batch_pred_ensembles_reversed, batch_pred_ensembles_parsed_reversed = prediction_generator.predict(batch_prompt_ensembles_reversed, reverse_categories=True)
+
+            # Merge the two sets of outputs, datum for datum merge
+            batch_li_prompts_fmtd = [ li_prompts_fmtd + li_prompts_fmtd_reversed for li_prompts_fmtd, li_prompts_fmtd_reversed in zip(batch_li_prompts_fmtd, batch_li_prompts_fmtd_reversed) ]
+            batch_pred_ensembles = [ pred_ensembles + pred_ensembles_reversed for pred_ensembles, pred_ensembles_reversed in zip(batch_pred_ensembles, batch_pred_ensembles_reversed) ]
+            batch_pred_ensembles_parsed = [ pred_ensembles_parsed + pred_ensembles_parsed_reversed for pred_ensembles_parsed, pred_ensembles_parsed_reversed in zip(batch_pred_ensembles_parsed, batch_pred_ensembles_parsed_reversed) ]
+            
+            # Let the aggregation step handle the rest
 
         # Aggregate ensembles into predictions
         batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles_parsed)
@@ -445,10 +460,8 @@ def parse_args():
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
-    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot' ], default='open', help='Style of prompt' )
-
-
-    parser.add_argument('--parse_style', type=str, choices=['rules','categories_perplexity', 'categories_rules', 'perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot_categorise' ], default='open', help='Style of prompt' )
+    parser.add_argument('--parse_style', type=str, choices=['rules', 'category_rules', 'category_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
 
     parser.add_argument('--ensemble_size', type=int, default=1 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
@@ -462,6 +475,8 @@ def parse_args():
     parser.add_argument('--k_shot_example_dset_name_b2i', type=lambda inp: None if inp.lower()=="none" else str(inp), default='spot', choices=['spot','england', None], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
     parser.add_argument('--k_shot_example_dset_name_i2i', type= lambda inp: None if inp.lower()=="none" else str(inp), default=None, choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
 
+    parser.add_argument('--unbias_categorisations', action='store_true', default=False, help='Indicates whether to take measures to reduce bias towards category N when using categorisation type methods to answer questions' )
+
     parser.add_argument('--local_or_remote', type=str, default='local', choices=['local','remote'], help='Whether to use llms on a remote server or locally' )
     parser.add_argument('--api_key', type=str, default=None, help='The api key for the remote server e.g. HuggingfaceHub or OpenAIapi' )
     
@@ -471,7 +486,7 @@ def parse_args():
 
     parser.add_argument('--save_output', action='store_true', default=False, help='Indicates whether the output should be saved' )
 
-    parser.add_argument('--max_dset_size', type=int, default=None, help='The maximum number of examples to use from the dataset' )
+    parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
 
     
     args = parser.parse_known_args()[0]

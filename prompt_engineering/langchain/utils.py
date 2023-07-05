@@ -9,10 +9,11 @@ from langchain.schema import (
     SystemMessage
 )
 from prompt_engineering.utils_prompteng import (map_relationship_system_prompt, map_relationship_promptsmap, 
-                                                map_relationship_sysprompt_categoriesanswer, perplexity_for_category,
-                                                map_llmname_input_format, perplexity_to_normalised_probability,
-                                                  open_response_cats, joint_probabilities_for_category, nomalized_probabilities,
-                                                   open_response_labels, categorise_cats )
+                                                map_relationship_sysprompt_categoriesanswer,
+                                                map_llmname_input_format,
+                                                  joint_probabilities_for_category, nomalized_probabilities,
+                                                   open_response_cats, open_response_labels, 
+                                                   categorise_cats, categorise_response_labels )
 import random
 
 import copy
@@ -46,10 +47,13 @@ OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
 ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
-
        
 def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', api_key:str|None=None):
-    
+    from  langchain.chat_models import ChatOpenAI
+    from  langchain.llms import HuggingFaceHub
+    from langchain import HuggingFacePipeline
+    import torch
+
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
     if local_or_remote == 'local': assert llm_name not in OPENAI_MODELS, f"llm_name must be a HuggingFace model if local_or_remote is 'local'" 
@@ -105,7 +109,6 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', 
 
     return llm 
 
-
 class PredictionGenerator():
     """
         NOTE: This prediction generator currently only designed for models tuned on instruct datasets that are remote
@@ -121,19 +124,15 @@ class PredictionGenerator():
                   deepspeed_compat:bool=False,
                   effect_type:str='directly',
                 **kwargs ):
-        
-        # Can not get model logits scores from ChatOpenAI
-        if isinstance(llm, langchain.chat_models.ChatOpenAI) and parse_style == 'categories_perplexity': 
-            raise ValueError("Can not get model logits scores from ChatOpenAI") #type: ignore
-        
-        if parse_style in ['categories_perplexity', 'perplexity']: 
+                
+        if parse_style in ['category_perplxcity']: 
             assert local_or_remote == 'local', "Can not get model logits scores from remote models"
+            assert not isinstance(llm, langchain.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['distribution']:
-            if parse_style not in ['categories_perplexity', 'perplexity'] :
-                if ensemble_size == 1: raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
-                                                         To use ensemble size 1, please use parse_style='categories_perplexity'.\
+        if edge_value in ['distribution'] and parse_style in ['rules','categories_rules']:
+            assert ensemble_size>1, raise ValueError(f"Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
+                                                         To use ensemble size 1, please use parse_style='category_perplxcity'.\
                                                          Alternatively use ensemble size > 1, ")
             
         self.llm = llm
@@ -161,19 +160,19 @@ class PredictionGenerator():
         elif prompt_style == 'categorise':
             generation_params[k] = 10
         elif prompt_style == 'cot':
-            generation_params[k] = 210
+            generation_params[k] = 250
         
         return generation_params
 
-    def predict(self, li_li_prompts:list[list[str]])->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
+    def predict(self, li_li_prompts:list[list[str]], reverse_categories=False)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
         
         # Generate predictions
         li_li_preds : list[list[str]] = []
         li_li_prompts_fmtd : list[list[str]] = []
 
-        if self.parse_style == 'perplexity':
-            # Case: prompt_style == 'cateogrise' so we do not need to generate predictions just insert answers and compare perplexities
+        if self.parse_style == 'category_perplxcity':
+            # Case: prompt_style == 'cateogrise' so we do not need to generate predictions just insert answers into a template including original question and compare likelihoods of each output
             li_li_preds = li_li_prompts 
 
         elif isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
@@ -214,8 +213,7 @@ class PredictionGenerator():
                         ) for prompt in li_prompts ]
 
                 outputs = self.llm.generate(
-                    prompts=li_prompts_fmtd,
-                    stop = ['\n\n'] )
+                    prompts=li_prompts_fmtd)
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
             
@@ -268,15 +266,20 @@ class PredictionGenerator():
         if self.parse_style == 'rules':
             li_li_preds_parsed = [ self.parse_outp_rules(li_predictions) for li_predictions in li_li_preds]
 
-        elif self.parse_style == 'categories_perplexity':
-            li_li_preds_parsed = [ self.parse_outp_categories_perplexity(li_predictions) for li_predictions in li_li_preds]
+        # elif self.parse_style == 'category_perplxcity':
+        #     li_li_preds_parsed = [ self.parse_outp_cotcategories_perplexity(li_predictions) for li_predictions in li_li_preds]
         
         elif self.parse_style == 'categories_rules':
             li_li_preds_parsed = [ self.parse_outp_categories_rules(li_predictions) for li_predictions in li_li_preds]
         
-        elif self.parse_style == 'perplexity':
-            li_li_preds_parsed = [ self.parse_outp_perplexity(li_predictions) for li_predictions in li_li_preds]
+        # elif self.parse_style == 'category_perplxcity':
+        #     li_li_preds_parsed = [ self.parse_outp_category_perplexity(li_predictions) for li_predictions in li_li_preds]
 
+        elif self.parse_style == 'category_perplexity':
+            if self.prompt_style == 'categorise':
+                li_li_preds_parsed = [ self.parse_outp_category_perplexity(li_predictions, reverse_categories=reverse_categories) for li_predictions in li_li_preds]
+            elif self.prompt_style == 'cot_categorise':
+                li_li_preds_parsed = [ self.parse_outp_cotcategory_perplexity(li_predictions, reverse_categories=reverse_categories) for li_predictions in li_li_preds]
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
@@ -317,7 +320,7 @@ class PredictionGenerator():
     def parse_outp_categories_rules(self, li_predictions:list[str])-> list[dict[str, float]] :
         
         # Template to prompt language llm to simplify the answer to a Yes/No output
-        li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categories_answer_v2']
+        li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categories_answer_rules']
         template = copy.deepcopy( random.choice(li_template) )     
 
         
@@ -394,17 +397,22 @@ class PredictionGenerator():
 
         return li_preds
     
-    def parse_outp_categories_perplexity(self, li_predictions:list[str])->  list[dict[str,float]] :
+    def parse_outp_cotcategory_perplexity(self, li_predictions:list[str], reverse_categories:bool=False)->  list[dict[str,float]] :
 
-        # This function outputs a distribution of probabilities over the Yes, No, NA categories and they are calcaulated as follows:
+        # This function outputs a distribution of probabilities over Yes,:
         #   - First select a prompt which contains the initial statement to verify and a space for potential answers
-        #   - Then fill the prompt with each of the possible answers (Yes/No/NA) - creating 3 filled prompts
-        #   - Then calculate the perplexity of each of the filled prompts - we only get perplexity of the fill text, not the whole prompt
+        #   - Then fill the prompt with each of the possible answers (Yes/No) - creating 2 filled prompts
+        #   - Then calculate the perplexity of each of the filled prompts - we only get perplexity of the fill answered for the text, not the whole prompt
         #   - Then calculate the probability of each of the answers as the ratio of the perplexities
         #   - Finally, return the probabilities as a distribution over the Yes/No/NA categories
 
+        # New Addition:
+        #   - For each datum we repeat the experiment with the numbers for the categorical answers swapped
+        #   - Then we average the two sets of probabilities for each Yes / No
+        #   - This is done to account for the fact that the model may be biased towards one of the categorical numbers
 
-        li_templates = map_relationship_promptsmap[self.relationship]['li_prompts_categories_answer_v1']
+
+        li_templates = map_relationship_promptsmap[self.relationship]['li_prompts_categories_answer_perplexity']
         template = copy.deepcopy( random.choice(li_templates) )
 
         li_filledtemplate = [ template.format(statement=pred) for pred in li_predictions ]
@@ -416,7 +424,7 @@ class PredictionGenerator():
                                         system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] )
                                     for prompt in li_filledtemplate ] #Added some base model formatting
 
-        # For each template, create a set of 3 filled templates with each of the possible answers
+        # For each template, create a set of templates that ask a categorical question about the LLMs answer to if Budget Item affects an indiciator 
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         answers = list(  open_response_cats.keys() )
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
@@ -435,14 +443,20 @@ class PredictionGenerator():
             li_li_probability.append(li_probability)
         
         # Convert set of perplexities into a list of list with each sublist having N perplexities for each category of answer
-        li_map_probability = [ { open_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
+        _categorise_response_labels = copy.deepcopy(categorise_response_labels)
+        if reverse_categories:
+            _ = categorise_response_labels[answers[0]]
+            _categorise_response_labels[answers[0]] = _categorise_response_labels[answers[1]] 
+            _categorise_response_labels[answers[1]] = _
+
+        li_map_probability = [ { _categorise_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
 
         # Convert this to normalised probabilities
         li_map_probability = [  nomalized_probabilities(map_perplexities) for map_perplexities in li_map_probability ]
 
         return li_map_probability
     
-    def parse_outp_perplexity(self, li_predictions:list[str])->  list[dict[str,float]] :
+    def parse_outp_category_perplexity(self, li_predictions:list[str], reverse_categories=False)->  list[dict[str,float]] :
 
         # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate = [
@@ -451,7 +465,7 @@ class PredictionGenerator():
                                         system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] ).replace('  ',' ') )
                                     for prompt in li_predictions ] #Added some base model formatting
 
-        # For each template, create a set of 3 filled templates with each of the possible answers
+        # For each template, create a set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         answers = list(  categorise_cats.keys() )
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
@@ -465,12 +479,17 @@ class PredictionGenerator():
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
                 batch_size=len(categorise_cats.keys()), 
-                deepspeed_compat = self.deepspeed_compat,
                 category_token_len=1 ) 
             li_li_probability.append(li_probability)
         
-        # Convert set of perplexities into a list of list with each sublist having N perplexities for each category of answer
-        li_map_probability = [ { open_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
+        # Convert set of perplexities into a list of list with each sublist having a probability for each category of answer
+        _categorise_response_labels = copy.deepcopy(categorise_response_labels)
+        if reverse_categories:
+            _ = categorise_response_labels[answers[0]]
+            _categorise_response_labels[answers[0]] = _categorise_response_labels[answers[1]] 
+            _categorise_response_labels[answers[1]] = _
+
+        li_map_probability = [ { _categorise_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
 
         # Convert this to normalised probabilities
         li_map_probability = [  nomalized_probabilities(map_perplexities) for map_perplexities in li_map_probability ]
@@ -495,7 +514,7 @@ class PredictionGenerator():
         if self.edge_value == 'binary_weight':
             
             # For each prediction (list of samples), return 1 if Yes is the model prediction
-            def is_yes_mode(li_dict_pred) -> dict[str,float]:
+            def mode(li_dict_pred) -> dict[str,float]:
                 li_argmax_pred = [ max(d, key=d.get) for d in li_dict_pred ]
                 most_common_pred = Counter(li_argmax_pred).most_common(1)[0][0]                
                 y_val = 1.0 if most_common_pred == 'Yes' else 0.0
@@ -505,7 +524,7 @@ class PredictionGenerator():
                 d = {'Yes':y_val,'No':n_val,'NA':na_val}
                 return d
            
-            li_pred_agg = [ is_yes_mode(li_dict_pred) for li_dict_pred in li_li_predictions ]
+            li_pred_agg = [ mode(li_dict_pred) for li_dict_pred in li_li_predictions ]
   
         elif self.edge_value == 'distribution':
              
@@ -538,7 +557,6 @@ class PredictionGenerator():
             raise NotImplementedError(f"Aggregation method {self.edge_value} not implemented")
         
         return li_pred_agg #type: ignore
-
 
 def load_annotated_examples(k_shot_example_dset_name:str|None, 
                             relationship_type:str='budgetitem_to_indicator') -> list[dict[str,str]] | None:

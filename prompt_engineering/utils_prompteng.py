@@ -10,6 +10,8 @@ from random import sample
 from functools import reduce
 import operator
 import random
+from typing import Optional
+
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -51,7 +53,7 @@ li_prompts_open_template_open_response =[
 ]
 
 
-# region Prompts for the open prompt style methodology
+# region Prompts for the open prompt style methodology with categorical parse style
 # open_response_cats = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
 # open_response_labels = { 'A':'Yes', 'B':'No', 'C':'NA'}
 # open_response_cats = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
@@ -63,7 +65,7 @@ open_response_labels = { '1':'Yes', '2':'No'}
 
 
 # V2 encourages the response the have the category letter as a response 
-li_prompts_categories_answer_v1: list[str] = [
+li_prompts_categories_answer_perplexity: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
 
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
@@ -84,7 +86,7 @@ li_prompts_categories_answer_v1: list[str] = [
 ]
 
 # V2 encourages the response the have the category name as a response
-li_prompts_categories_answer_v2: list[str] = [
+li_prompts_categories_answer_rules: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
 
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
@@ -104,7 +106,6 @@ li_prompts_categories_answer_v2: list[str] = [
 # endregion
 
 # region Prompts for the category prompt style methodology
-# categorise_cats = { '1':'Spending On "Government Budget Item" Does Affect "Socio-Economic/Health Indicator"' , '2':'"Spending On Government Budget Item" Does Not Affect "Socio-Economic/Health Indicator"' }
 categorise_cats = { '1': 'Spending on "{budget_item}" does affect "{indicator}"' , '2':'Spending on "{budget_item}" Does Not Affect "{indicator}"' }
 categorise_response_labels = { '1':'Yes', '2':'No' }
 
@@ -113,6 +114,13 @@ li_prompts_categorise_template: list[str] = [
 
     f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {categorise_cats["1"]}\n2) {categorise_cats["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
 ]
+
+li_prompts_categorise_template_reversed: list[str] = [
+    # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {categorise_cats["1"]}, 2) {categorise_cats["2"]}.'
+
+    f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {categorise_cats["2"]}\n2) {categorise_cats["1"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
+]
+
 # endregion
 
 # region Prompts for the cot prompt style methodology
@@ -127,8 +135,8 @@ budgetitem_to_indicator_prompts = {
 
     'li_prompts_open_template':li_prompts_open_template,
     'li_prompts_open_template_open_response':li_prompts_open_template_open_response,
-    'li_prompts_categories_answer_v1':li_prompts_categories_answer_v1,
-    'li_prompts_categories_answer_v2':li_prompts_categories_answer_v2,
+    'li_prompts_categories_answer_perplexity':li_prompts_categories_answer_perplexity,
+    'li_prompts_categories_answer_rules':li_prompts_categories_answer_rules,
     
 
     'li_prompts_categorise_template':li_prompts_categorise_template,
@@ -556,15 +564,20 @@ def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
         return probs
 
 class PromptBuilder():
-    def __init__(self, prompt_style:str, k_shot:int,
+    def __init__(self, 
+                 prompt_style:str,
+                 k_shot:int,
                  ensemble_size:int, 
                  examples_dset:list[dict]|None=None, 
                  effect_type:str="arbitrary", 
                  relationship:str="budgetitem_to_indicator",
                 seed:int=10  ) -> None:
+        """
+            unbias_categorisations (bool): If true, the PromptBuilder builds two categorical answer prompts with the order of categories reversed in order to remove any bias towards select 1st of 2nd answer  
+        """
         
         assert prompt_style in ['yes_no','open','categorise','cot']
-        assert effect_type in [ 'arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
+        assert effect_type in ['arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
 
@@ -578,13 +591,14 @@ class PromptBuilder():
         self.examples_dset = examples_dset
         self.effect_type = '' if effect_type == 'arbitrary' else effect_type 
         self.relationship = relationship
+        self.seed = seed
         random.seed(seed)
         # when arbitrary is subbed into the prompt template, it will result in a double space in the prompt. We use .replace("  ", " ") to remove this
 
 
-    def __call__(self, batch:list[dict]) -> list[list[str]]:
+    def __call__(self, batch:list[dict], unbias_categorisations:Optional[bool]=False) -> list[list[str]]:
         """
-        Given a batch of examples, this function returns a list of prompts for each example in the batch
+            Given a batch of examples, this function returns a list of prompts for each example in the batch
         """
 
         # First we generate an ensemble of templates to be filled in for each element in the batch
@@ -593,11 +607,14 @@ class PromptBuilder():
         elif self.prompt_style == 'open':
             templates = self._open_template()
         elif self.prompt_style == 'categorise':
-            templates = self._categorise_template()
+            # To ensure both the templates selected are the same for each example in the batch, we use the seed to ensure the random selection is the same for each example
+            templates = self._categorise_template(reverse_categories_order=unbias_categorisations, seed=self.seed)
         elif self.prompt_style == 'cot':
-            templates: list[str] = self._cot_template()
+            templates = self._cot_template(reverse_categories_order=unbias_categorisations, seed=self.seed)
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
+    
+
 
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
         if self.prompt_style in ['yes_no']:
@@ -605,13 +622,13 @@ class PromptBuilder():
         elif self.prompt_style in ['open']:
             li_li_prompts = self.fill_template_open(templates, batch)
         elif self.prompt_style in ['categorise']:
-            li_li_prompts = self.fill_template_categorise(templates, batch)
+            li_li_prompts = self.fill_template_categorise(templates, batch, reverse_categories_order=unbias_categorisations)
         elif self.prompt_style in ['cot']:
             li_li_prompts = self.fill_template_cot(templates, batch)
         
         else:
             li_li_prompts = []
-            
+         
         return li_li_prompts
     
     def _yes_no_template(self) -> list[str]:
@@ -681,10 +698,18 @@ class PromptBuilder():
 
         return templates
 
-    def _categorise_template(self)  -> list[str]:
+    def _categorise_template(self, reverse_categories_order=False, seed=None)  -> list[str]:
+        """
+            If reverse_categories_order is True, then the categories are reversed. Used in order to remove bias in the model towards the first category.
+            seed sets the seed controlling the order of generation
+        """
+        if seed is not None:
+            random.seed(seed)
 
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_template']
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_template' if not reverse_categories_order else 'li_prompts_categorise_template_reversed']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
+
+        assert len(templates)>=self.ensemble_size, f"len(templates)={len(templates)} < self.ensemble_size={self.ensemble_size}. Can not sample {self.ensemble_size} prompts from 'li_prompts_categorise_template' prompts."
 
         for ens_idx in range(self.ensemble_size):
 
@@ -709,9 +734,12 @@ class PromptBuilder():
             templates[ens_idx] = prompt
         return templates
     
-    def _cot_template(self)  -> list[str]:
+    def _cot_template(self, reverse_categories_order=False, seed=None)  -> list[str]:
+        if seed is not None:
+            random.seed(seed)
 
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_cot_categorise_template']
+        
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categorise_template' if not reverse_categories_order else 'li_prompts_categorise_template_reversed']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
 
         for ens_idx in range(self.ensemble_size):
@@ -820,7 +848,7 @@ class PromptBuilder():
         
         return li_li_prompts
 
-    def fill_template_categorise(self, templates:list[str], batch:list[dict])->list[list[str]]:
+    def fill_template_categorise(self, templates:list[str], batch:list[dict], reverse_categories_order:bool=False)->list[list[str]]:
 
         """Fill in the template with the target and k_shot context"""
 
@@ -833,14 +861,21 @@ class PromptBuilder():
             prompt = None
             # for each member of the ensemble (note each ensemble member has a different prompt template)
             categorise_response_labels_inverted = {v:k for k,v in categorise_response_labels.items()}
-            for ens_idx in range(self.ensemble_size):
-                # This indented code section fills in the k_shot context with random extracts from dataset
+            if reverse_category_order is True:
+                _categorise_response_labels_inverted = copy.deepcopy(categorise_response_labels_inverted)
+                keys = list(_categorise_response_labels_inverted.keys())
+                _ = _categorise_response_labels_inverted[keys[0]]
+                _categorise_response_labels_inverted[keys[0]] = _categorise_response_labels_inverted[keys[1]] 
+                _categorise_response_labels_inverted[keys[1]] = _                
 
+            for ens_idx in range(self.ensemble_size):
+                
+                # This indented code section fills in the k_shot context with random extracts from dataset
                 if self.k_shot == 0:
                     format_dict = {}
                 # sample k items from our train set into a format dict for the template
                 elif self.relationship == 'budgetitem_to_indicator':
-                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":categorise_response_labels_inverted[d['label']] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
+                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":_categorise_response_labels_inverted[d['label']] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
                 elif self.relationship == 'indicator_to_indicator':
                     raise NotImplementedError("Categorise response not implemented for indicator_to_indicator")
                     format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
@@ -880,7 +915,6 @@ class PromptBuilder():
                 if self.relationship == 'budgetitem_to_indicator':
                     prompt = templates[ens_idx].format(
                         target_budget_item= row['budget_item'], target_indicator=row['indicator'],
-                        
                     )
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
