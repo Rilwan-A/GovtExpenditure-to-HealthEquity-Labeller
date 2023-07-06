@@ -31,7 +31,6 @@ from prompt_engineering.langchain.utils import load_annotated_examples, load_llm
 
 
 import yaml
-import openai
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
@@ -80,7 +79,7 @@ def main(
     if prompt_style == 'yes_no':
         assert parse_style == 'rules'
     elif prompt_style == 'open':
-        assert parse_style =='category_rules
+        assert parse_style == 'categories_rules'
     elif prompt_style == 'categorise':
         assert parse_style == 'perplexity'
     elif prompt_style == 'cot_categorise':
@@ -89,7 +88,7 @@ def main(
         raise ValueError(f"Invalid prompt_style: {prompt_style}")
 
     # Setup Logging
-    logging = setup_logging_predict(llm_name)
+    logging = setup_logging_predict(llm_name, debugging)
 
     logging.info("Starting Prediction Script with model: {}".format(llm_name))
 
@@ -109,14 +108,14 @@ def main(
 
     # Create Prompt Builders
     logging.info("\tCreating Prompt Builders")
-    prompt_builder_b2i = None if predict_b2i is False else PromptBuilder(prompt_style, k_shot_b2i,
+    prompt_builder_b2i = None if predict_b2i is False else PromptBuilder(llm, prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type,
                                         relationship='budgetitem_to_indicator',
                                         seed=data_load_seed,
                                         )
     
-    prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(prompt_style, k_shot_i2i,
+    prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(llm, prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type,
                                                                            relationship='indicator_to_indicator',
@@ -358,17 +357,18 @@ def predict_batches(prompt_builder:PromptBuilder,
             logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
 
         # Create prompts
-        batch_prompt_ensembles = prompt_builder(batch)
+        batch_prompt_ensembles, batch_li_prompts_fmtd = prompt_builder(batch)
         
         # Generate predictions
-        batch_li_prompts_fmtd, batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
+        batch_pred_ensembles, batch_pred_ensembles_parsed = prediction_generator.predict(batch_prompt_ensembles)
 
         # Generate any predictions with category order reversed
         if unbias_categorisations:
-            batch_prompt_ensembles_reversed = prompt_builder(batch, reverse_order=True)
-            batch_li_prompts_fmtd_reversed, batch_pred_ensembles_reversed, batch_pred_ensembles_parsed_reversed = prediction_generator.predict(batch_prompt_ensembles_reversed, reverse_categories=True)
+            batch_prompt_ensembles_reversed, batch_li_prompts_fmtd_reversed = prompt_builder(batch, reverse_categories_order=True)
+            batch_pred_ensembles_reversed, batch_pred_ensembles_parsed_reversed = prediction_generator.predict(batch_prompt_ensembles_reversed, reverse_categories=True)
 
             # Merge the two sets of outputs, datum for datum merge
+            batch_prompt_ensembles = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_prompt_ensembles, batch_prompt_ensembles_reversed) ]
             batch_li_prompts_fmtd = [ li_prompts_fmtd + li_prompts_fmtd_reversed for li_prompts_fmtd, li_prompts_fmtd_reversed in zip(batch_li_prompts_fmtd, batch_li_prompts_fmtd_reversed) ]
             batch_pred_ensembles = [ pred_ensembles + pred_ensembles_reversed for pred_ensembles, pred_ensembles_reversed in zip(batch_pred_ensembles, batch_pred_ensembles_reversed) ]
             batch_pred_ensembles_parsed = [ pred_ensembles_parsed + pred_ensembles_parsed_reversed for pred_ensembles_parsed, pred_ensembles_parsed_reversed in zip(batch_pred_ensembles_parsed, batch_pred_ensembles_parsed_reversed) ]
@@ -456,7 +456,7 @@ def parse_args():
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot_categorise' ], default='open', help='Style of prompt' )
-    parser.add_argument('--parse_style', type=str, choices=['rules', 'category_rules', 'category_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
+    parser.add_argument('--parse_style', type=str, choices=['rules', 'categories_rules', 'categories_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
 
     parser.add_argument('--ensemble_size', type=int, default=1 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
