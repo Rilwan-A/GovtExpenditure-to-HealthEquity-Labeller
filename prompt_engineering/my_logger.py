@@ -2,19 +2,22 @@ import logging
 import os, sys
 from datetime import datetime
 
-def setup_logging(filename):
-    # Create logging directory if it doesn't exist
-    if not os.path.exists('logging'):
-        os.makedirs('logging')
+def setup_logging(filename, debugging=False):
+    if not debugging:
+        # Create logging directory if it doesn't exist
+        if not os.path.exists('logging'):
+            os.makedirs('logging')
 
-    log_filename = f'logging/{filename}'
+        log_filename = f'logging/{filename}'
+    else:
+        log_filename = None
 
     # Configure logging
     logging.basicConfig(filename=log_filename, level=logging.INFO, 
                         format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
     return logging
 
-def setup_logging_predict( llm_name ):
+def setup_logging_predict( llm_name, debugging=False ):
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H%M%S")
 
@@ -22,7 +25,7 @@ def setup_logging_predict( llm_name ):
 
     log_filename = f'{llm_name}_{dt_string}.log'
 
-    logging = setup_logging(log_filename)
+    logging = setup_logging(log_filename, debugging)
 
     sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
 

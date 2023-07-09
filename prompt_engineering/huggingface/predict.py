@@ -338,7 +338,6 @@ class PredictionGenerator():
         
         return li_predictions
 
-
 def load_dataset(dset_name:str, random_state_seed:int=10, **kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
     
     if dset_name == 'spot':

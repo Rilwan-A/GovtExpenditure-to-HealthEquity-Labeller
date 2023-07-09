@@ -16,7 +16,7 @@ def main(model_id, json_file, max_tokens_per_chunk=None):
     logging = setup_logging_preprocess( json_file, model_id )
 
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
 
     # Load data from JSON file

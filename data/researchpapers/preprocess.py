@@ -99,7 +99,7 @@ def main(
                                      )
 
     # Add labels to dataset
-    dataset_dict = dataset_dict.map( lambda batch: create_labels_with_mask(batch, tokenizer), batched=False  )
+    dataset_dict = dataset_dict.map( lambda batch: create_labels_with_mask(batch, tokenizer), batched=False )
 
     # Save Dataset in torch format
     dataset_train = dataset_dict['train']
@@ -181,7 +181,7 @@ def _split_text_parallel(texts: str, max_words_per_chunk: int, min_words_per_chu
     for text in texts:
     
         # First split by paragraph / section
-        text_split: List[str] = split_paragraphs(text, min_words_per_chunk)
+        text_split: list[str] = split_paragraphs(text, min_words_per_chunk)
 
         # For each txt in text_split, Splitting based on max_len, with overlap
         text_split_split = [ list(map( lambda seq:  ' '.join(seq).strip(' '),

@@ -19,6 +19,8 @@ from langchain.schema import (
 from time import sleep
 
 import peft
+from functools import lru_cache
+
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -35,15 +37,10 @@ li_prompts_yes_no_question = [
 ]
 
 li_prompts_openended_question = [    
-
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
-
     # 'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
-
     # 'Does local government spending on \"{budget_item}\" {effect_type} relate to the level of \"{indicator}\"?'
-
     # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
-    
     # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?'
 ]
 
@@ -52,8 +49,10 @@ li_prompts_openended_question = [
 # map_category_label = { 'A':'Yes', 'B':'No', 'C':'NA'}
 # map_category_answer = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
 
-map_category_answer = { '1':'Spending on "{budget_item}" Does {effect_type} Affect "{indicator}"', '2':'Spending on "{budget_item}" Does Not {effect_type} Affect "{indicator}"' }
-map_category_label = { '1':'Yes', '2':'No'}
+map_category_answer = { '1':'Local government spending on "{budget_item}" does {effect_type} affect "{indicator}"', 
+                                        '2':'Local government spending on "{budget_item}" does not {effect_type} affect "{indicator}"' }
+map_category_label = {'1':'Yes',
+                                    '2':'No'}
 
 
 li_prompts_categorical_question_w_reasoning: list[str] = [
@@ -72,25 +71,35 @@ li_prompts_categorical_question_w_reasoning: list[str] = [
     # NOTE: All the above prompts included a letters for the category labels, issue with this is that when using perplexity method then the perplexity of category labels can also include probability of the model produce open answers that start with label lettter.
 
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
-    f'The statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
+    # f'The statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
+    # f'The Statement below expresses an opinion on whether government spending on "{{budget_item}}" affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\t2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement'
+    f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement'
 
 ]
 
 li_prompts_categorical_question_w_reasoning_reversed: list[str] = [
-        f'The statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["2"]}, 2) {map_category_answer["1"]}.\nStatement: {"{statement}"}'
-        ]
+        # f'The Statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["2"]}, 2) {map_category_answer["1"]}.\nStatement: {"{statement}"}'
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\t2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
+    f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
+    ]
 
 
 li_prompts_categorical_question: list[str] = [
     # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.'
-
-    f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
-]
+    # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
+    # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}',
+    # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
+    f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
+    ]
 
 li_prompts_categorical_question_reversed: list[str] = [
     # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.'
-
-    f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
+    # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
+    # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
+    
+    # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
+    f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
 ]
 
 # endregion
@@ -528,13 +537,15 @@ def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
 class PromptBuilder():
     def __init__(self, 
                  llm,
+                 llm_name,
                  prompt_style:str,
                  k_shot:int,
                  ensemble_size:int, 
                  examples_dset:list[dict]|None=None, 
                  effect_type:str="arbitrary", 
                  relationship:str="budgetitem_to_indicator",
-                seed:int=10  ) -> None:
+                 seed:int=10,
+                 **kwargs ) -> None:
         """
             unbias_categorisations (bool): If true, the PromptBuilder builds two categorical answer prompts with the order of categories reversed in order to remove any bias towards select 1st of 2nd answer  
         """
@@ -548,6 +559,8 @@ class PromptBuilder():
             assert k_shot == 0, "K-shot must be 0 for cot prompts"
 
         self.llm = llm
+        self.llm_name = llm_name
+        self.tokenizer = kwargs.get('tokenizer', None)
         self.prompt_style = prompt_style
         self.k_shot = k_shot    # Number of examples to use as context for each prompt
         self.ensemble_size = ensemble_size # Number of different prompts to use per prediction
@@ -585,7 +598,7 @@ class PromptBuilder():
         elif self.prompt_style == 'categorise':
             li_filled_templates, li_li_prompts_fmtd = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'cot_categorise':
-            li_filled_templates, li_li_prompts_fmtd = self.fill_template_cot(templates, batch)
+            li_filled_templates, li_li_prompts_fmtd = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
         
         else:
             li_filled_templates = []
@@ -822,7 +835,7 @@ class PromptBuilder():
         
         return templates
 
-    def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> tuple(list[list[str]], list[list[str]]):
+    def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> tuple[list[list[str]], list[list[str]]]:
         """Fill in the template with the target and k_shot context"""
 
         li_li_prompts = []
@@ -861,11 +874,12 @@ class PromptBuilder():
             li_li_prompts.append(li_prompts)
         
         # Adding Prediction
-        li_li_prompts_fmtd, li_li_filled_templates = self.generate(li_li_prompts)
+        li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts)
+        li_li_discourse = [ [ prompt_fmtd+statement for prompt_fmtd, statement in zip(li_prompts, li_statement) ] for li_prompts, li_statement in zip(li_li_prompts_fmtd, li_li_statement) ]
 
-        return li_li_prompts_fmtd, li_li_filled_templates
+        return li_li_statement, li_li_discourse
 
-    def fill_template_open(self, templates:list[str], batch:list[dict])->tuple(list[list[str]], list[list[str]]):
+    def fill_template_open(self, templates:list[str], batch:list[dict])->tuple[list[list[str]], list[list[str]]]:
         
         assert self.ensemble_size == 1, "Open ended questions only support ensemble_size=1, since map_category_answer is has one dictionary"
         li_answer_templates = [map_category_answer]
@@ -922,28 +936,28 @@ class PromptBuilder():
             li_li_prompts.append(li_prompts)
         
         # Generate the Open Response
-        li_li_prompts_fmtd, li_li_statements = self.generate(li_li_prompts)
-
+        li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts)
+        li_li_discourse = [ [ prompt_fmtd+reasoning for prompt_fmtd, reasoning in zip(li_prompts, li_reasoning) ] for li_prompts, li_reasoning in zip(li_li_prompts_fmtd, li_li_reasoning) ]
         # Put the response in a categorical question template
-        li_filled_templates = self._fill_template_response_in_categorical_question(li_li_statements)
+        li_filled_templates = self._fill_template_response_in_categorical_question(li_li_statement, batch)
 
-        return li_li_statements, li_li_prompts_fmtd
+        return li_filled_templates, li_li_discourse
     
-    def _fill_template_response_in_categorical_question(self, li_li_statements, batch):
+    def _fill_template_response_in_categorical_question(self, li_li_statement, batch):
         li_li_filled_templates = []
 
-        for li_statements, row in zip(li_li_statements, batch):
+        for li_statements, row in zip(li_li_statement, batch):
             # Template to prompt language llm to simplify the answer to a Yes/No output
             li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categorical_question_w_reasoning']
             template = copy.deepcopy( random.choice(li_template) )     
 
-            li_filledtemplate = [ template.format(statement=statement, effect_type=self.effect_type, budget_item=row['budget_item'], indicator=row['indicator'], effect_type=self.effect_type ).replace('  ',' ') for statement in li_statements ]
+            li_filledtemplate = [ template.format(statement=statement, effect_type=self.effect_type, budget_item=row['budget_item'], indicator=row['indicator'] ).replace('  ',' ') for statement in li_statements ]
 
             li_li_filled_templates.append(li_filledtemplate)
 
         return li_li_filled_templates 
 
-    def fill_template_categorise(self, templates:list[str], batch:list[dict], reverse_categories_order:bool=False)->tuple(list[list[str]], list[list[str]]):
+    def fill_template_categorise(self, templates:list[str], batch:list[dict], reverse_categories_order:bool=False)->tuple[list[list[str]], list[list[str]]]:
 
         """Fill in the template with the target and k_shot context"""
 
@@ -995,7 +1009,7 @@ class PromptBuilder():
         li_filled_prompt = li_li_prompts
         return li_filled_prompt, []
 
-    def fill_template_cot(self, templates:list[str], batch:list[dict], reverse_categories_order:bool=False)->tuple(list[list[str]], list[list[str]]):
+    def fill_template_cot(self, templates:list[str], batch:list[dict], reverse_categories_order:bool=False)->tuple[list[list[str]], list[list[str]]]:
 
         li_li_prompts = []
 
@@ -1024,46 +1038,13 @@ class PromptBuilder():
             li_li_prompts.append(li_prompts)
 
         # Now all prompts created get the 1st Step Chain of Thought response from the LLM
-        li_li_reasoning, li_li_prompts_fmtd = self._fill_template_cot_llm_thought(li_li_prompts)
-
+        li_li_prompts_fmtd, li_li_reasoning = self.generate(li_li_prompts)
+        li_li_discourse = [ [ prompt_fmtd+reasoning for prompt_fmtd, reasoning in zip(li_prompts, li_reasoning) ] for li_prompts, li_reasoning in zip(li_li_prompts_fmtd, li_li_reasoning) ]
 
         # Now insert each llm response reason into the final template including the COT conversation
-        li_li_prompts = self._fill_template_cot_classifyconv( li_li_reasoning, batch, reverse_categories_order )
+        li_li_filledtemplate = self._fill_template_cot_classifyconv( li_li_reasoning, batch, reverse_categories_order )
         
-        return li_li_prompts, li_li_prompts_fmtd
-
-    def _fill_template_cot_llm_thought(self, li_li_prompts:list[list[str]]):
-        
-        li_li_preds : list[list[str]] = []
-        li_li_prompts_fmtd : list[list[str]] = []
-
-        if isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
-            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
-            
-            for k,v in self.get_generation_params(self.prompt_style).items():
-                try:
-                    self.llm.pipeline._forward_params[k] = v
-                except AttributeError:
-                    self.llm.pipeline._forward_params = {k:v}
-
-            for li_prompts in li_li_prompts:
-                
-                # Formatting prompts to adhere to format required by Base Language Model
-                li_prompts_fmtd = [
-                    map_llmname_input_format(self.llm_name,
-                        user_message = prompt,
-                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]
-                        ) for prompt in li_prompts ]
-
-                outputs = self.llm.generate(
-                    prompts=li_prompts_fmtd)
-                
-                li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
-            
-                li_li_prompts_fmtd.append(li_prompts_fmtd)
-                li_li_preds.append(li_preds)
-        
-        return li_li_preds, li_li_prompts_fmtd
+        return li_li_filledtemplate, li_li_discourse
 
     def _fill_template_cot_classifyconv(self, li_li_reasoning:list[list[str]], batch:list[dict], reverse_categories_order:bool=False, seed=None  )->list[list[str]]:
         if seed is not None:
