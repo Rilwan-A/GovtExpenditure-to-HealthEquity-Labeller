@@ -84,7 +84,7 @@ def main(
     
     # Fixing lack of spaces between parts of text
     if split_combined_words:
-        llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local' )
+        llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local', 0 )
         llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk
         
         dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)

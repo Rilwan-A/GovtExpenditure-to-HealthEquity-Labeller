@@ -348,7 +348,7 @@ def load_dataset(dset_name:str, random_state_seed:int=10, **kwargs) -> tuple[pd.
         dset = dset[dset['type'] == 'Outcome']
 
         # Creating target field
-        dset['label'] = 'Yes'
+        dset['related'] = 'Yes'
 
         # Rename columns to match the format of the other datasets
         dset = dset.rename( columns={'category': 'budget_item', 'name':'indicator' } )
@@ -367,10 +367,10 @@ def load_dataset(dset_name:str, random_state_seed:int=10, **kwargs) -> tuple[pd.
         dset = utils_prompteng.create_negative_examples(dset, random_state=random_state )
 
         # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
-        dset = dset.groupby(['budget_item','label']).filter(lambda x: len(x) > 1)
+        dset = dset.groupby(['budget_item','related']).filter(lambda x: len(x) > 1)
     
         # perform stratified split of a dataframe into train and test subsets
-        train_dset, test_dset = train_test_split(dset, test_size=0.8, random_state=random_state, stratify=dset[['budget_item','label']])
+        train_dset, test_dset = train_test_split(dset, test_size=0.8, random_state=random_state, stratify=dset[['budget_item','related']])
 
     elif dset_name == 'england':
         raise NotImplementedError

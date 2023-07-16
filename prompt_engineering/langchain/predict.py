@@ -15,11 +15,12 @@
 
 import os,sys
 sys.path.append(os.getcwd())
+from prompt_engineering.my_logger import setup_logging_predict
+
 from argparse import ArgumentParser
 
 import pandas as pd
 
-from functools import reduce
 import json as json
 
 # Testing models to see how well they aligned to expert's annotations of the SPOT dataset with yes_no prompt style w/ rule based parsing and binary weight edge value 
@@ -28,16 +29,12 @@ from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODEL
 
 from prompt_engineering.langchain.utils import load_annotated_examples, load_llm
 
-
-
 import yaml
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
-import torch
 import random
 
-from prompt_engineering.my_logger import setup_logging_predict
 
 def main(
     llm_name:str,
@@ -89,12 +86,32 @@ def main(
     # Setup Logging
     logging = setup_logging_predict(llm_name, debugging)
 
+    # Log Arguments
+    logging.info("Arguments:")
+    logging.info(f"\tllm_name: {llm_name}")
+    logging.info(f"\texp_name: {exp_name}")
+    logging.info(f"\tfinetuned: {finetuned}")
+    logging.info(f"\tpredict_b2i: {predict_b2i}")
+    logging.info(f"\tpredict_i2i: {predict_i2i}")
+    logging.info(f"\tprompt_style: {prompt_style}")
+    logging.info(f"\tparse_style: {parse_style}")
+    logging.info(f"\tensemble_size: {ensemble_size}")
+    logging.info(f"\teffect_type: {effect_type}")
+    logging.info(f"\tedge_value: {edge_value}")
+    # logging.info(f"\tinput_file: {input_file}")
+    logging.info(f"\tk_shot_b2i: {k_shot_b2i}")
+    logging.info(f"\tk_shot_i2i: {k_shot_i2i}")
+    logging.info(f"\tk_shot_example_dset_name_b2i: {k_shot_example_dset_name_b2i}")
+    logging.info(f"\tk_shot_example_dset_name_i2i: {k_shot_example_dset_name_i2i}")
+    logging.info(f"\tunbias_categorisations: {unbias_categorisations}")
+    
+
     logging.info("Starting Prediction Script with model: {}".format(llm_name))
 
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key)
+        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -164,11 +181,11 @@ def main(
     logging.info("\tRunning Predictions")
     (li_prompt_ensemble_b2i, li_pred_ensemble_b2i,
         li_pred_agg_b2i, 
-        li_prompt_ensemble_fmtd_b2i) = (None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, unbias_categorisations, logging) # type: ignore #ignore
+        li_discourse_ensemble_b2i) = (None, None, None, None) if (predict_b2i is False) else predict_batches( prompt_builder_b2i, prediction_generator_b2i, li_record_b2i, batch_size, unbias_categorisations, logging) # type: ignore #ignore
         
     (li_prompt_ensemble_i2i, li_pred_ensemble_i2i,
          li_pred_agg_i2i,
-         li_prompt_ensemble_fmtd_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, unbias_categorisations, logging) #type: ignore 
+         li_discourse_ensemble_i2i) = (None, None, None, None) if (predict_i2i is False) else predict_batches( prompt_builder_i2i, prediction_generator_i2i, li_record_i2i, batch_size, unbias_categorisations, logging) #type: ignore 
     logging.info("\tPredictions Complete")
 
     # saving to file
@@ -189,6 +206,7 @@ def main(
                             "k_shot_example_dset_name_b2i": k_shot_example_dset_name_b2i,
                             "k_shot_example_dset_name_i2i": k_shot_example_dset_name_i2i,
                             "local_or_remote": local_or_remote,
+                            "unbias_categorisations": unbias_categorisations,
                         }
         
         # Save experiment config
@@ -207,10 +225,10 @@ def main(
 
         #unbatching data
         if predict_b2i: 
-            save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_prompt_ensemble_fmtd_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
+            save_experiment(li_record_b2i, li_prompt_ensemble_b2i, li_discourse_ensemble_b2i, li_pred_ensemble_b2i, li_pred_agg_b2i, relationship='budgetitem_to_indicator', save_dir=save_dir) #type: ignore
         
         if predict_i2i: 
-            save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_prompt_ensemble_fmtd_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
+            save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_discourse_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
         logging.info("\tOutput Saved")
 
@@ -251,7 +269,7 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
         # set_budget_items = sorted(set(li_budget_items))
         # set_indicator = sorted(set(li_indicator))
 
-        li_labels = json_data.get('label', [None]*len(li_budget_items) )
+        li_labels = json_data.get('related', [None]*len(li_budget_items) )
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
         df = pd.read_csv(input_file)
@@ -259,7 +277,7 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
 
         li_budget_items = df['budget_item'].tolist()
         li_indicator = df['indicator'].tolist()
-        li_labels = df['label'].tolist() if 'label' in df.columns else [None]*len(li_budget_items)
+        li_labels = df['related'].tolist() if 'related' in df.columns else [None]*len(li_budget_items)
 
         # set_budget_items = sorted(set(li_budget_items))
         # set_indicator = sorted(set(li_indicator))
@@ -275,7 +293,7 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
         raise NotImplementedError(f"input_file must be a json or csv file name, or a Django UploadedFile Object, not {input_file}")
     
     # Creating all possible combinations of budget_items and indicators
-    li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'label':label  } for budget_item, indicator, label in zip( li_budget_items, li_indicator, li_labels) ] 
+    li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'related':label  } for budget_item, indicator, label in zip( li_budget_items, li_indicator, li_labels) ] 
     
     if debugging:
         random.seed(data_load_seed)
@@ -305,7 +323,7 @@ def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_see
         
         li_indicator1 = json_data['indicator1']
         li_indicator2  = json_data['indicator2']
-        li_labels = json_data.get('label', [None]*len(li_indicator1) )
+        li_labels = json_data.get('related', [None]*len(li_indicator1) )
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
         df = pd.read_csv(input_file)
@@ -313,7 +331,7 @@ def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_see
 
         li_indicator1 = df['indicator1'].tolist()
         li_indicator2 = df['indicator2'].tolist()
-        li_labels = df['label'].tolist() if 'label' in df.columns else [None]*len(li_indicator1)
+        li_labels = df['related'].tolist() if 'related' in df.columns else [None]*len(li_indicator1)
 
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
@@ -327,7 +345,7 @@ def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_see
            
 
     # Creating all possible combinations of budget_items and indicators
-    li_record_i2i = [ {'indicator1':indicator1, 'indicator2':indicator2, 'label':label  } for indicator1, indicator2, label in zip( li_indicator1, li_indicator2, li_labels) ] 
+    li_record_i2i = [ {'indicator1':indicator1, 'indicator2':indicator2, 'related':label  } for indicator1, indicator2, label in zip( li_indicator1, li_indicator2, li_labels) ] 
     
     if debugging:
         li_record_i2i = random.sample(li_record_i2i, 1)
@@ -343,7 +361,7 @@ def predict_batches(prompt_builder:PromptBuilder,
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
-    li_prompt_ensemble_fmtd = []
+    li_discourse_ensemble = []
     li_pred_ensemble = []
     li_pred_agg = []
 
@@ -354,19 +372,19 @@ def predict_batches(prompt_builder:PromptBuilder,
             logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
 
         # Create prompts
-        batch_prompt_ensembles, batch_li_prompts_fmtd = prompt_builder(batch)
+        batch_filled_template, batch_li_li_discourse = prompt_builder(batch)
         
         # Generate predictions
-        batch_pred_ensembles = prediction_generator.predict(batch_prompt_ensembles)
+        batch_pred_ensembles = prediction_generator.predict(batch_filled_template)
 
         # Generate any predictions with category order reversed
         if unbias_categorisations:
-            batch_prompt_ensembles_reversed, batch_li_prompts_fmtd_reversed = prompt_builder(batch, reverse_categories_order=True)
-            batch_pred_ensembles_reversed = prediction_generator.predict(batch_prompt_ensembles_reversed, reverse_categories=True)
+            batch_filled_template_reversed, batch_li_li_discourse_reversed = prompt_builder(batch, reverse_categories_order=True)
+            batch_pred_ensembles_reversed = prediction_generator.predict(batch_filled_template_reversed, reverse_categories=True)
 
             # Merge the two sets of outputs, datum for datum merge
-            batch_prompt_ensembles = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_prompt_ensembles, batch_prompt_ensembles_reversed) ]
-            batch_li_prompts_fmtd = [ li_prompts_fmtd + li_prompts_fmtd_reversed for li_prompts_fmtd, li_prompts_fmtd_reversed in zip(batch_li_prompts_fmtd, batch_li_prompts_fmtd_reversed) ]
+            batch_filled_template = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_filled_template, batch_filled_template_reversed) ]
+            batch_li_li_discourse = [ li_discourse + li_discourse_reversed for li_discourse, li_discourse_reversed in zip(batch_li_li_discourse, batch_li_li_discourse_reversed) ]
             batch_pred_ensembles = [ pred_ensembles + pred_ensembles_reversed for pred_ensembles, pred_ensembles_reversed in zip(batch_pred_ensembles, batch_pred_ensembles_reversed) ]
             
             # Let the aggregation step handle the rest
@@ -375,17 +393,17 @@ def predict_batches(prompt_builder:PromptBuilder,
         batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles)
 
         # Extract predictions from the generated text
-        li_prompt_ensemble.extend(batch_prompt_ensembles)  # type: ignore
-        li_prompt_ensemble_fmtd.extend(batch_li_prompts_fmtd) # type: ignore
+        li_prompt_ensemble.extend(batch_filled_template)  # type: ignore
+        li_discourse_ensemble.extend(batch_li_li_discourse) # type: ignore
         li_pred_ensemble.extend( batch_pred_ensembles ) # type: ignore
         li_pred_agg.extend(batch_pred_agg) # type: ignore
     
-    return li_prompt_ensemble, li_pred_ensemble, li_pred_agg, li_prompt_ensemble_fmtd
+    return li_prompt_ensemble, li_pred_ensemble, li_pred_agg, li_discourse_ensemble
 
 def save_experiment( 
     li_record:list[dict[str,str]],
     li_prompt_ensemble:list[list[str]],
-    li_prompt_ensemble_fmtd:list[list[str]],
+    li_discourse_ensemble:list[list[str]],
     li_pred_ensemble:list[list[str]],
     li_pred_agg,
     relationship:str='budgetitem_to_indicator',
@@ -394,7 +412,7 @@ def save_experiment(
     # Save predictions as csv files with the following columns ['prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed']
     encode = lambda _list: [ json.dumps(val) for val in _list]
     
-    li_prompt_ensemble_fmtd = li_prompt_ensemble_fmtd if len(li_prompt_ensemble_fmtd) > 0 else [None]*len(li_prompt_ensemble)
+    li_discourse_ensemble = li_discourse_ensemble if len(li_discourse_ensemble) > 0 else [None]*len(li_prompt_ensemble)
     if relationship == 'budgetitem_to_indicator':
         df = pd.DataFrame({ 
                         'budget_item': [ d['budget_item'] for d in li_record],
@@ -402,23 +420,23 @@ def save_experiment(
                        'pred_aggregated':li_pred_agg, 
                        'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 
-                       'prompts_fmtd':encode(li_prompt_ensemble_fmtd) })
-        if 'label' in li_record[0].keys():
-            df['label'] = [ d['label'] for d in li_record]
-            # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
-            df = df[['budget_item', 'indicator', 'label', 'pred_aggregated', 'prompts', 'predictions', 'prompts_fmtd']]
+                       'discourse':encode(li_discourse_ensemble) })
+        if 'related' in li_record[0].keys():
+            df['related'] = [ d['related'] for d in li_record]
+            # reorder df columns to be 'budget_item', 'indicator', 'related', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
+            df = df[['budget_item', 'indicator', 'related', 'pred_aggregated', 'prompts', 'predictions', 'discourse']]
 
 
     elif relationship == 'indicator_to_indicator':
         df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
                            'indicator_2': [ d['indicator_2'] for d in li_record],
-                        #    'label': [ d['label'] for d in li_record],
+                        #    'related': [ d['related'] for d in li_record],
                         'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
-                       'predictions':encode(li_pred_ensemble), 'prompts_fmtd':encode(li_prompt_ensemble_fmtd)})
-        if 'label' in li_record[0].keys():
-            df['label'] = [ d['label'] for d in li_record]
-            # reorder df columns to be 'budget_item', 'indicator', 'label', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
-            df = df[['indicator1', 'indicator2', 'label', 'prediction_aggregated', 'prompts', 'predictions']]
+                       'predictions':encode(li_pred_ensemble), 'discourse':encode(li_discourse_ensemble)})
+        if 'related' in li_record[0].keys():
+            df['related'] = [ d['related'] for d in li_record]
+            # reorder df columns to be 'budget_item', 'indicator', 'related', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
+            df = df[['indicator1', 'indicator2', 'related', 'prediction_aggregated', 'prompts', 'predictions']]
                 
     else:
         raise ValueError("relationship must be one of ['budgetitem_to_indicator', 'indicator_to_indicator']")

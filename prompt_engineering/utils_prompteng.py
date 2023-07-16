@@ -105,8 +105,6 @@ li_prompts_categorical_question_reversed: list[str] = [
 # endregion
 
 
-
-
 budgetitem_to_indicator_prompts = {
     'li_prompts_yes_no_question':li_prompts_yes_no_question,
 
@@ -171,9 +169,10 @@ map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_p
 # endregion
 
 # region SystemMessages
-system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
-system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
+
 system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
 
 map_system_prompts_b2i = {
@@ -211,7 +210,7 @@ map_relationship_sysprompt_categoriesanswer = {
 # endregion
 
 # region BaseModelFormat - The format required by the underlying language model
-format_vicuna_1_1 = "USER: {system_message} {user_message}\nASSISTANT:"
+format_vicuna_1_1 = "USER: {system_message}\n{user_message}\nASSISTANT:"
 format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT:"
 format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
 format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
@@ -222,7 +221,9 @@ format_mpt_no_sysmessage = "{user_message}\n\n"
 def map_llmname_input_format(llm_name, user_message, system_message=None, response=None):
 
     assert user_message is not None
-    
+    if system_message is not None:
+        system_message = system_message.strip(' ')
+
     llm_name = llm_name.lower()
 
     if 'vicuna' in llm_name and system_message is not None:
@@ -302,111 +303,14 @@ def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFra
             dset_budget_item_neg = dset[dset['budget_item']!=budget_item].sample(min(n,l-n), replace=False, random_state=random_state) 
         
         dset_budget_item_neg['budget_item'] = budget_item
-        dset_budget_item_neg['label'] = 'No'
+        dset_budget_item_neg['related'] = 'No'
         
         dset = pd.concat([dset, dset_budget_item_neg], axis=0)
 
     return dset
 
-def perplexity_for_category(
-    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, category_token_len=1):
-
-    """Calculate the perplexity of the final token for a given set of sentences"""
-    from transformers import PreTrainedModel, PreTrainedTokenizerBase
-
-    assert isinstance(model, PreTrainedModel)
-    assert isinstance(tokenizer, PreTrainedTokenizerBase)
-
-    model = model
-    tokenizer = tokenizer
-
-    # if batch_size > 1 (which generally leads to padding being required), and
-    # if there is not an already assigned pad_token, assign an existing
-    # special token to also be the padding token
-    if tokenizer.pad_token is None and batch_size > 1:
-        existing_special_tokens = list(tokenizer.special_tokens_map_extended.values())
-        # check that the model already has at least one special token defined
-        assert (
-            len(existing_special_tokens) > 0
-        ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
-        # assign one of the special tokens to also be the pad token
-        tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
-
-    if add_start_token and max_length:
-        # leave room for <BOS> token to be added:
-        assert (
-            tokenizer.bos_token is not None
-        ), "Input model must already have a BOS token if using add_start_token=True. Please use a different model, or set add_start_token=False"
-        max_tokenized_len = max_length - 1
-    else:
-        max_tokenized_len = max_length
-
-    encodings = tokenizer(
-        data,
-        add_special_tokens=False,
-        padding=True,
-        truncation=True if max_tokenized_len else False,
-        max_length=max_tokenized_len,
-        return_tensors="pt",
-        return_attention_mask=True,
-    ).to(model.device)
-
-    encoded_texts = encodings["input_ids"]
-    attn_masks = encodings["attention_mask"]
-
-    # check that each input is long enough:
-    if add_start_token:
-        assert torch.all(torch.ge(attn_masks.sum(1), 1)), "Each input text must be at least one token long."
-    else:
-        assert torch.all(
-            torch.ge(attn_masks.sum(1), 2)
-        ), "When add_start_token=False, each input text must be at least two tokens long. Run with add_start_token=True if inputting strings of only one token, and remove all empty input strings."
-
-    ppls = []
-    loss_fct = CrossEntropyLoss(reduction="none")
-
-    for start_index in range(0, len(encoded_texts), batch_size):
-        end_index = min(start_index + batch_size, len(encoded_texts))
-        encoded_batch = encoded_texts[start_index:end_index]
-        attn_mask = attn_masks[start_index:end_index]
-
-        if add_start_token:
-            bos_tokens_tensor = torch.tensor([[tokenizer.bos_token_id]] * encoded_batch.size(dim=0)).to(model.device)
-            encoded_batch = torch.cat([bos_tokens_tensor, encoded_batch], dim=1)
-            attn_mask = torch.cat(
-                [torch.ones(bos_tokens_tensor.size(), dtype=torch.int64).to(model.device), attn_mask], dim=1
-            )
-
-        labels = encoded_batch
-
-        # use a dummy context for now
-        with torch.no_grad():
-            out_logits = model(encoded_batch, attention_mask=attn_mask).logits
-
-        shift_logits = out_logits[..., :-1, :]
-        shift_labels = labels[..., 1:]
-        shift_attention_mask_batch = attn_mask[..., 1:]
-
-        # Slice to get only the last positions which is the category label:
-        shift_logits = shift_logits[..., -category_token_len:, :]
-        shift_labels = shift_labels[..., -category_token_len:]
-        shift_attention_mask_batch = shift_attention_mask_batch[..., -category_token_len:]
-
-        shift_logits = shift_logits.contiguous()
-        shift_labels = shift_labels.contiguous()
-        shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
-
-        perplexity_batch = torch.exp(
-            (loss_fct(shift_logits.transpose(1, 2), shift_labels) * shift_attention_mask_batch).sum(1)
-            / shift_attention_mask_batch.sum(1)
-        )
-
-        ppls += perplexity_batch.tolist()
-
-    return ppls
-
 def joint_probabilities_for_category(
-    data, model, tokenizer, batch_size: int = 16, add_start_token: bool = True, max_length=None, category_token_len=1):
+    data, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
 
 
     """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
@@ -432,56 +336,42 @@ def joint_probabilities_for_category(
         ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
         tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
 
-    if add_start_token and max_length:
-        assert (
-            tokenizer.bos_token is not None
-        ), "Input model must already have a BOS token if using add_start_token=True. Please use a different model, or set add_start_token=False"
-        max_tokenized_len = max_length - 1
-    else:
-        max_tokenized_len = max_length
+    max_tokenized_len = max_length
+
+    tokenizer.padding_side = 'left'
+    tokenizer.truncation_side = 'left'
 
     encodings = tokenizer(
         data,
         add_special_tokens=False,
         padding=True,
-        truncation=True if max_tokenized_len else False,
+        truncation=False,
         max_length=max_tokenized_len,
         return_tensors="pt",
         return_attention_mask=True,
     ).to(model.device)
 
+    tokenizer.padding_side = 'right'
+    tokenizer.truncation_side = 'right'
+
     encoded_texts = encodings["input_ids"]
     attn_masks = encodings["attention_mask"]
-
-    if add_start_token:
-        assert torch.all(torch.ge(attn_masks.sum(1), 1)), "Each input text must be at least one token long."
-    else:
-        assert torch.all(
-            torch.ge(attn_masks.sum(1), 2)
-        ), "When add_start_token=False, each input text must be at least two tokens long. Run with add_start_token=True if inputting strings of only one token, and remove all empty input strings."
 
     joint_probs = []
 
     for start_index in range(0, len(encoded_texts), batch_size):
         end_index = min(start_index + batch_size, len(encoded_texts))
-        encoded_batch = encoded_texts[start_index:end_index]
-        attn_mask = attn_masks[start_index:end_index]
+        encoded_texts_batch = encoded_texts[start_index:end_index]
+        attn_masks_batch = attn_masks[start_index:end_index]
 
-        if add_start_token:
-            bos_tokens_tensor = torch.tensor([[tokenizer.bos_token_id]] * encoded_batch.size(dim=0)).to(model.device)
-            encoded_batch = torch.cat([bos_tokens_tensor, encoded_batch], dim=1)
-            attn_mask = torch.cat(
-                [torch.ones(bos_tokens_tensor.size(), dtype=torch.int64).to(model.device), attn_mask], dim=1
-            )
-
-        labels = encoded_batch
+        labels = encoded_texts_batch
 
         with torch.no_grad():
-            out_logits = model(encoded_batch, attention_mask=attn_mask).logits
+            out_logits = model(encoded_texts_batch, attention_mask=attn_masks_batch).logits
 
         shift_logits = out_logits[..., :-1, :]
         shift_labels = labels[..., 1:]
-        shift_attention_mask_batch = attn_mask[..., 1:]
+        shift_attention_mask_batch = attn_masks_batch[..., 1:]
 
         shift_logits = shift_logits[..., -category_token_len:, :]
         shift_labels = shift_labels[..., -category_token_len:]
@@ -490,7 +380,6 @@ def joint_probabilities_for_category(
         shift_logits = shift_logits.contiguous()
         shift_labels = shift_labels.contiguous()
         shift_attention_mask_batch = shift_attention_mask_batch.contiguous()
-
 
         # Calculate probabilities from logits
         log_probs  = log_softmax(shift_logits, dim=-1)
@@ -592,18 +481,18 @@ class PromptBuilder():
     
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
         if self.prompt_style == 'yes_no':
-            li_filled_templates, li_li_prompts_fmtd = self.fill_template_yesno(templates, batch)
+            li_filled_templates, li_li_discourse = self.fill_template_yesno(templates, batch)
         elif self.prompt_style == 'open':
-            li_filled_templates, li_li_prompts_fmtd = self.fill_template_open(templates, batch)
+            li_filled_templates, li_li_discourse = self.fill_template_open(templates, batch)
         elif self.prompt_style == 'categorise':
-            li_filled_templates, li_li_prompts_fmtd = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
+            li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'cot_categorise':
-            li_filled_templates, li_li_prompts_fmtd = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
+            li_filled_templates, li_li_discourse = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
         
         else:
             li_filled_templates = []
          
-        return li_filled_templates, li_li_prompts_fmtd
+        return li_filled_templates, li_li_discourse
     
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str):
@@ -639,7 +528,7 @@ class PromptBuilder():
                         for prompt in li_prompts]
                 
                 
-                outputs = self.llm.generate(batch_messages )
+                outputs = self.llm.generate( batch_messages )
                 li_preds: list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
@@ -853,9 +742,9 @@ class PromptBuilder():
                 if self.k_shot == 0:
                     format_dict = {}
                 elif self.relationship == 'budgetitem_to_indicator':
-                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
+                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":d['related'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
                 elif self.relationship == 'indicator_to_indicator':
-                    format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":d['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
+                    format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":d['related'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
                     
                 ## filling context examples in template and target info
                 if self.relationship == 'budgetitem_to_indicator':
@@ -897,8 +786,8 @@ class PromptBuilder():
                     # Fill in the k_shot context with random extracts from dataset
                     
                     # Sample math.ceil(k/2) positive and math.floor(k/2) negative examples
-                    pos_examples_sample = random.sample( [d for d in self.examples_dset if d['label']=='Yes'], math.ceil(self.k_shot/2) )
-                    neg_examples_sample = random.sample( [d for d in self.examples_dset if d['label']=='No'], math.floor(self.k_shot/2) )
+                    pos_examples_sample = random.sample( [d for d in self.examples_dset if d['related']=='Yes'], math.ceil(self.k_shot/2) )
+                    neg_examples_sample = random.sample( [d for d in self.examples_dset if d['related']=='No'], math.floor(self.k_shot/2) )
                     
                     # Creating the open ended answer version of the examples
                     if self.relationship == 'budgetitem_to_indicator':
@@ -937,7 +826,7 @@ class PromptBuilder():
         
         # Generate the Open Response
         li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts)
-        li_li_discourse = [ [ prompt_fmtd+reasoning for prompt_fmtd, reasoning in zip(li_prompts, li_reasoning) ] for li_prompts, li_reasoning in zip(li_li_prompts_fmtd, li_li_reasoning) ]
+        li_li_discourse = [ [ prompt_fmtd+statement for prompt_fmtd, statement in zip(li_prompts, li_statement) ] for li_prompts, li_statement in zip(li_li_prompts_fmtd, li_li_statement) ]
         # Put the response in a categorical question template
         li_filled_templates = self._fill_template_response_in_categorical_question(li_li_statement, batch)
 
@@ -985,10 +874,10 @@ class PromptBuilder():
                     format_dict = {}
                 # sample k items from our train set into a format dict for the template
                 elif self.relationship == 'budgetitem_to_indicator':
-                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":_categorise_response_labels_inverted[d['label']] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
+                    format_dict = reduce( operator.ior, [ { f'budget_item_{idx}':d['budget_item'], f"indicator_{idx}":d['indicator'], f"answer_{idx}":_categorise_response_labels_inverted[d['related']] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} ) 
                 elif self.relationship == 'indicator_to_indicator':
                     raise NotImplementedError("Categorise response not implemented for indicator_to_indicator")
-                    format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":['label'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
+                    format_dict = reduce( operator.ior, [ { f'indicator1_{idx}':d['indicator1'], f"indicator2_{idx}":d['indicator2'], f"answer_{idx}":['related'] } for idx, d in  enumerate(random.sample(self.examples_dset, self.k_shot) ) ], {} )
                     
                 ## filling context examples in template and target info
                 if self.relationship == 'budgetitem_to_indicator':

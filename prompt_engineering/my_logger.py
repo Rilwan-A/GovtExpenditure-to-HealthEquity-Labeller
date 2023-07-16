@@ -1,4 +1,7 @@
 import logging
+logging.getLogger("bitsandbytes").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
 import os, sys
 from datetime import datetime
 

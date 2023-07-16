@@ -32,9 +32,9 @@ HUGGINGFACE_MODELS = [
 
 MAP_LOAD_IN_NBIT = {
     
-    'mosaicml/mpt-7b-chat': 8,
+    'mosaicml/mpt-7b-chat': 4,
 
-    'TheBloke/vicuna-7B-1.1-HF':8,
+    'TheBloke/vicuna-7B-1.1-HF':4,
     'TheBloke/wizard-vicuna-13B-HF':4,
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF':4,
 
@@ -48,7 +48,7 @@ ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
        
-def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', api_key:str|None=None):
+def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', api_key:str|None=None, device=-1):
     from  langchain.chat_models import ChatOpenAI
     from  langchain.llms import HuggingFaceHub
     from langchain import HuggingFacePipeline
@@ -84,8 +84,9 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='remote', 
                 model_id=model_id,
                 task="text-generation",
                 model_kwargs={'trust_remote_code':True,
-                                'quantization_config':quant_config
-                                })
+                                'quantization_config':quant_config,
+                                'do_sample':False},
+                )
 
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
@@ -245,6 +246,7 @@ class PredictionGenerator():
                 'num_return_sequences':1,
                 'early_stopping':True,
                 'max_new_tokens': 60,
+                'do_sample': False
             }
 
             self.llm.pipeline._forward_params =  generation_params
@@ -355,24 +357,26 @@ class PredictionGenerator():
         li_filledtemplate = [
                 map_llmname_input_format(self.llm_name,
                                         user_message = prompt, 
-                                        system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] ).replace('  ',' ').strip(' ') )
+                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]  )
                                     for prompt in li_filledtemplate ] #Added some base model formatting
 
         # For each template, create a set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
-        answers = list(  map_category_answer.keys() )
+        answers = [ str(num) for num in range(1,1+len(map_category_answer.keys()) ) ]
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + ans for ans in answers ] for filledtemplate in li_filledtemplate ]
 
 
         # For each filled template set calcualte the relative probability of each answer
         li_li_probability = []
         for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
+
             li_probability = joint_probabilities_for_category(
                 li_filledtemplates_with_answers, 
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
                 batch_size=len(map_category_answer.keys()), 
                 category_token_len=1 ) 
+            
             li_li_probability.append(li_probability)
         
         # Convert set of perplexities into a list of list with each sublist having a probability for each category of answer
@@ -458,7 +462,7 @@ def load_annotated_examples(k_shot_example_dset_name:str|None,
 
     if k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
         # Load spot dataset as pandas dataframe
-        dset = pd.read_csv('./data/spot/spot_indicator_mapping_table_train.csv')
+        dset = pd.read_csv('./data/spot/spot_b2i_broad_train.csv')
         
         li_records = dset.to_dict('records') #type: ignore
     

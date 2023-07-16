@@ -138,7 +138,7 @@ class PromptEngineeringLM(pl.LightningModule):
             batch, self.prompt_builder, self.prediction_generator)
 
         outp = {'pred_agg': batch_pred_agg,
-                'label': [d['label'] for d in batch]}
+                'related': [d['related'] for d in batch]}
 
         self.validation_step_outputs.append(outp)
 
@@ -149,7 +149,7 @@ class PromptEngineeringLM(pl.LightningModule):
         outputs = self.validation_step_outputs
 
         preds_agg = sum([d['pred_agg'] for d in outputs], [])
-        labels = sum([d['label'] for d in outputs], [])
+        labels = sum([d['related'] for d in outputs], [])
 
         # compute metrics between binary labels and predictions
         (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None)

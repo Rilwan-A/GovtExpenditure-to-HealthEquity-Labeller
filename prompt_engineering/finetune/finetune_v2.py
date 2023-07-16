@@ -143,7 +143,7 @@ class PromptEngineeringLM(pl.LightningModule):
             # Convert the li_pred_agg, which is a list of agg
             li_pred_agg = [ next( (k for k,v in d.items() if v==1) ) for d in li_pred_agg]
 
-            outp = {'pred_agg': li_pred_agg,'label': [d['label'] for d in batch]}
+            outp = {'pred_agg': li_pred_agg,'related': [d['related'] for d in batch]}
 
             self.val_step_outputs_spotalign.append(outp)
 
@@ -157,7 +157,7 @@ class PromptEngineeringLM(pl.LightningModule):
 
         if 'spot_alignment' in self.val_tasks:
             preds_agg = sum([d['pred_agg'] for d in self.val_step_outputs_spotalign], [])
-            labels = sum([d['label'] for d in self.val_step_outputs_spotalign], [])
+            labels = sum([d['related'] for d in self.val_step_outputs_spotalign], [])
 
             # compute metrics between binary labels and predictions
             (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None)
