@@ -28,11 +28,8 @@ li_prompts_yes_no_question = [
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
 
     # "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
-    
     # 'Give me a yes or no answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
-    
     # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
-
     # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',    
 ]
 
@@ -44,45 +41,45 @@ li_prompts_openended_question = [
     # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?'
 ]
 
+li_prompts_reasoning_question = [
+    'To what extent, if any, does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
+]
+
 # region Prompts for the open prompt style methodology with categorical parse style
 # map_category_answer = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
 # map_category_label = { 'A':'Yes', 'B':'No', 'C':'NA'}
 # map_category_answer = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
 
-map_category_answer = { '1':'Local government spending on "{budget_item}" does {effect_type} affect "{indicator}"', 
+map_category_answer = { '1':'Local government spending on "{budget_item}" does {effect_type} affect "{indicator}".', 
                                         '2':'Local government spending on "{budget_item}" does not {effect_type} affect "{indicator}"' }
 map_category_label = {'1':'Yes',
-                                    '2':'No'}
-
+                       '2':'No'}
 
 li_prompts_categorical_question_w_reasoning: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
-
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
-
     # "Please choose the letter that accurately classifies the assertion made in the statement regarding the potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. The statement will be presented to you, and you must select one of the three categories provided: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should consist of the letter that corresponds to the most suitable classification."
-
     # "Please evaluate the statement provided, which discusses a potential causal link between local government spending on a specific budget item and a socio-economic or health indicator. Based on the information in the statement, classify the relationship into one of the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should be the letter that best represents your classification."
-
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter of the selected category: A) {map_category_answer["A"]}, B) {map_category_answer["B"]}, or C) {map_category_answer["C"]}.\nStatement: {"{statement}"}',
-
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter (A, B or C) of the selected category: A) {map_category_answer["A"]}, B) {map_category_answer["B"]}, or C) {map_category_answer["C"]}.\nStatement: {"{statement}"}'
     # NOTE: All the above prompts included a NA category e.g. if the model was not sure. The issue was that the NA category always attracted too much weight during prediction so we removed it.
     # NOTE: All the above prompts included a letters for the category labels, issue with this is that when using perplexity method then the perplexity of category labels can also include probability of the model produce open answers that start with label lettter.
-
     # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
     # f'The statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
     # f'The Statement below expresses an opinion on whether government spending on "{{budget_item}}" affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
     # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\t2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement'
-    f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement'
-
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement',
+    # f'Write "1" if the following statement implies {map_category_answer["1"]} or write "2" if it implies {map_category_answer["2"]}.\nStatement: {"{statement}"}',
+    f'Write only the number of the category that fits the following statement.\nStatement: {"{statement}"}\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
 ]
 
 li_prompts_categorical_question_w_reasoning_reversed: list[str] = [
         # f'The Statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["2"]}, 2) {map_category_answer["1"]}.\nStatement: {"{statement}"}'
     # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\t2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
-    f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
-    ]
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
+    # f'Write "1" if the following statement implies {map_category_answer["2"]} or write "2" if it implies {map_category_answer["1"]}.\nStatement: {"{statement}"}',
+    f'Write only the number of the category that fits the following statement.\nStatement: {"{statement}"}\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
+        ]
 
 
 li_prompts_categorical_question: list[str] = [
@@ -90,25 +87,31 @@ li_prompts_categorical_question: list[str] = [
     # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
     # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}',
     # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
-    f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
+    # f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
+    # f'Categories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}\nWrite the number of the category that best answers whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer["1"]}\n\t2) {map_category_answer["2"]}.'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label["1"]}" or "2" if the answer is "{map_category_label["2"]}".',
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Answers: 1) {map_category_label["1"]} 2) {map_category_label["2"]}',
+    f'Write "1" if the following statement is True or "2" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
     ]
 
 li_prompts_categorical_question_reversed: list[str] = [
     # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.'
     # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
     # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
-    
     # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
-    f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
+    # f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
+    # f'Categories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}\nWrite the number of the category that best answers whether government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer["2"]}\n\t2) {map_category_answer["1"]}.'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label["2"]}" or "2" if the answer is "{map_category_label["1"]}".'
+    f'Write "2" if the following statement is True or "1" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
 ]
 
 # endregion
-
-
 budgetitem_to_indicator_prompts = {
     'li_prompts_yes_no_question':li_prompts_yes_no_question,
-
     'li_prompts_openended_question':li_prompts_openended_question,
+    'li_prompts_reasoning_question':li_prompts_reasoning_question,
     'li_prompts_categorical_question_w_reasoning':li_prompts_categorical_question_w_reasoning,
     'li_prompts_categorical_question_w_reasoning_reversed':li_prompts_categorical_question_w_reasoning_reversed,
     
@@ -131,9 +134,10 @@ li_prompts_yes_no_template_i2i = [
     
     'Answer the following question with yes or no: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 
-] 
-li_prompts_categories_answer_i2i = [
 ]
+
+li_prompts_categories_answer_i2i = []
+
 li_prompts_open_template_i2i = [
     'Does the level of \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?',
 
@@ -173,16 +177,16 @@ system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with a
 system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
 system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
 
-system_prompt_i2i = 'You are an analyst tasked with determining if there\'s a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+system_prompt_i2i = 'You are an analyst tasked with determining if there is a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
 
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
     'directly':system_prompt_b2i_directly,
     'indirectly':system_prompt_b2i_indirectly,
-    'yes_no':'Answer the following question with a yes or no.',
-    'open':'Please use your expertise to answer the following question with a conclusive, one sentence answer.',
+    'yes_no':'Answer the following question with "Yes" or "No".',
+    'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Using your expert knowledge, please provide a thorough, detailed and conclusive four sentence answer to the following question.'
+    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.'
 
 }
 
@@ -210,12 +214,12 @@ map_relationship_sysprompt_categoriesanswer = {
 # endregion
 
 # region BaseModelFormat - The format required by the underlying language model
-format_vicuna_1_1 = "USER: {system_message}\n{user_message}\nASSISTANT:"
-format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT:"
+format_vicuna_1_1 = "{system_message}\nUSER: {user_message}\nASSISTANT: "
+format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT: "
 format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
 format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
-format_mpt = "{system_message}\n\n{user_message}\n\n"
-format_mpt_no_sysmessage = "{user_message}\n\n"
+format_dummy = "{system_message}\n\n{user_message}\n\n"
+format_dummy_no_sysmessage = "{user_message}\n\n"
 
 
 def map_llmname_input_format(llm_name, user_message, system_message=None, response=None):
@@ -226,30 +230,26 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
 
     llm_name = llm_name.lower()
 
-    if 'vicuna' in llm_name and system_message is not None:
-        template = format_vicuna_1_1
-    elif 'vicuna' in llm_name and system_message is None:
-        template = format_vicuna_1_1_no_sysmessage
+    "CalderaAI/30B-Lazarus"
     
-    elif 'alpaca' in llm_name and system_message is not None:
-        template = format_alpaca
-    elif 'alpaca' in llm_name and system_message is None:
-        template = format_alpaca_no_sysmessage
+    if any(x in llm_name for x in ['vicuna', 'lazarus']):
+        if system_message is not None:
+            template = format_vicuna_1_1
+        else:
+            template = format_vicuna_1_1_no_sysmessage
+
+    elif any( x in llm_name for x in ['alpaca', 'guanaco']):
+        if system_message is not None:
+            template = format_alpaca
+        else:
+            template = format_alpaca_no_sysmessage
     
-    elif 'guanaco' in llm_name and system_message is not None:
-        template = format_alpaca
-    elif 'guanaco' in llm_name and system_message is None:
-        template = format_alpaca_no_sysmessage
     
-    elif 'mpt' in llm_name and system_message is not None:
-        template = format_mpt
-    elif 'mpt' in llm_name and system_message is None:
-        template = format_mpt_no_sysmessage
-    
-    elif 'dummy' in llm_name and system_message is not None:
-        template = format_mpt
-    elif 'dummy' in llm_name and system_message is None:
-        template = format_mpt_no_sysmessage
+    elif any(x in llm_name for x in ['dummy', 'test']) :
+        if system_message is not None:
+            template = format_dummy
+        else:
+            template = format_dummy_no_sysmessage
 
 
     else:
@@ -290,20 +290,12 @@ def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFra
         dset_budget_item = dset[dset['budget_item']==budget_item]
         n = len(dset_budget_item)
         
-        # The edit below is specific to the Spot Dataset
-        if budget_item == 'Public Health':
-            # Some of the labels are sub-categories of Public Health
-            # Examples from these categories must be ignored when creating negative
-            cat_ignore = ['Public Health', 'Health Improvement', 'Sexual Health', 'Mental Health', 'Health Protection', 'Child Health', 'Healthcare']
 
-            # Get all the examples that do not have budget items in the ignore list
-            dset_budget_item_neg = dset[~dset['budget_item'].isin(cat_ignore)].sample(min(n,l-n), replace=True, random_state=random_state) 
-
-        else:
-            dset_budget_item_neg = dset[dset['budget_item']!=budget_item].sample(min(n,l-n), replace=False, random_state=random_state) 
+        dset_budget_item_neg = dset[dset['budget_item']!=budget_item].sample(min(n,l-n), replace=False, random_state=random_state) 
         
         dset_budget_item_neg['budget_item'] = budget_item
         dset_budget_item_neg['related'] = 'No'
+        dset_budget_item_neg['budget_item_original'] = dset_budget_item['budget_item_original'].iloc[0]
         
         dset = pd.concat([dset, dset_budget_item_neg], axis=0)
 
@@ -454,13 +446,16 @@ class PromptBuilder():
         self.k_shot = k_shot    # Number of examples to use as context for each prompt
         self.ensemble_size = ensemble_size # Number of different prompts to use per prediction
         self.examples_dset = examples_dset
-        self.effect_type = '' if effect_type == 'arbitrary' else effect_type 
+        self.effect_type = effect_type
         self.relationship = relationship
         self.seed = seed
         random.seed(seed)
         # when arbitrary is subbed into the prompt template, it will result in a double space in the prompt. We use .replace("  ", " ") to remove this
 
-
+    
+    def effect_type_str(self) -> str:
+        return '' if self.effect_type == 'arbitrary' else self.effect_type 
+    
     def __call__(self, batch:list[dict], reverse_categories_order:Optional[bool]=False) -> list[list[str]]:
         """
             Given a batch of examples, this function returns a list of prompts for each example in the batch
@@ -495,27 +490,37 @@ class PromptBuilder():
         return li_filled_templates, li_li_discourse
     
     @lru_cache(maxsize=2)
-    def get_generation_params(self, prompt_style:str):
+    def get_generation_params(self, prompt_style:str, **gen_kwargs):
         generation_params = {}
         k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
         if prompt_style == 'yes_no':
             generation_params[k] = 10
         elif prompt_style == 'open':
-            generation_params[k] = 100
+            generation_params[k] = 200
         elif prompt_style == 'categorise':
-            generation_params[k] = 10
+            generation_params[k] = 2
         elif prompt_style == 'cot_categorise':
-            generation_params[k] = 250
+            generation_params[k] = 300
         
+        if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
+            generation_params['early_stopping'] = True
+            generation_params['do_sample'] = False
+
+        
+        # Overriding any set keys with k,v in gen_kwargs
+        for k,v in gen_kwargs.items():
+            if k in generation_params:
+                generation_params[k] = v
+            
         return generation_params
 
-    def generate(self, li_li_prompts):
+    def generate(self, li_li_prompts, include_user_message_pre_prompt=True, include_system_message=True, **gen_kwargs):
         li_li_preds= []
         li_li_prompts_fmtd = []
 
         if isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
             
-            generation_params = self.get_generation_params(self.prompt_style)
+            generation_params = self.get_generation_params(self.prompt_style, **gen_kwargs)
             
             for k,v in generation_params.items():
                 setattr(self.llm, k, v)
@@ -523,9 +528,10 @@ class PromptBuilder():
             for li_prompts in li_li_prompts:
                 sleep(20)
                 batch_messages = [
-                    [ SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]),
-                        HumanMessage(content=prompt) ]
-                        for prompt in li_prompts]
+                    [   SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type]),
+                        HumanMessage(content=map_relationship_system_prompt[self.relationship][self.prompt_style] + ' ' + prompt) ]
+                        for prompt in li_prompts
+                        ]
                 
                 
                 outputs = self.llm.generate( batch_messages )
@@ -533,9 +539,9 @@ class PromptBuilder():
                 li_li_preds.append(li_preds)
         
         elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
+
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
-            
-            for k,v in self.get_generation_params(self.prompt_style).items():
+            for k,v in self.get_generation_params(self.prompt_style, **gen_kwargs).items():
                 try:
                     self.llm.pipeline._forward_params[k] = v
                 except AttributeError:
@@ -544,11 +550,25 @@ class PromptBuilder():
             for li_prompts in li_li_prompts:
                 
                 # Formatting prompts to adhere to format required by Base Language Model
-                li_prompts_fmtd = [
-                    map_llmname_input_format(self.llm_name,
-                        user_message = prompt,
-                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]
-                        ) for prompt in li_prompts ]
+                li_prompts_fmtd = []
+                
+                for prompt in li_prompts:
+                    if include_user_message_pre_prompt:
+                        user_message = map_relationship_system_prompt[self.relationship][self.prompt_style] + ' ' + prompt
+                    else:
+                        user_message = prompt
+
+                    if include_system_message:
+                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type]
+                    else:
+                        system_message = None
+
+                    li_prompts_fmtd.append(
+                        map_llmname_input_format(self.llm_name,
+                            user_message = user_message ,
+                            system_message = system_message,
+                            )
+                    )
 
                 outputs = self.llm.generate(
                     prompts=li_prompts_fmtd)
@@ -574,14 +594,24 @@ class PromptBuilder():
             
             for li_prompts in li_li_prompts:
                 
-                # Formatting prompts to adhere to format required by Base Language Model
-                li_prompts_fmtd = [
-                    map_llmname_input_format(self.llm_name,
-                        user_message = prompt,
-                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]
-                        ) for prompt in li_prompts ]
-                
-                
+                # Formatting prompts to adhere to format required by Base Language Model                
+                for prompt in li_prompts:
+                    if include_user_message_pre_prompt:
+                        user_message = map_relationship_system_prompt[self.relationship][self.prompt_style] + ' '+ prompt
+                    else:
+                        user_message = prompt
+
+                    if include_system_message:
+                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type]
+                    else:
+                        system_message = None
+
+                    li_prompts_fmtd.append(
+                        map_llmname_input_format(self.llm_name,
+                            user_message = user_message ,
+                            system_message = system_message)
+                    )
+
                 # Removing trailing space from end: (for some reason a space at the end causes to model to instaly stop generating)
                 li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
 
@@ -615,19 +645,19 @@ class PromptBuilder():
             # This handles the actual question excl the k_shot context
             if self.relationship == 'budgetitem_to_indicator':
                 if self.k_shot >0:
-                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') +"\nAnswer: "
+                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ') +"\nAnswer: "
                 else:
-                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ')
                 
             elif self.relationship == 'indicator_to_indicator':
-                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') +"\nAnswer: "
+                prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type_str() ).replace('  ',' ') +"\nAnswer: "
 
             # Add k_shot context to prompt
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Example Question {k}: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}',  indicator=f'{{indicator_{k}}}', effect_type=self.effect_type_str() ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}',  indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type_str() ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
                 prompt = context_k + "\n\n"+prompt
             
             templates[ens_idx] = prompt
@@ -646,22 +676,22 @@ class PromptBuilder():
         for ens_idx in range(self.ensemble_size):
             if self.relationship == 'budgetitem_to_indicator':
                 if self.k_shot >0:
-                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ') + "\nAnswer: "
                 else:
-                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ')
 
             elif self.relationship == 'indicator_to_indicator':
                 if self.k_shot >0:
-                    prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                    prompt = "Question: "+templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type_str() ).replace('  ',' ') + "\nAnswer: "
                 else:
-                    prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ')
+                    prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type_str() ).replace('  ',' ')
                 
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Question: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_type=self.effect_type_str() ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
+                    context_k = "Question: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type_str() ).replace('  ',' ') + f"\nAnswer: {{answer_{k}}}."
 
                 prompt = context_k + "\n\n"+prompt
             
@@ -686,19 +716,19 @@ class PromptBuilder():
 
             if self.relationship == 'budgetitem_to_indicator':
                 if self.k_shot >0:
-                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ') + "\nAnswer: "
+                    prompt = "Question: "+templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ') + "\nAnswer: "
                 else:
-                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+                    prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ')
             
             elif self.relationship == 'indicator_to_indicator':
-                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ')
+                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type_str() ).replace('  ',' ')
             
             # Add k_shot context
             for k in reversed(range(self.k_shot)):
                 if self.relationship == 'budgetitem_to_indicator':
-                    context_k = "Example Question {k}: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( budget_item=f'{{budget_item_{k}}}', indicator=f'{{indicator_{k}}}', effect_type=self.effect_type_str() ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
                 elif self.relationship == 'indicator_to_indicator':
-                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
+                    context_k = "Example Question {k}: " +templates[ens_idx].format( indicator1=f'{{indicator1_{k}}}', indicator2=f'{{indicator2_{k}}}', effect_type=self.effect_type_str() ).replace('  ',' ') + f"\nExample Answer {k}: {{answer_{k}}}."
 
                 prompt = context_k + "\n\n"+prompt
             
@@ -709,16 +739,16 @@ class PromptBuilder():
         if seed is not None:
             random.seed(seed)
 
-        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_openended_question']
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_reasoning_question']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
 
         for ens_idx in range(self.ensemble_size):
 
             if self.relationship == 'budgetitem_to_indicator':
-                prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type ).replace('  ',' ')
+                prompt = templates[ens_idx].format( budget_item='{target_budget_item}',  indicator='{target_indicator}', effect_type=self.effect_type_str() ).replace('  ',' ')
             
             elif self.relationship == 'indicator_to_indicator':
-                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type ).replace('  ',' ')
+                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', effect_type=self.effect_type_str() ).replace('  ',' ')
                         
             templates[ens_idx] = prompt
         
@@ -791,11 +821,11 @@ class PromptBuilder():
                     
                     # Creating the open ended answer version of the examples
                     if self.relationship == 'budgetitem_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type).replace('  ',' ') for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type).replace('  ',' ') for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type_str()).replace('  ',' ') for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type_str()).replace('  ',' ') for d in neg_examples_sample ]
                     elif self.relationship == 'indicator_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type.replace('  ',' ')) for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type).replace('  ',' ') for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type_str().replace('  ',' ')) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type_str()).replace('  ',' ') for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
                     li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
@@ -813,10 +843,10 @@ class PromptBuilder():
 
                 # filling in the target info
                 if self.relationship == 'budgetitem_to_indicator':
-                    prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'], effect_type=self.effect_type,
+                    prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'], effect_type=self.effect_type_str(),
                                                     **format_dict).replace('  ',' ')
                 elif self.relationship == 'indicator_to_indicator':
-                    prompt =  templates[ens_idx].format(target_indicator1= row['indicator1'], target_indicator2=row['indicator2'], effect_type=self.effect_type,
+                    prompt =  templates[ens_idx].format(target_indicator1= row['indicator1'], target_indicator2=row['indicator2'], effect_type=self.effect_type_str(),
                                                     **format_dict).replace('  ',' ')
                 
                 li_prompts.append(prompt)
@@ -827,12 +857,20 @@ class PromptBuilder():
         # Generate the Open Response
         li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts)
         li_li_discourse = [ [ prompt_fmtd+statement for prompt_fmtd, statement in zip(li_prompts, li_statement) ] for li_prompts, li_statement in zip(li_li_prompts_fmtd, li_li_statement) ]
+        
         # Put the response in a categorical question template
-        li_filled_templates = self._fill_template_response_in_categorical_question(li_li_statement, batch)
+        li_li_filled_template = self._fill_template_open_add_categorical_question_template(li_li_statement, batch)
 
-        return li_filled_templates, li_li_discourse
+        # Get Categorical Question Response
+        li_li_prompts_fmtd, li_li_preds = self.generate(li_li_filled_template, include_user_message_pre_prompt=False, include_system_message=False, max_new_tokens=60, max_tokens=60 )
+
+        # Extendinng the discourse with the categorical question and response
+
+        li_li_discourse = [ [ ('===first section===\n\n' + discourse + '\n\n===second section===\n\n' + prompt_fmtd + pred) for discourse, prompt_fmtd, pred in zip(li_discourse, li_prompts, li_preds) ] for li_discourse, li_prompts, li_preds in zip(li_li_discourse, li_li_prompts_fmtd, li_li_preds) ]
+
+        return li_li_preds, li_li_discourse
     
-    def _fill_template_response_in_categorical_question(self, li_li_statement, batch):
+    def _fill_template_open_add_categorical_question_template(self, li_li_statement, batch):
         li_li_filled_templates = []
 
         for li_statements, row in zip(li_li_statement, batch):
@@ -840,12 +878,12 @@ class PromptBuilder():
             li_template = map_relationship_promptsmap[self.relationship]['li_prompts_categorical_question_w_reasoning']
             template = copy.deepcopy( random.choice(li_template) )     
 
-            li_filledtemplate = [ template.format(statement=statement, effect_type=self.effect_type, budget_item=row['budget_item'], indicator=row['indicator'] ).replace('  ',' ') for statement in li_statements ]
+            li_filledtemplate = [ template.format(statement=statement, effect_type=self.effect_type_str(), budget_item=row['budget_item'], indicator=row['indicator'] ).replace('  ',' ') for statement in li_statements ]
 
             li_li_filled_templates.append(li_filledtemplate)
 
-        return li_li_filled_templates 
-
+        return li_li_filled_templates
+        
     def fill_template_categorise(self, templates:list[str], batch:list[dict], reverse_categories_order:bool=False)->tuple[list[list[str]], list[list[str]]]:
 
         """Fill in the template with the target and k_shot context"""
@@ -949,19 +987,17 @@ class PromptBuilder():
         li_li_filledtemplate = []
         for li_reasoning, dict_datum in zip( li_li_reasoning, batch):
             # Filling template
-            # NOTE: HERE - ISSUE IS WE NEED TO INSERT THE INDICATOR AND BUDGET ITEM AT THIS STAGE BUT PREDICTION GENERATOR DOES NOT HAVE ACCESS TO THOSE. MAYBE MOVE THIS LOGIC AND GENERATION LOGIC INTO THE PROMPT BUILDER
-            
-
+           
             if self.relationship == 'budgetitem_to_indicator':
                 budget_item = dict_datum['budget_item']
                 indicator = dict_datum['indicator']
                 
-                li_filledtemplate = [ template.format(statement=pred, budget_item=budget_item, indicator=indicator, effect_type=self.effect_type) for pred in li_reasoning ]
+                li_filledtemplate = [ template.format(statement=pred, budget_item=budget_item, indicator=indicator, effect_type=self.effect_type_str()).replace('  ', ' ') for pred in li_reasoning ]
             
             elif self.relationship == 'indicator_to_indicator':
                 indicator1 = dict_datum['indicator1']
                 indicator2 = dict_datum['indicator2']
-                li_filledtemplate = [ template.format(statement=pred, indicator1=indicator1, indicator2=indicator2, effect_type=self.effect_type) for pred in li_reasoning ]
+                li_filledtemplate = [ template.format(statement=pred, indicator1=indicator1, indicator2=indicator2, effect_type=self.effect_type_str()).replace('  ', ' ') for pred in li_reasoning ]
             
             li_li_filledtemplate.append(li_filledtemplate)
         

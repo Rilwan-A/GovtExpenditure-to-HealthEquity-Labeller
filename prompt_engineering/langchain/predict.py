@@ -35,7 +35,6 @@ from prompt_engineering.utils_prompteng import PromptBuilder
 from django.core.files.uploadedfile import UploadedFile
 import random
 
-
 def main(
     llm_name:str,
     exp_name:str,
@@ -244,8 +243,7 @@ def main(
         'li_pred_agg_i2i': li_pred_agg_i2i,
     }
 
-def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, 
-                  logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
+def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, logging=None ) -> tuple[list[dict[str,str]]|None, list[dict[str,str]]|None]:
     """
         Loads the data from the input_file and returns a list of lists of dicts
 
@@ -258,7 +256,8 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
     expected_keys = ['budget_item','indicator']
     
     # Load data
-    # Data cn be passed in as a json or csv file name, or as a Django UploadedFile Object
+    
+    # Data can be passed in as a json or csv file name, or as a Django UploadedFile Object
     if isinstance(input_file, str) and input_file[-4:]=='.json':
         json_data = json.load( open(input_file, 'r') )
         assert all([key in json_data.keys() for key in expected_keys]), f"input_json must have the following keys: {expected_keys}"
@@ -279,9 +278,6 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
         li_indicator = df['indicator'].tolist()
         li_labels = df['related'].tolist() if 'related' in df.columns else [None]*len(li_budget_items)
 
-        # set_budget_items = sorted(set(li_budget_items))
-        # set_indicator = sorted(set(li_indicator))
-
     elif isinstance(input_file, UploadedFile):
         json_data = input_file
         raise NotImplementedError("UploadedFile not implemented yet")
@@ -297,7 +293,10 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
     
     if debugging:
         random.seed(data_load_seed)
-        li_record_b2i = random.sample(li_record_b2i, 2)
+        # sample 5 where 'related' is Yes and 5 where 'related' is No
+        li_record_b2i_yes = [x for x in li_record_b2i if x['related']=='Yes']
+        li_record_b2i_no = [x for x in li_record_b2i if x['related']=='No']
+        li_record_b2i = random.sample(li_record_b2i_yes, 3) + random.sample(li_record_b2i_no, 3)
     
     return li_record_b2i # type: ignore
 
@@ -421,9 +420,9 @@ def save_experiment(
                        'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 
                        'discourse':encode(li_discourse_ensemble) })
+        
         if 'related' in li_record[0].keys():
             df['related'] = [ d['related'] for d in li_record]
-            # reorder df columns to be 'budget_item', 'indicator', 'related', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
             df = df[['budget_item', 'indicator', 'related', 'pred_aggregated', 'prompts', 'predictions', 'discourse']]
 
 
@@ -471,7 +470,7 @@ def parse_args():
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
 
-    parser.add_argument('--input_file', type=str, default='"./data/spot/spot_indicator_mapping_table_test.csv"', help='Path to the file containing the input data' )
+    parser.add_argument('--input_file', type=str, default='"./data/spot/spot_b2i_broad_test.csv"', help='Path to the file containing the input data' )
 
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
