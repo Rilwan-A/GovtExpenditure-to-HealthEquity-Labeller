@@ -24,7 +24,7 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 from typing import List, Sequence
-from bs4 import BeautifulSoup
+# from bs4 import BeautifulSoup
 import requests
 
 import fitz
@@ -46,8 +46,10 @@ import pdftotext
     Then converts the research papers to a .txt document format.
     Then performs preprocessing.
     Then saves in pkl format.
-
     #TODO: Ensure that no duplicates pdfs are downloaded
+
+    # We use search terms related to each of the broad budget categories
+
 """
 
 def main(
@@ -260,7 +262,7 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
             
         url_base = "https://api.semanticscholar.org/graph/v1/paper/search?"
         url_query = f"query={search_term.replace(' ','+')}"
-        url_filters = "openAccessPdf"
+        url_filters = "openAccessPdf&year=2000-2021"
         url_fields = "fields=title,authors,citationCount,openAccessPdf"
         url_paper_count = f"offset={str(idx*papers_per_query)}&limit={str(papers_per_query)}"
         url_lang = "lang=en"
