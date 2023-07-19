@@ -18,10 +18,10 @@ from aiohttp import  ClientError
 
 import asyncio
 
-import logging
-logger = logging.getLogger('logger')
-logger.setLevel(logging.INFO)
-logger.addHandler(logging.StreamHandler(sys.stdout))
+# import logging
+# logger = logging.getLogger('logger')
+# logger.setLevel(logging.INFO)
+# logger.addHandler(logging.StreamHandler(sys.stdout))
 
 from typing import List, Sequence
 # from bs4 import BeautifulSoup
@@ -40,8 +40,8 @@ import numpy as np
 
 from pdfminer.high_level import extract_pages, extract_text
 import pdftotext
-from prompt_engineering.my_logger import setup_logging
-
+from prompt_engineering.my_logger import setup_logging_scrape_rps
+logger = None
 """
     This script scrapes research papers from Google Scholar.
     Then converts the research papers to a .txt document format.
@@ -64,7 +64,9 @@ def main(
 
     search_terms = yaml.safe_load(open('./data/researchpapers/search_terms.yaml','r'))
     
-    logger =    setup_logging('scrape_research_papers', debugging=debugging)
+    
+    global logger 
+    logger =  setup_logging_scrape_rps(debugging=debugging)
 
     if debugging:
         downloads_per_search_term = 1
@@ -73,7 +75,7 @@ def main(
     if not pdfs_downloaded:
         # scrape pdfs
         logger.info("Scraping pdfs")
-        li_li_pdf_title_authors = asyncio.run(scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
+        li_li_pdf_title_authors = asyncio.run( scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source ) )
         logger.info("Finished Scraping pdfs")
 
         # remove duplicates from li_li_pdf_title_authors by checking for duplicated titles
@@ -144,7 +146,7 @@ async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, s
 
         for idx, search_term in enumerate(search_terms):
             # li_tasks[idx] = asyncio.create_task(scrape_pdfs_google_scholar(session, search_term, downloads_per_search_term, min_citations))            
-            li_tasks[idx] = scrape_func(session, search_term, downloads_per_search_term, min_citations, waitfactor=len(search_terms))
+            li_tasks[idx] = scrape_func(session, search_term, downloads_per_search_term, min_citations, proc_idx_totalcount = (idx, len(search_terms)), logger=logger )
                     
         li_pdf_title_author = await asyncio.gather(*li_tasks)
 
@@ -250,7 +252,7 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
     outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
-async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int,waitfactor:int) -> list[tuple[str, bytes]]:
+async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int, proc_idx_totalcount:tuple[int, int], logger=None) -> list[tuple[str, bytes]]:
     # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
 
     # Helper class to generate headers for requests
@@ -285,59 +287,71 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
         headers2 = headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})
         
         # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
-        # sample a number between 1 and 2*waitfactor
+        # We multiply the wait time by 2 since we also make a second request later on
+        # The first request gets the list of pdf links and details of the research papers
+        # The second request gets the actual pdf documetns
         if idx == 0:
-            time.sleep(1.5*np.random.rand())
+            await asyncio.sleep(4*proc_idx_totalcount[0])
         else:    
-            _ = 1.5 + int( 2*waitfactor*np.random.rand() )
-            time.sleep( max(idx*3*waitfactor - (time.time()-start_time), 0.0)  )
+            await asyncio.sleep( max(idx*4*proc_idx_totalcount[1]*2 - (time.time()-start_time), 0.0)  )
+        
+        # time.sleep(4)
 
-        async with session.get(url, headers=headers1, timeout=120 ) as resp:
-            
-            if resp.status != 200:
-                break
-            else:
-                pass
+        try:
+            async with session.get(url, headers=headers1, timeout=45*proc_idx_totalcount[1] ) as resp:
+                
+                if resp.status != 200:
+                    break
+                else:
+                    pass
 
-            resp_dict = await resp.content.read()
-            resp_dict = json.loads(resp_dict.decode())
-            
-            # break when no more pages left on website for query,
-            # semantic scholar api returns a total number of papers that match the query as ['total']
-            if resp_dict['total'] < (idx+1)*papers_per_query:
-                break
+                resp_dict = await resp.content.read()
+                resp_dict = json.loads(resp_dict.decode())
+                
+                # break when no more pages left on website for query,
+                # semantic scholar api returns a total number of papers that match the query as ['total']
+                if resp_dict['total'] < (idx+1)*papers_per_query:
+                    break
+        except asyncio.TimeoutError as e:
+            logging.warning(f"request timed out - {search_term} -\n\t{url}")
+            break
+
 
         li_dict_papers = resp_dict['data']
 
         ## reformating author fields
-        for idx in range(len(li_dict_papers)):
-            li_dict_papers[idx]['authors'] = ', '.join( ( dict_['name'] for dict_ in li_dict_papers[idx]['authors'] ))
+        for idx_1 in range(len(li_dict_papers)):
+            li_dict_papers[idx_1]['authors'] = ', '.join( ( dict_['name'] for dict_ in li_dict_papers[idx_1]['authors'] ))
 
         ## filtering for research papers that have at least min_citations citations
-        for idx in reversed(range(len(li_dict_papers))):
-            dict_paper = li_dict_papers[idx]
+        for idx_2 in reversed(range(len(li_dict_papers))):
+            dict_paper = li_dict_papers[idx_2]
 
             if dict_paper['citationCount'] < min_citations:
-                li_dict_papers.pop(idx)
+                li_dict_papers.pop(idx_2)
             
         # extracting pdf documents        
         pdfs = []
-        for idx, dict_ in enumerate(li_dict_papers):
+        logger.info(f"\tDownloading {len(li_dict_papers)} for{search_term}")
+        for idx_3, dict_ in enumerate(li_dict_papers):
             
-            dict_ = li_dict_papers[idx]
+            dict_ = li_dict_papers[idx_3]
             
             try:
-                time.sleep(3.0)
+                await asyncio.sleep(3.0*proc_idx_totalcount[1])
+                
+                await asyncio.sleep( 3.0 )
                 pdf = await (await session.get(dict_['openAccessPdf']['url'], cookies=resp.cookies,
-                         headers=headers2
+                         headers=headers2, timeout=45*proc_idx_totalcount[1]
                            )).content.read()
 
             except (ClientError):
                 pdf = "NAN"
-                time.sleep(10.0)
+                # time.sleep(15.0)
+                await asyncio.sleep(4.0)
 
             pdfs.append(pdf)
-
+        logger.info(f"\tDownloaded {len(pdfs)} for{search_term}")
 
         # Filtering out invalid pdfs
         pdfs, titles, authors  = zip( *[ (pdf, d['title'], d['authors'] ) for d, pdf in zip(li_dict_papers,pdfs) if pdf[:4]==b'%PDF'  ]  )
@@ -385,7 +399,7 @@ def remove_duplicates(li_li_pdf_title_author: list[list[tuple[bytes|int,str,str]
 def save_pdfs(search_term, search_term_idx, li_pdf_title_author):
     
     # making directory
-    dir_ = f'./data/finetune/pdf_format/{search_term_idx:02}'
+    dir_ = f'./data/researchpapers/pdf_format/{search_term_idx:02}'
     os.makedirs(dir_, exist_ok=True)
 
     with open( os.path.join(dir_,'search_term.txt'), 'w') as f:
@@ -412,7 +426,7 @@ def load_pdfs(search_terms) -> list[ list[tuple[bytes,str,str]]  ]:
     li_li_pdf_title_author = []
 
     for idx, search_term in enumerate(search_terms):
-        dir_ = f'./data/finetune/pdf_format/{idx:02}'
+        dir_ = f'./data/researchpapers/pdf_format/{idx:02}'
         fp_index = os.path.join(dir_, 'index.csv')
 
         # Loading title and author
@@ -482,7 +496,7 @@ def extract_text_pdftotext(pdf:bytes) -> str:
 def save_text(search_term:str, search_term_idx:int, li_txt_title_author: list[list[str]]):
 
     # making directory
-    dir_ = f'./data/finetune/text_format/{search_term_idx:02}'
+    dir_ = f'./data/researchpapers/text_format/{search_term_idx:02}'
     os.makedirs(dir_, exist_ok=True)
 
     with open( os.path.join(dir_,'search_term.txt'), 'w') as f:
@@ -514,8 +528,7 @@ def parse_args(parent_parser):
     parser.add_argument('--mp_count', type=int, default=4, help='')
     parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers', choices=['google_scholar','semantic_scholar'])
     parser.add_argument('--pdf_parser', type=str, default='pdftotext', help='Which pdf parser to use', choices=['pdfminer','pdftotext','fitz'])
-    parser.add_argument('--debugging', action='store_true',
-                         default=False, help='Whether to run in debuggging mode')
+    parser.add_argument('--debugging', action='store_true', default=False, help='Whether to run in debuggging mode')
 
     parser.add_argument('--pdfs_downloaded', action='store_true',
                          default=False, help='Whether the pdfs for the documents have already been downloaded')
