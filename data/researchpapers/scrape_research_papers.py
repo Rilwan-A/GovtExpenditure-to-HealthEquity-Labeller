@@ -36,10 +36,11 @@ from fake_headers import Headers
 from requests_html import HTMLSession, AsyncHTMLSession
 
 import json
+import numpy as np
 
 from pdfminer.high_level import extract_pages, extract_text
 import pdftotext
-
+from prompt_engineering.my_logger import setup_logging
 
 """
     This script scrapes research papers from Google Scholar.
@@ -58,9 +59,16 @@ def main(
     source:str,
     mp_count=4,
     pdf_parser:str='pdfminer',
-    pdfs_downloaded:bool=False):
+    pdfs_downloaded:bool=False,
+    debugging:bool=False):
 
-    search_terms = yaml.safe_load(open('./data/finetune/search_terms.yaml','r'))
+    search_terms = yaml.safe_load(open('./data/researchpapers/search_terms.yaml','r'))
+    
+    logger =    setup_logging('scrape_research_papers', debugging=debugging)
+
+    if debugging:
+        downloads_per_search_term = 1
+        search_terms = search_terms[:1]
 
     if not pdfs_downloaded:
         # scrape pdfs
@@ -75,6 +83,7 @@ def main(
         logger.info("Saving pdfs to file")
         with mp.Pool(mp_count) as p:
             res = p.starmap(save_pdfs,  list(zip(search_terms, itertools.count(), li_li_pdf_title_authors))  )
+    
     else:
         # load pdfs from file
         logger.info("Loading pdfs from file")
@@ -115,8 +124,7 @@ def main(
     
     logger.info("Script Finished")
     return None
-
-    
+   
 async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, source:str ) -> list[ list[tuple[bytes|int,str,str]]  ]:
     
     async with aiohttp.ClientSession(headers={'User-Agent':'Mozilla/5.0' } ) as session:
@@ -136,7 +144,7 @@ async def scrape_pdfs( search_terms, downloads_per_search_term, min_citations, s
 
         for idx, search_term in enumerate(search_terms):
             # li_tasks[idx] = asyncio.create_task(scrape_pdfs_google_scholar(session, search_term, downloads_per_search_term, min_citations))            
-            li_tasks[idx] = scrape_func(session, search_term, downloads_per_search_term, min_citations)
+            li_tasks[idx] = scrape_func(session, search_term, downloads_per_search_term, min_citations, waitfactor=len(search_terms))
                     
         li_pdf_title_author = await asyncio.gather(*li_tasks)
 
@@ -242,7 +250,7 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
     outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
-async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int) -> list[tuple[str, bytes]]:
+async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int,waitfactor:int) -> list[tuple[str, bytes]]:
     # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
 
     # Helper class to generate headers for requests
@@ -277,7 +285,12 @@ async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_
         headers2 = headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})
         
         # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
-        time.sleep( max(idx*3 - (time.time()-start_time), 0.0) +1.0 )
+        # sample a number between 1 and 2*waitfactor
+        if idx == 0:
+            time.sleep(1.5*np.random.rand())
+        else:    
+            _ = 1.5 + int( 2*waitfactor*np.random.rand() )
+            time.sleep( max(idx*3*waitfactor - (time.time()-start_time), 0.0)  )
 
         async with session.get(url, headers=headers1, timeout=120 ) as resp:
             
@@ -501,6 +514,8 @@ def parse_args(parent_parser):
     parser.add_argument('--mp_count', type=int, default=4, help='')
     parser.add_argument('--source', type=str, default='semantic_scholar', help='Which website to use for sourcing the research papers', choices=['google_scholar','semantic_scholar'])
     parser.add_argument('--pdf_parser', type=str, default='pdftotext', help='Which pdf parser to use', choices=['pdfminer','pdftotext','fitz'])
+    parser.add_argument('--debugging', action='store_true',
+                         default=False, help='Whether to run in debuggging mode')
 
     parser.add_argument('--pdfs_downloaded', action='store_true',
                          default=False, help='Whether the pdfs for the documents have already been downloaded')
