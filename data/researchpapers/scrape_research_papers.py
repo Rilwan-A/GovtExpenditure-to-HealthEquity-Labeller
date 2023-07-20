@@ -53,6 +53,9 @@ logger = None
 
 """
 
+conccurent_tasks = 1
+sem = asyncio.Semaphore(conccurent_tasks)  # Limiting to 10 concurrent tasks.
+
 def main(
     downloads_per_search_term:int,
     min_citations:int,
@@ -254,121 +257,137 @@ async def scrape_pdfs_google_scholar(session, search_term:str, downloads_per_sea
 
 async def get_pdfs_semantic_scholar_api(session, search_term:str, downloads_per_search_term:int, min_citations:int, proc_idx_totalcount:tuple[int, int], logger=None) -> list[tuple[str, bytes]]:
     # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
-
-    # Helper class to generate headers for requests
-    # NOTE: TO avoid brotli encoded responses, ".update({'accept-encoding': 'gzip, deflate, utf-8'})":" is appended to the generate output
-    headers = Headers(os='win', headers=True)
     
-    li_pdf = []
-    li_title = []
-    li_author = []
+    async with sem:
 
-    papers_per_query = 100
-    # open webpage
-
-    start_time = time.time()
-
-    for idx in itertools.count(start=0):
-            
-        url_base = "https://api.semanticscholar.org/graph/v1/paper/search?"
-        url_query = f"query={search_term.replace(' ','+')}"
-        url_filters = "openAccessPdf&year=2000-2021"
-        url_fields = "fields=title,authors,citationCount,openAccessPdf"
-        url_paper_count = f"offset={str(idx*papers_per_query)}&limit={str(papers_per_query)}"
-        url_lang = "lang=en"
-        url_fieldsofstudy = 'fieldsOfStudy='+','.join(['Sociology','Political Science','Economics','Law','Education'])
+        # Helper class to generate headers for requests
+        # NOTE: TO avoid brotli encoded responses, ".update({'accept-encoding': 'gzip, deflate, utf-8'})":" is appended to the generate output
+        headers = Headers(os='win', headers=True)
         
-        url = url_base+'&'.join([url_query, url_filters, url_fields, url_paper_count, url_lang, url_fieldsofstudy])
+        li_pdf = []
+        li_title = []
+        li_author = []
 
-        headers1 = {
-            "Accept": "*/*",
-            "Content-Type": "application/json" 
-            }
-        headers2 = headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})
-        
-        # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
-        # We multiply the wait time by 2 since we also make a second request later on
-        # The first request gets the list of pdf links and details of the research papers
-        # The second request gets the actual pdf documetns
-        if idx == 0:
-            await asyncio.sleep(4*proc_idx_totalcount[0])
-        else:    
-            await asyncio.sleep( max(idx*4*proc_idx_totalcount[1]*2 - (time.time()-start_time), 0.0)  )
-        
-        # time.sleep(4)
+        papers_per_query = 100
+        # open webpage
 
-        try:
-            async with session.get(url, headers=headers1, timeout=45*proc_idx_totalcount[1] ) as resp:
+        start_time = time.time()
+
+        for idx in itertools.count(start=0):
                 
-                if resp.status != 200:
-                    break
-                else:
-                    pass
-
-                resp_dict = await resp.content.read()
-                resp_dict = json.loads(resp_dict.decode())
-                
-                # break when no more pages left on website for query,
-                # semantic scholar api returns a total number of papers that match the query as ['total']
-                if resp_dict['total'] < (idx+1)*papers_per_query:
-                    break
-        except asyncio.TimeoutError as e:
-            logging.warning(f"request timed out - {search_term} -\n\t{url}")
-            break
-
-
-        li_dict_papers = resp_dict['data']
-
-        ## reformating author fields
-        for idx_1 in range(len(li_dict_papers)):
-            li_dict_papers[idx_1]['authors'] = ', '.join( ( dict_['name'] for dict_ in li_dict_papers[idx_1]['authors'] ))
-
-        ## filtering for research papers that have at least min_citations citations
-        for idx_2 in reversed(range(len(li_dict_papers))):
-            dict_paper = li_dict_papers[idx_2]
-
-            if dict_paper['citationCount'] < min_citations:
-                li_dict_papers.pop(idx_2)
+            url_base = "https://api.semanticscholar.org/graph/v1/paper/search?"
+            url_query = f"query={search_term.replace(' ','+')}"
+            url_filters = "openAccessPdf&year=2000-2021"
+            url_fields = "fields=title,authors,citationCount,openAccessPdf"
+            url_paper_count = f"offset={str(idx*papers_per_query)}&limit={str(papers_per_query)}"
+            url_lang = "lang=en"
+            url_fieldsofstudy = 'fieldsOfStudy='+','.join(['Sociology','Political Science','Economics','Law','Education'])
             
-        # extracting pdf documents        
-        pdfs = []
-        logger.info(f"\tDownloading {len(li_dict_papers)} for{search_term}")
-        for idx_3, dict_ in enumerate(li_dict_papers):
+            url = url_base+'&'.join([url_query, url_filters, url_fields, url_paper_count, url_lang, url_fieldsofstudy])
+
+            headers1 = {
+                "Accept": "*/*",
+                "Content-Type": "application/json" 
+                }
+            headers2 = headers.generate().update({'accept-encoding': 'gzip, deflate, utf-8'})
             
-            dict_ = li_dict_papers[idx_3]
+            # rate limit of 100 requests per 5 minutes, 1 request per 3 seconds
+            # We multiply the wait time by 2 since we also make a second request later on
+            # The first request gets the list of pdf links and details of the research papers
+            # The second request gets the actual pdf documetns
+            if idx == 0:
+                await asyncio.sleep(proc_idx_totalcount[0]*3.5)
+            else:    
+                await asyncio.sleep( max( (idx*3.5*conccurent_tasks)*1.1 - (time.time()-start_time), 0.0)  )
             
+            # time.sleep(4)
+
             try:
-                await asyncio.sleep(3.0*proc_idx_totalcount[1])
+                async with session.get(url, headers=headers1, timeout=60*conccurent_tasks ) as resp:
+                    
+                    if resp.status != 200:
+                        break
+                    else:
+                        pass
+
+                    resp_dict = await resp.content.read()
+                    resp_dict = json.loads(resp_dict.decode())
+                    
+                    # break when no more pages left on website for query,
+                    # semantic scholar api returns a total number of papers that match the query as ['total']
+                    if resp_dict['total'] < (idx+1)*papers_per_query:
+                        break
+            except asyncio.TimeoutError as e:
+                logging.warning(f"request timed out - {search_term} -\n\t{url}")
+                break
+
+
+            li_dict_papers = resp_dict['data']
+
+            ## reformating author fields
+            for idx_1 in range(len(li_dict_papers)):
+                li_dict_papers[idx_1]['authors'] = ', '.join( ( dict_['name'] for dict_ in li_dict_papers[idx_1]['authors'] ))
+
+            ## filtering for research papers that have at least min_citations citations
+            for idx_2 in reversed(range(len(li_dict_papers))):
+                dict_paper = li_dict_papers[idx_2]
+
+                if dict_paper['citationCount'] < min_citations:
+                    li_dict_papers.pop(idx_2)
                 
-                await asyncio.sleep( 3.0 )
-                pdf = await (await session.get(dict_['openAccessPdf']['url'], cookies=resp.cookies,
-                         headers=headers2, timeout=45*proc_idx_totalcount[1]
-                           )).content.read()
+            # extracting pdf documents        
+            pdfs = []
+            logger.info(f"\tDownloading {len(li_dict_papers)} for {search_term}")
+            for idx_3, dict_ in enumerate(li_dict_papers):
+                
+                dict_ = li_dict_papers[idx_3]
+                
+                try:
+                    # randomly select a float between 0.5 and 2.5 times the average time to download a pdf
+                    stime = np.random.uniform( conccurent_tasks*0.75, conccurent_tasks*2.0 )
 
-            except (ClientError):
-                pdf = "NAN"
-                # time.sleep(15.0)
-                await asyncio.sleep(4.0)
+                    await asyncio.sleep( stime )
 
-            pdfs.append(pdf)
-        logger.info(f"\tDownloaded {len(pdfs)} for{search_term}")
+                    pdf = await (await session.get(dict_['openAccessPdf']['url'], cookies=resp.cookies,
+                            headers=headers2, timeout=60*conccurent_tasks
+                            )).content.read()
 
-        # Filtering out invalid pdfs
-        pdfs, titles, authors  = zip( *[ (pdf, d['title'], d['authors'] ) for d, pdf in zip(li_dict_papers,pdfs) if pdf[:4]==b'%PDF'  ]  )
-        
-        li_pdf.extend(pdfs)
-        li_title.extend(titles)
-        li_author.extend(authors)
+                except (ClientError):
+                    pdf = "NAN"
+                    # time.sleep(15.0)
+                    logger.warning(f"ClientError - {search_term} -\n\t{url}")
+                    await asyncio.sleep(conccurent_tasks*10)
 
-        # break pdf urls collected exceeds min citations
-        if len(li_pdf)>=downloads_per_search_term:
-            li_pdf = li_pdf[:downloads_per_search_term]
-            li_title = li_title[:downloads_per_search_term]
-            li_author = li_author[:downloads_per_search_term]
-            break
+                except(asyncio.TimeoutError):
+                    pdf = "NAN"
+                    logger.warning(f"TimeoutError - {search_term} -\n\t{url}")
+                    await asyncio.sleep(conccurent_tasks*10)
+
+                pdfs.append(pdf)
+                if (idx_3+1)%(papers_per_query/5)==0:
+                    logger.info(f"\tCurrently downloading pdf number {len(pdfs)} for {search_term}")
 
 
-    outp = list( zip(li_pdf, li_title, li_author))
+            # Filtering out invalid pdfs
+            pdfs, titles, authors  = zip( *[ (pdf, d['title'], d['authors'] ) for d, pdf in zip(li_dict_papers,pdfs) if pdf[:4]==b'%PDF'  ]  )
+            
+            li_pdf.extend(pdfs)
+            li_title.extend(titles)
+            li_author.extend(authors)
+
+            logger.info(f"\tDownloaded {len(li_pdf)} for {search_term}")
+            
+            # break pdf urls collected exceeds min citations
+            if len(li_pdf)>=downloads_per_search_term:
+                li_pdf = li_pdf[:downloads_per_search_term]
+                li_title = li_title[:downloads_per_search_term]
+                li_author = li_author[:downloads_per_search_term]
+                logger.info(f"\tFinished Downloading for {search_term}")
+
+                break
+
+
+        outp = list( zip(li_pdf, li_title, li_author))
     return outp
 
 def remove_duplicates(li_li_pdf_title_author: list[list[tuple[bytes|int,str,str]]]) -> list[list[tuple[bytes,str,str]]] :
