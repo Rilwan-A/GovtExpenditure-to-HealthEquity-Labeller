@@ -346,7 +346,6 @@ def parse_args():
     parser.add_argument('--model_id', type=str, 
                         default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF')
     
-    # mosaicml/mpt-7b-chat', 'JosephusCheung/Guanaco','TheBloke/stable-vicuna-7B-HF','TheBloke/stable-vicuna-13B-HF'
     parser.add_argument('--max_tokens_per_chunk',type=int, default=500 )
     parser.add_argument('--min_tokens_per_chunk',type=int, default=100)
     
@@ -354,7 +353,7 @@ def parse_args():
 
     parser.add_argument('--prop_chunk_overlap', type=float, default=0.35, help='Number of tokens to overlap between chunks')
 
-    parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words', default=False)
+    parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words. Uses a language model to split words combined due to parsing errors from pdf parser', default=False)
 
     parser.add_argument('--debugging', action='store_true', help='Whether to run in debugging mode', default=False)
 

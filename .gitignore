@@ -21,6 +21,7 @@ temp*
 
 # Logs
 **/**.log
+/logging/
 
 # Dataset Files
 

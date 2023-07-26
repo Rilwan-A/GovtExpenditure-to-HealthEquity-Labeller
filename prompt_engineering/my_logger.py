@@ -49,3 +49,15 @@ def setup_logging_preprocess( dset_name, llm_name ):
 
     return logging
 
+def setup_logging_scrape_rps( debugging ):
+    now = datetime.now()
+    dt_string = now.strftime("%Y%m%d_%H%M%S")
+
+
+    log_fn = f'scrape_rps_{dt_string}.log'
+
+    logging = setup_logging(log_fn, debugging)
+
+    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
+
+    return logging
