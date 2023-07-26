@@ -29,12 +29,16 @@ import openai
 HUGGINGFACE_MODELS = [ 
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF',
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF',
-    'CalderaAI/30B-Lazarus']
+    'CalderaAI/30B-Lazarus',
+    'TheBloke/Wizard-Vicuna-30B-Uncensored-fp16'
+    ]
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF':4,
-    'CalderaAI/30B-Lazarus':4 }
+    'CalderaAI/30B-Lazarus':4,
+    'TheBloke/Wizard-Vicuna-30B-Uncensored-fp16':4
+      }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
 ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS

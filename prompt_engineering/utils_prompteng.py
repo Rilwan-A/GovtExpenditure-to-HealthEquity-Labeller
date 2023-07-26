@@ -230,7 +230,6 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
 
     llm_name = llm_name.lower()
 
-    "CalderaAI/30B-Lazarus"
     
     if any(x in llm_name for x in ['vicuna', 'lazarus']):
         if system_message is not None:
