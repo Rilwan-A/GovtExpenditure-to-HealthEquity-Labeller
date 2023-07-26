@@ -35,7 +35,7 @@ def setup_logging_predict( llm_name, debugging=False ):
     return logging
 
 
-def setup_logging_preprocess( dset_name, llm_name ):
+def setup_logging_preprocess( dset_name, llm_name, debugging=False ):
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H%M%S")
 
@@ -43,7 +43,7 @@ def setup_logging_preprocess( dset_name, llm_name ):
 
     log_filename = f'pprcs_{dset_name}_{llm_name}_{dt_string}.log'
 
-    logging = setup_logging(log_filename)
+    logging = setup_logging(log_filename, debugging)
 
     sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
 

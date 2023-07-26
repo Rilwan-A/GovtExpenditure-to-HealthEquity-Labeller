@@ -8,8 +8,6 @@ from prompt_engineering.utils_prompteng import map_llmname_input_format
 from prompt_engineering.my_logger import setup_logging_preprocess
 
 
-
-
 def main(model_id, json_file, max_tokens_per_chunk=None):
 
     # Setup logging
@@ -20,7 +18,7 @@ def main(model_id, json_file, max_tokens_per_chunk=None):
     tokenizer.pad_token = tokenizer.eos_token
 
     # Load data from JSON file
-    raw_dataset = load_dataset('json', data_files=os.path.join('data','llm_dsets',json_file) )
+    raw_dataset = load_dataset('json', data_files=os.path.join('data','instruct', json_file) )
 
     # Shuffle and split data
     raw_dataset = raw_dataset.shuffle()
@@ -37,9 +35,8 @@ def main(model_id, json_file, max_tokens_per_chunk=None):
         # # Filter out instances where all elements of 'labels' are -100
         # dataset_dict[key] = dataset_dict[key].filter(lambda example: not all(label == -100 for label in example['labels']))
 
-
     # Save data to arrow files
-    dir_ = './data/finetune'
+    dir_ = './data/instruct/preprocessed'
     os.makedirs(dir_, exist_ok=True)
     
     fn = json_file.split('.')[0]
