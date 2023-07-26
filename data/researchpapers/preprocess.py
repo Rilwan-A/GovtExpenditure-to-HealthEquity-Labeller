@@ -24,6 +24,8 @@ import multiprocessing as mp
 import math
 import re
 
+from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
+
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 
 # ERRONEOUS_NEWLINES_RE = re.compile(r"\n(?!\u)")  # "\n" followed by any character that is not a unicode character
@@ -35,17 +37,19 @@ def main(
     prop_chunk_overlap,
     languages_to_include:list[str],
     split_combined_words:bool,
-    debugging:bool,
+    split_combined_words_model:str='',
+    debugging:bool=False,
     ):
 
     # Setting up logging
-    logging = setup_logging_preprocess( 'rsearchpaper', model_id )
+    logging = setup_logging_preprocess( 'rp_proc', model_id, debugging )
 
     # Locate data to be tokenized
     data_dir = os.path.join( './data/researchpapers/text_format/' )
 
     # Locate tokenizer to use
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+    # tokenizer = PreTrainedTokenizerFast(model_id)
     tokenizer.pad_token = tokenizer.eos_token
     
     # Convert data to huggingface dataset    
@@ -55,14 +59,18 @@ def main(
     if debugging:
         dataset = dataset.select(range(2))
 
+    logging.info('Starting Splitting into Training and Test sets')
     dataset_dict = dataset.train_test_split( test_size=0.2, shuffle=True if (not debugging) else False)
+    logging.info('Finished Splitting into Training and Test sets')
 
     # Compute average number of tokens in 200 words from a sample of your data
     if not debugging:
+        logging.info('Computing average number of tokens per word in 200 documents from a sample of your data')
         sample_text = ' '.join(dataset['text'][:200])  # Create a sample text from your data
         num_tokens_in_sample = len(tokenizer.encode(sample_text))
         num_words_in_sample = len(sample_text.split())
         avg_tokens_per_word = num_tokens_in_sample / num_words_in_sample
+        logging.info(f'Average number of tokens per word in 200 documents from a sample of your data: {avg_tokens_per_word}')
     else:
         avg_tokens_per_word = 2.0
 
@@ -71,27 +79,34 @@ def main(
     max_words_per_chunk = int(max_tokens_per_chunk / avg_tokens_per_word)
     min_words_per_chunk = int(min_tokens_per_chunk / avg_tokens_per_word) 
     
+    logging.info('Splitting Text into Chunks')
     dataset_dict = dataset_dict.map( 
         lambda batch: split_text_parallel(batch, max_words_per_chunk, min_words_per_chunk, prop_chunk_overlap), 
         batched=True,
         batch_size=700,
         remove_columns=dataset_dict.column_names['train']
     )
+    logging.info('Finished Splitting Text into Chunks')
     
     # Filter based on language
+    logging.info('Filtering based on language')
     dataset_dict = dataset_dict.map( lambda batch: filter_on_language_parallel(batch, languages_to_include), batched=True, batch_size=700, 
                                     remove_columns=dataset_dict.column_names['train'] )
-    
+    logging.info('Finished Filtering based on language')
+
     # Fixing lack of spaces between parts of text
     if split_combined_words:
-        llm = load_llm( 'TheBloke/wizard-vicuna-13B-HF', False, 'local', 0 )
-        llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk
-        
-        dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm), batched=True, batch_size=500, remove_columns=dataset_dict.column_names['train'], num_proc=1)
+        logging.info('Fixing lack of spaces between parts of text')
+        llm = load_llm( split_combined_words_model, False, 'local', 0 )
+        # llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk # +10 to account for the Corrected Text: prefix
+        llm.pipeline.tokenizer.pad_token = llm.pipeline.tokenizer.eos_token
+        # TODO: test the maximum batch size that can be used here
+        dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm, max_tokens_per_chunk), batched=True, batch_size=48 , remove_columns=dataset_dict.column_names['train'], num_proc=1)
         # release the memory used by the llm
         del llm
         gc.collect()
         empty_cache()
+        logging.info('Finished Fixing lack of spaces between parts of text')
 
 
     # Loop over dataset applying tokenizer to each row
@@ -109,7 +124,7 @@ def main(
     dataset_test.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
     
     # Saving to disk
-    dir_ = f'./data/finetune'
+    dir_ = f'./data/research_papers/preprocessed'
     os.makedirs(dir_, exist_ok=True)
 
     dataset_train.save_to_disk( os.path.join(dir_,f'rp_{model_id.replace("/","_")}_train.arrow')) 
@@ -128,7 +143,6 @@ def dataset_generator(data_dir:str):
         with open(fp, "r") as f:
             text = f.read()
             yield {'text':text}
-
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -160,8 +174,7 @@ def split_text(dict_text:Dict[str,str], max_words_per_chunk:int=200, min_words_p
     return {'text':li_text_chunked}
 
 def split_text_parallel(dict_text: Dict[str, str], max_words_per_chunk: int = 200, min_words_per_chunk: int = 10, prop_chunk_overlap: float = 0.25):
-    
-    
+     
     procs=min(mp.cpu_count(),6)
     inp_batch_text = list(chunks(dict_text['text'], math.ceil(len(dict_text['text'])/procs)))
 
@@ -220,11 +233,10 @@ def split_paragraphs(input_text:str="", min_words_per_chunk:int=10):
 
     return split_text
 
-
 def filter_on_language(batch, languages_to_include:list[str]=['en']):
     """
-    Filter out text that is not in the languages_to_include list
-    Also removes text where the language can not be discerned; usually implies gibberish
+        Filter out text that is not in the languages_to_include list
+        Also removes text where the language can not be discerned; usually implies gibberish
     """
 
     inp_batch_text = batch['text']
@@ -267,7 +279,7 @@ def _filter_on_language_parallel(texts: list[str], languages_to_include: list[st
     return outp_batch_text
 
 
-def fix_text(batch, llm):
+def fix_text(batch, llm, max_tokens_per_chunk):
     """ 
         1) First remove unicode control characters
         2) Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
@@ -278,23 +290,34 @@ def fix_text(batch, llm):
         text = remove_unicode_directionality(text)
         texts.append(text)
 
+    # Part 1b)
+    # Truncating any text to max_tokens_per_chunk tokens
+    llm.pipeline.tokenizer.padding_side = 'left'
+    llm.pipeline.tokenizer.truncation_side = 'right'
+    _ = llm.pipeline.tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=max_tokens_per_chunk )
+    texts = llm.pipeline.tokenizer.batch_decode(_['input_ids'], skip_special_tokens=True)
+
     # Part 2)
     li_split_text = []
-    user_message = 'Please fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
+    user_message = 'Fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
     li_prompts_fmtd = [
         map_llmname_input_format(llm.model_id, 
                                                 user_message = user_message + ' ' + text,
                                                 system_message = None) for text in texts
     ]
 
-    outputs = llm.generate(
-                prompts=li_prompts_fmtd,
-    )
+    # outputs = llm.generate(
+    #             prompts=li_prompts_fmtd,
+    # )
+    # # remove any double spaces on ends
+    # output_txts : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
 
-    # remove any double spaces on ends
-    li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
+    inputs = llm.pipeline.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', max_length=None, truncation=False )
+    output_ids = llm.pipeline.model.generate( **inputs, max_new_tokens=max_tokens_per_chunk+len(llm.pipeline.tokenizer.encode('Corrected Text: \n'))+1 )
+    output_txts = llm.pipeline.tokenizer.batch_decode( output_ids, skip_special_tokens=True )
 
-    for text in li_preds:
+
+    for text in output_txts:
         # Check if text starts with 'Corrected Text:'
         if not text.startswith('Corrected Text:'):
             continue
@@ -344,16 +367,17 @@ def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--model_id', type=str, 
-                        default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF')
+                        default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF', choices=HUGGINGFACE_MODELS)
     
-    parser.add_argument('--max_tokens_per_chunk',type=int, default=500 )
-    parser.add_argument('--min_tokens_per_chunk',type=int, default=100)
+    parser.add_argument('--max_tokens_per_chunk',type=int, default=256 )
+    parser.add_argument('--min_tokens_per_chunk',type=int, default=64)
     
     parser.add_argument('--languages_to_include', nargs='+', default=['en'], choices=['en','es'], help='List of languages to filter for')
 
     parser.add_argument('--prop_chunk_overlap', type=float, default=0.35, help='Number of tokens to overlap between chunks')
 
     parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words. Uses a language model to split words combined due to parsing errors from pdf parser', default=False)
+    parser.add_argument('--split_combined_words_model', type=str, default='TheBloke/Wizard-Vicuna-7B-Uncensored-HF', choices=HUGGINGFACE_MODELS)
 
     parser.add_argument('--debugging', action='store_true', help='Whether to run in debugging mode', default=False)
 
