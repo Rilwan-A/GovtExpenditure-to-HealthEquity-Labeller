@@ -21,6 +21,7 @@ from prompt_engineering.langchain.utils import load_llm
 from prompt_engineering.utils_prompteng import map_llmname_input_format
 
 import multiprocessing as mp
+
 import math
 import re
 
@@ -64,15 +65,7 @@ def main(
     logging.info('Finished Splitting into Training and Test sets')
 
     # Compute average number of tokens in 200 words from a sample of your data
-    if not debugging:
-        logging.info('Computing average number of tokens per word in 200 documents from a sample of your data')
-        sample_text = ' '.join(dataset['text'][:200])  # Create a sample text from your data
-        num_tokens_in_sample = len(tokenizer.encode(sample_text))
-        num_words_in_sample = len(sample_text.split())
-        avg_tokens_per_word = num_tokens_in_sample / num_words_in_sample
-        logging.info(f'Average number of tokens per word in 200 documents from a sample of your data: {avg_tokens_per_word}')
-    else:
-        avg_tokens_per_word = 2.0
+    avg_tokens_per_word = 1.3
 
     # Compute max_tokens_per_chunk based on average tokens per word
     # NOTE: This will underpredict due to the math formulas in the texts
@@ -98,10 +91,9 @@ def main(
     if split_combined_words:
         logging.info('Fixing lack of spaces between parts of text')
         llm = load_llm( split_combined_words_model, False, 'local', 0 )
-        # llm.pipeline._forward_params['max_new_tokens'] = max_tokens_per_chunk # +10 to account for the Corrected Text: prefix
         llm.pipeline.tokenizer.pad_token = llm.pipeline.tokenizer.eos_token
         # TODO: test the maximum batch size that can be used here
-        dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm, max_tokens_per_chunk), batched=True, batch_size=48 , remove_columns=dataset_dict.column_names['train'], num_proc=1)
+        dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm, max_tokens_per_chunk), batched=True, batch_size=24 , remove_columns=dataset_dict.column_names['train'], num_proc=1 )
         # release the memory used by the llm
         del llm
         gc.collect()
@@ -110,10 +102,12 @@ def main(
 
 
     # Loop over dataset applying tokenizer to each row
+    logging.info('Adding input_ids and attention masks to data')
     dataset_dict = dataset_dict.map( lambda batch: map_tokenize(batch, tokenizer, max_len=max_tokens_per_chunk), batched=True, batch_size=500
                                      )
 
     # Add labels to dataset
+    logging.info('Adding labels to data')
     dataset_dict = dataset_dict.map( lambda batch: create_labels_with_mask(batch, tokenizer), batched=False )
 
     # Save Dataset in torch format
@@ -122,9 +116,15 @@ def main(
 
     dataset_train.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
     dataset_test.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
-    
+
+    dataset_dict['train'].split = 'train'
+    dataset_dict['test'].split = 'test'
+
+    dataset_dict['train'].dataset_size = len(dataset_dict['train'])
+    dataset_dict['test'].dataset_size = len(dataset_dict['test'])
+
     # Saving to disk
-    dir_ = f'./data/research_papers/preprocessed'
+    dir_ = f'./data/researchpapers/preprocessed'
     os.makedirs(dir_, exist_ok=True)
 
     dataset_train.save_to_disk( os.path.join(dir_,f'rp_{model_id.replace("/","_")}_train.arrow')) 
@@ -278,7 +278,6 @@ def _filter_on_language_parallel(texts: list[str], languages_to_include: list[st
 
     return outp_batch_text
 
-
 def fix_text(batch, llm, max_tokens_per_chunk):
     """ 
         1) First remove unicode control characters
@@ -302,15 +301,9 @@ def fix_text(batch, llm, max_tokens_per_chunk):
     user_message = 'Fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
     li_prompts_fmtd = [
         map_llmname_input_format(llm.model_id, 
-                                                user_message = user_message + ' ' + text,
-                                                system_message = None) for text in texts
+                                    user_message = user_message + ' ' + text,
+                                    system_message = None) for text in texts
     ]
-
-    # outputs = llm.generate(
-    #             prompts=li_prompts_fmtd,
-    # )
-    # # remove any double spaces on ends
-    # output_txts : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
 
     inputs = llm.pipeline.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', max_length=None, truncation=False )
     output_ids = llm.pipeline.model.generate( **inputs, max_new_tokens=max_tokens_per_chunk+len(llm.pipeline.tokenizer.encode('Corrected Text: \n'))+1 )
@@ -319,11 +312,14 @@ def fix_text(batch, llm, max_tokens_per_chunk):
 
     for text in output_txts:
         # Check if text starts with 'Corrected Text:'
-        if not text.startswith('Corrected Text:'):
-            continue
-
+        # if not text.startswith('Corrected Text:'):\
+        #     continue
         # strip all text before and including 'Corrected Text:',
-        text = text.split('Corrected Text:')[-1]
+        # text = text.split('Corrected Text:')[-1]
+        splits = text.split('Corrected Text:')
+        if len(splits) <= 1:
+            continue
+        text = splits[-1]   
         # remove any double spaces / new lines are start or end of text
         text = text.strip(' \n')
 
@@ -347,7 +343,6 @@ def map_tokenize(batch, tokenizer, max_len:int):
 def create_labels_with_mask(batch, tokenizer):
 
     # Create labels for each token
-
     labels = [-100]*len(batch['input_ids']) 
 
     # Find the index where the first bos appears in the input_ids
@@ -356,25 +351,24 @@ def create_labels_with_mask(batch, tokenizer):
     if tokenizer.eos_token_id in batch['input_ids'][idx_first_bos:]:
         eos_token_idx = batch['input_ids'][idx_first_bos:].index(tokenizer.eos_token_id) + idx_first_bos
         labels[:eos_token_idx+1] = batch['input_ids'][:eos_token_idx+1]  # set labels to input_ids
-        labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
+        # labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
     else:
         labels = batch['input_ids']
-        labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
+        # labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
 
     return {'labels':labels}
 
 def parse_args():
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--model_id', type=str, 
-                        default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF', choices=HUGGINGFACE_MODELS)
+    parser.add_argument('--model_id', type=str, default='TheBloke/Wizard-Vicuna-13B-Uncensored-HF', choices=HUGGINGFACE_MODELS)
     
-    parser.add_argument('--max_tokens_per_chunk',type=int, default=256 )
-    parser.add_argument('--min_tokens_per_chunk',type=int, default=64)
+    parser.add_argument('--max_tokens_per_chunk', type=int, default=256 )
+    parser.add_argument('--min_tokens_per_chunk', type=int, default=128 )
     
     parser.add_argument('--languages_to_include', nargs='+', default=['en'], choices=['en','es'], help='List of languages to filter for')
 
-    parser.add_argument('--prop_chunk_overlap', type=float, default=0.35, help='Number of tokens to overlap between chunks')
+    parser.add_argument('--prop_chunk_overlap', type=float, default=0.45, help='Number of tokens to overlap between chunks')
 
     parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words. Uses a language model to split words combined due to parsing errors from pdf parser', default=False)
     parser.add_argument('--split_combined_words_model', type=str, default='TheBloke/Wizard-Vicuna-7B-Uncensored-HF', choices=HUGGINGFACE_MODELS)

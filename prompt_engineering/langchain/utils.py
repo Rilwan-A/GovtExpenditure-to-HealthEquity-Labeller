@@ -145,23 +145,23 @@ class PredictionGenerator():
       
         self.effect_type = effect_type
 
-    @lru_cache(maxsize=2)
-    def get_generation_params(self, prompt_style:str):
-        generation_params = {}
-        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
-        if prompt_style == 'yes_no':
-            generation_params[k] = 10
-        elif prompt_style == 'open':
-            generation_params[k] = 10
-        elif prompt_style == 'categorise':
-            generation_params[k] = 10
-        elif prompt_style == 'cot_categorise':
-            generation_params[k] = 250
+    # @lru_cache(maxsize=2)
+    # def get_generation_params(self, prompt_style:str):
+    #     generation_params = {}
+    #     k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
+    #     if prompt_style == 'yes_no':
+    #         generation_params[k] = 10
+    #     elif prompt_style == 'open':
+    #         generation_params[k] = 10
+    #     elif prompt_style == 'categorise':
+    #         generation_params[k] = 10
+    #     elif prompt_style == 'cot_categorise':
+    #         generation_params[k] = 250
 
-        if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
-            generation_params['early_stopping'] = True
+    #     if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
+    #         generation_params['early_stopping'] = True
         
-        return generation_params
+    #     return generation_params
 
     def predict(self, li_li_filled_template:list[list[str]], reverse_categories=False)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"

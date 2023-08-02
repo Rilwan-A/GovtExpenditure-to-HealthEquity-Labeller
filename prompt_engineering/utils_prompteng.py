@@ -588,11 +588,16 @@ class PromptBuilder():
             # if hasattr(self.llm.generation_config, 'max_length'):
             #     delattr(self.llm.generation_config, 'max_length')
             self.llm.generation_config.max_length = None
-            self.llm.generation_config.max_new_tokens = generation_params['max_new_tokens'] 
+            # self.llm.generation_config.max_new_tokens = generation_params['max_new_tokens'] 
+
+            for k,v in generation_params.items():
+                setattr(self.llm.generation_config, k, v)
+
 
             
             for li_prompts in li_li_prompts:
                 
+                li_prompts_fmtd = []
                 # Formatting prompts to adhere to format required by Base Language Model                
                 for prompt in li_prompts:
                     if include_user_message_pre_prompt:
@@ -614,7 +619,10 @@ class PromptBuilder():
                 # Removing trailing space from end: (for some reason a space at the end causes to model to instaly stop generating)
                 li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
 
-                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt')
+                # Decide how to pad and truncate the inputs
+                self.tokenizer.padding_side = 'left'
+                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', truncation=False ).to(self.llm.device)
+                self.tokenizer.padding_side = 'right'
                 
                 # Ignoring any warning from the model
                 outputs = self.llm.generate(**inputs, **generation_params, generation_config=self.llm.generation_config )

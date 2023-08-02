@@ -219,7 +219,7 @@ def main(
         save_dir = os.path.join(dir_experiments, f"exp_{exp_name}_{experiment_number:03d}" )
         os.makedirs(save_dir, exist_ok=True )
         
-        with open(os.path.join(save_dir, 'config.json'), 'w') as f:
+        with open(os.path.join(save_dir, 'config.yaml'), 'w') as f:
             yaml.safe_dump(experiment_config, f)
 
         #unbatching data
@@ -371,18 +371,18 @@ def predict_batches(prompt_builder:PromptBuilder,
             logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
 
         # Create prompts
-        batch_filled_template, batch_li_li_discourse = prompt_builder(batch)
+        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch)
         
         # Generate predictions
-        batch_pred_ensembles = prediction_generator.predict(batch_filled_template)
+        batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement) 
 
         # Generate any predictions with category order reversed
         if unbias_categorisations:
-            batch_filled_template_reversed, batch_li_li_discourse_reversed = prompt_builder(batch, reverse_categories_order=True)
-            batch_pred_ensembles_reversed = prediction_generator.predict(batch_filled_template_reversed, reverse_categories=True)
+            batch_li_li_statement_reversed, batch_li_li_discourse_reversed = prompt_builder(batch, reverse_categories_order=True)
+            batch_pred_ensembles_reversed = prediction_generator.predict(batch_li_li_statement_reversed, reverse_categories=True)
 
             # Merge the two sets of outputs, datum for datum merge
-            batch_filled_template = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_filled_template, batch_filled_template_reversed) ]
+            batch_li_li_statement = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_li_li_statement, batch_li_li_statement_reversed) ]
             batch_li_li_discourse = [ li_discourse + li_discourse_reversed for li_discourse, li_discourse_reversed in zip(batch_li_li_discourse, batch_li_li_discourse_reversed) ]
             batch_pred_ensembles = [ pred_ensembles + pred_ensembles_reversed for pred_ensembles, pred_ensembles_reversed in zip(batch_pred_ensembles, batch_pred_ensembles_reversed) ]
             
@@ -392,7 +392,7 @@ def predict_batches(prompt_builder:PromptBuilder,
         batch_pred_agg = prediction_generator.aggregate_predictions(batch_pred_ensembles)
 
         # Extract predictions from the generated text
-        li_prompt_ensemble.extend(batch_filled_template)  # type: ignore
+        li_prompt_ensemble.extend(batch_li_li_statement)  # type: ignore
         li_discourse_ensemble.extend(batch_li_li_discourse) # type: ignore
         li_pred_ensemble.extend( batch_pred_ensembles ) # type: ignore
         li_pred_agg.extend(batch_pred_agg) # type: ignore

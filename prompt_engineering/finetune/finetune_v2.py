@@ -31,6 +31,10 @@ from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
 from datasets import interleave_datasets, load_dataset
 from prompt_engineering.langchain.predict import prepare_data_b2i, predict_batches
 
+from transformers import get_constant_schedule_with_warmup
+import pandas as pd
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 def print_trainable_parameters(model):
     """
@@ -48,9 +52,8 @@ def print_trainable_parameters(model):
 
 # TODO: Add the other models to this dict mebe
 map_modelid_targetmodule = {
-    'mosaicml/mpt-7b-chat': ['kv'] ,
-    'TheBloke/vicuna-7B-1.1-HF': ['k_proj', 'v_proj'] #, 'o_proj']
-
+    'TheBloke/Wizard-Vicuna-7B-Uncensored-HF': ['k_proj', 'v_proj'],
+    'TheBloke/Wizard-Vicuna-13B-Uncensored-HF': ['k_proj', 'v_proj']
 }
 
 class PromptEngineeringLM(pl.LightningModule):
@@ -75,19 +78,22 @@ class PromptEngineeringLM(pl.LightningModule):
     
         if 'spot_alignment' in self.val_tasks:
             self.val_step_outputs_spotalign = []
-            self.prompt_builder_b2i = PromptBuilder( 'yes_no', k_shot=0,
+            self.prompt_builder_b2i = PromptBuilder( self.model,
+                                                     self.model.name_or_path,  
+                                                     'yes_no',
+                                                     k_shot=0,
                                                      ensemble_size=1, 
                                                      examples_dset=None, 
                                                      effect_type='directly',
                                                      relationship='budgetitem_to_indicator',
-                                                     seed=kwargs.get('seed', 10) 
-                                                     )
+                                                     seed=kwargs.get('seed', 10),
+                                                     tokenizer=self.tokenizer)
     
             self.prediction_generator_b2i = PredictionGenerator(self.model,
                                                             self.model.name_or_path,
                                                             prompt_style='yes_no',
-                                                            ensemble_size=0,
-                                                            edge_value="distribution",
+                                                            ensemble_size=1,
+                                                            edge_value="binary_weight",
                                                             parse_style='rules',
                                                             relationship='budgetitem_to_indicator',
                                                             local_or_remote='local',
@@ -99,18 +105,18 @@ class PromptEngineeringLM(pl.LightningModule):
         return self.model( **kwargs)
 
     def training_step(self, batch, batch_idx):
-
-        outputs = self( **batch, output_hidden_states=False, output_attentions=False)
-
+        batch['labels'] = batch['input_ids'].clone()
+        outputs = self(**batch, output_hidden_states=False, output_attentions=False)
         loss = outputs.loss
+
         if torch.isnan(loss):
             return None
+        
         self.log('train_loss', loss, on_step=True,
-                 on_epoch=False, prog_bar=True, logger=True,
-                sync_dist=False, rank_zero_only=True)
+                  on_epoch=False, prog_bar=True, logger=True,
+                  sync_dist=False, rank_zero_only=True)
         
         # if a nan in loss then return None so pytorch lightning skips the step
-        
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
@@ -118,7 +124,9 @@ class PromptEngineeringLM(pl.LightningModule):
         if self.val_tasks[dataloader_idx] == 'next_token':
             input_ids = batch['input_ids']
             attention_mask = batch['attention_mask']
-            labels = batch['labels']
+            # labels = batch['labels']
+            labels = batch['input_ids'].clone()
+
 
             with torch.no_grad():
                 outputs = self(input_ids=input_ids, attention_mask = attention_mask, labels=labels,
@@ -134,16 +142,22 @@ class PromptEngineeringLM(pl.LightningModule):
             # batch will be a list of dicts with keys: budget_item,id,indicator,type,label
             
             with torch.no_grad():
-                li_prompt_ensemble, li_pred_ensemble, li_pred_ensemble_parsed, li_pred_agg, li_prompt_ensemble_fmtd = predict_batches(
-                    li_record = batch,
+                li_prompt_ensemble, li_pred_ensemble, li_pred_agg, li_discourse_ensemble = predict_batches(
                     prompt_builder=self.prompt_builder_b2i,
                     prediction_generator=self.prediction_generator_b2i,
+                    li_record = batch,
+                    unbias_categorisations=False,
                     batch_size=len(batch) )
 
             # Convert the li_pred_agg, which is a list of agg
             li_pred_agg = [ next( (k for k,v in d.items() if v==1) ) for d in li_pred_agg]
 
-            outp = {'pred_agg': li_pred_agg,'related': [d['related'] for d in batch]}
+            outp = {'pred_agg': li_pred_agg,
+                    'related': [d['related'] for d in batch],
+                    'indicator': [d['indicator'] for d in batch],
+                    'budget_item': [d['budget_item'] for d in batch],
+                    'discourse': li_discourse_ensemble
+                    }
 
             self.val_step_outputs_spotalign.append(outp)
 
@@ -160,13 +174,13 @@ class PromptEngineeringLM(pl.LightningModule):
             labels = sum([d['related'] for d in self.val_step_outputs_spotalign], [])
 
             # compute metrics between binary labels and predictions
-            (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None)
+            (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None, zero_division=0)
             
             acc = accuracy_score(labels, preds_agg)
 
 
-            self.log('val_loss', -acc, on_step=False, on_epoch=True,
-                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+            # self.log('val_loss', -acc, on_step=False, on_epoch=True,
+            #         prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
             
             # Logging General Metrics
             self.log('val_spot/acc', acc, on_step=False, on_epoch=True,
@@ -174,7 +188,7 @@ class PromptEngineeringLM(pl.LightningModule):
             
             # Logging positive class metrics
             self.log('val_spot/f1/pos', f1_yes, on_step=False, on_epoch=True,
-                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
             self.log('val_spot/prec/pos', prec_yes, on_step=False, on_epoch=True,
                     prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
             self.log('val_spot/rec/pos', recall_yes, on_step=False, on_epoch=True,
@@ -182,11 +196,23 @@ class PromptEngineeringLM(pl.LightningModule):
 
             # Logging negative class metrics
             self.log('val_spot/f1/neg', f1_no, on_step=False, on_epoch=True,
-                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
+                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
             self.log('val_spot/prec/neg', prec_no, on_step=False, on_epoch=True,
                     prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
             self.log('val_spot/rec/neg', recall_no, on_step=False, on_epoch=True,
                     prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
+            
+            # Saving the predictions to file
+            df = pd.DataFrame({'pred_agg': preds_agg, 
+                               'label': labels, 
+                               'budget_item': [ bi for d in self.val_step_outputs_spotalign for bi in d['budget_item']],
+                                'indicator': [ i for d in self.val_step_outputs_spotalign for i in d['indicator'] ]
+                                 })
+            # make a csv path that is a combination of current epoch and absolute step
+            save_path = os.path.join( os.path.dirname(self.trainer.checkpoint_callback.dirpath), 'val_outputs' ,f'val_preds_epoch_{self.current_epoch}_step_{self.global_step}.csv')
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            df.to_csv( save_path, index=False)
 
             self.val_step_outputs_spotalign.clear()
             
@@ -202,14 +228,29 @@ class PromptEngineeringLM(pl.LightningModule):
             optimizer = bnb.optim.Adam8bit(
                     self.trainer.model.model.parameters(), 
                     # lr=self.lr, 
-                    # betas=(0.9, 0.995),
-                    # eps=1e-9,
+                    betas=(0.9, 0.95),
+                    eps=1e-5,
                     )
-            return {'optimizer': optimizer, 'monitor': 'val_loss'}
+            # return {'optimizer': optimizer, 'monitor': 'val_loss'}
+            return {'optimizer': optimizer, 'monitor': 'val_loss/acc'}
+        
         
         elif self.optimizer == 'Adam8bitPaged':
-            optimizer = bnb.optim.PagedAdamW8bit(self.parameters(), lr=self.lr)
-            return {'optimizer': optimizer, 'monitor': 'val_loss'}
+            optimizer = bnb.optim.PagedAdamW8bit(self.parameters(), 
+                                                 betas=(0.9, 0.95),
+                                                    eps=1e-5,
+                                                 lr=self.lr)
+            #Add a CosineLR scheduler
+            # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 
+            #                                                        T_max= se, 
+            #                                                        eta_min=self.lr/1000 ) 
+
+            # add warmup
+            scheduler = get_constant_schedule_with_warmup(optimizer, 
+                                                        num_warmup_steps=30)
+
+            # return {'optimizer': optimizer, 'monitor': 'val_loss', 'lr_scheduler': scheduler}
+            return {'optimizer': optimizer, 'monitor': 'val_loss/acc', 'lr_scheduler': scheduler}
 
         else:
             raise ValueError(f'optimizer {self.optimizer} not recognized')
@@ -236,9 +277,10 @@ class PromptEngineeringLM(pl.LightningModule):
             r=8, 
             lora_alpha=32, 
             target_modules=map_modelid_targetmodule[config_trainer.model_id], 
-            lora_dropout=0.1, 
+            lora_dropout=0, 
             bias="none", 
-            task_type="CAUSAL_LM"
+            inference_mode=False,
+            task_type=TaskType.CAUSAL_LM
         )
         # prepare int-8 model for training
         # model = prepare_model_for_int8_training(model)
@@ -259,16 +301,37 @@ class PromptEngineeringLM(pl.LightningModule):
 
         # Trainer Callbacks
         callbacks = []
-        callbacks.append(ModelCheckpoint(
-            monitor="val_loss",
-            filename='{epoch}-{step}-{val_loss:.3f}',
-            save_last=True,
-            auto_insert_metric_name=True,
-            save_weights_only=True,
-            save_top_k=2))
-        callbacks.append(PairedEarlyStopping(patience=config_trainer.patience, 
-                                             monitor_1='val_nt/loss',
-                                             monitor_2='val_spot/acc'))
+        
+        callbacks.append(
+            ModelCheckpoint(
+                monitor="val_nt/loss",
+                filename='epoch={epoch}-step-{step}-val_nt_loss={val_nt/loss:.3f}',
+                save_last=False,
+                auto_insert_metric_name=False,
+                save_weights_only=True,
+                save_top_k=1))
+        
+        callbacks.append(
+            ModelCheckpoint(
+                monitor="val_spot/acc",
+                filename='epoch={epoch}-step={step}-val_spot_acc={val_spot/acc:.3f}',
+                save_last=False,
+                auto_insert_metric_name=False,
+                save_weights_only=True,
+                save_top_k=2))
+        
+        callbacks.append(
+            PairedEarlyStopping(
+                                patience_1=config_trainer.patience_1,
+                                patience_2=config_trainer.patience_2, 
+                                    monitor_1='val_nt/loss',
+                                    monitor_2='val_spot/acc',
+                                    mode_1='min',
+                                    mode_2='max' )
+                                    )
+        # callbacks.append(
+        #     EarlyStopping(monitor='val')
+        #     )
 
         # setting up strategy
         strategy = config_trainer.strategy
@@ -281,21 +344,19 @@ class PromptEngineeringLM(pl.LightningModule):
             accelerator=config_trainer.accelerator,
             devices=config_trainer.devices,
 
-            default_root_dir=os.path.join(
-                config_trainer.dir_ckpt, f"{config_trainer.exp_name}"),
-
             callbacks=callbacks,
             logger=pl_loggers.TensorBoardLogger(
-                save_dir=config_trainer.dir_ckpt),
-            
+                config_trainer.dir_ckpt,
+                name=config_trainer.exp_name,               
+                ),
             precision= 32,
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
-            max_epochs=2 if config_trainer.debugging else config_trainer.max_epochs,
+            max_epochs=3 if config_trainer.debugging else config_trainer.max_epochs,
             num_sanity_val_steps=0,
             
-            limit_train_batches=10 if config_trainer.debugging else None,
-            limit_val_batches=4 if config_trainer.debugging else None,
+            limit_train_batches=30 if config_trainer.debugging else None,
+            limit_val_batches=2 if config_trainer.debugging else None,
             log_every_n_steps=1 if config_trainer.debugging else 10,
             
             val_check_interval=config_trainer.val_check_interval
@@ -344,6 +405,7 @@ class PromptEngineeringLM(pl.LightningModule):
             setattr(config_data, k, v)
 
         # Loading parameters for saved model
+        raise NotImplementedError
         checkpoint_path = next((elem for elem in glob.glob(os.path.join(dir_model_version, "checkpoints", "*"))
                                 if elem[-4:] == "ckpt"))
 
@@ -396,12 +458,14 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--debugging', action='store_true')
         
 
-        parser.add_argument('--dir_ckpt', type=str, default='./prompt_engineering/finetune/ckpt')
+        # parser.add_argument('--dir_ckpt', type=str, default='./prompt_engineering/finetune/ckpt')
+        parser.add_argument('--dir_ckpt', type=str, default='/mnt/Data1/akann1w0w1ck/AlanTuring/prompt_engineering/finetune/ckpt')
+
      
         parser.add_argument('--optimizer', type=str,
                             choices=['Adam8bitPaged', 'Adam8bit'], 
                             default='Adam8bitPaged' )
-        parser.add_argument('--lr', type=float, default=3e-4)
+        parser.add_argument('--lr', type=float, default=1e-4)
 
         
         parser.add_argument('--devices', type=int, default=1)
@@ -409,11 +473,12 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--strategy', type=str, default='auto',
                             choices=['auto', 'ddp', 'fsdp', 'deepspeed_stage_2', 'deepspeed_stage_2_offload',
                                      'deepspeed_stage_3', 'deepspeed_stage_3_offload'])        
-        parser.add_argument('--patience', type=int, default=4)
+        parser.add_argument('--patience_1', type=int, default=4)
+        parser.add_argument('--patience_2', type=int, default=6)
         
         parser.add_argument('--accumulate_grad_batches', type=int, default=4)
         parser.add_argument('--max_epochs', type=int, default=2)
-        parser.add_argument('--val_check_interval', type=lambda x: float(x) if '.' in x else int(x),  default=1.0 )
+        parser.add_argument('--val_check_interval', type=lambda x: float(x) if '.' in x else int(x),  default=0.1 )
     
         args = parser.parse_known_args()[0]
 
@@ -443,18 +508,21 @@ class DataModule(pl.LightningDataModule):
 
         if 'research_paper' in self.train_dsets_names:
             dataset = Dataset.load_from_disk(os.path.join(
-                self.dir_data, 'finetune', f"rp_{self.model_id.replace('/','_')}_train.arrow"))
+                self.dir_data, 'researchpapers', 'preprocessed' ,f"rp_{self.model_id.replace('/','_')}_train.arrow"))
             datasets.append(dataset)
             # NOTE: we assume that we do not have to use a chat style 
 
         if 'wizardLM_instruct_70k' in self.train_dsets_names:
             dataset = Dataset.load_from_disk(os.path.join(
-                self.dir_data, 'finetune', f"wLM70k_nofilt_{self.model_id.replace('/','_')}_train.arrow"))
+                self.dir_data, 'instruct', 'preprocessed' , f"wLM70k_nofilt_{self.model_id.replace('/','_')}_train.arrow"))
             datasets.append(dataset)
 
         # datasets interleave two datasets in a 2:1 proportion
         if len(datasets) > 1:
-            dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=self.seed)
+            dataset = interleave_datasets(datasets, 
+                                        #   probabilities=[0.5, 0.5], 
+                                          seed=self.seed, 
+                                          stopping_strategy="first_exhausted" )
         else:
             dataset = datasets[0]
 
@@ -477,31 +545,35 @@ class DataModule(pl.LightningDataModule):
             # Add each of the datasets listed in self.train_dsets_names
             if 'research_paper' in self.train_dsets_names:
                 dataset = Dataset.load_from_disk(os.path.join(
-                    self.dir_data,'finetune', f"rp_{self.model_id.replace('/','_')}_test.arrow"))
+                    self.dir_data, 'researchpapers', 'preprocessed', f"rp_{self.model_id.replace('/','_')}_test.arrow"))
                 datasets.append(dataset)
                 # NOTE: we assume that we do not have to use a chat style 
 
             if 'wizardLM_instruct_70k' in self.train_dsets_names:
                 dataset = Dataset.load_from_disk(os.path.join(
-                    self.dir_data, 'finetune', f"wLM70k_nofilt_{self.model_id.replace('/','_')}_test.arrow"))
+                    self.dir_data, 'instruct', 'preprocessed' , f"wLM70k_nofilt_{self.model_id.replace('/','_')}_test.arrow"))
                 datasets.append(dataset)
                 
             # datasets interleave two datasets in a 2:1 proportion
             # Combine into one dataset
             if len(datasets) > 1:
-                dataset = interleave_datasets(datasets, probabilities=[0.5, 0.5], seed=self.seed)
+                dataset = interleave_datasets(datasets, 
+                                            #   probabilities=[0.5, 0.5], 
+                                            #   seed=self.seed,
+                                              stopping_strategy="first_exhausted")
+            
             else:
                 dataset = datasets[0]
             
-            dataloader_nexttoken = DataLoader(dataset, batch_size=self.batch_size,
-                        shuffle=True, num_workers=self.num_workers, 
+            dataloader_nexttoken = DataLoader(dataset, batch_size=self.batch_size_inf,   
+                        shuffle=False, num_workers=self.num_workers, 
                         pin_memory=False, drop_last=False)
             
             dataloaders.append(dataloader_nexttoken)
             
         if 'spot_alignment' in self.val_tasks :
 
-            dset_records = prepare_data_b2i(input_file=os.path.join(self.dir_data,'spot','spot_indicator_mapping_table_test.csv'), data_load_seed=self.seed)
+            dset_records = prepare_data_b2i(input_file=os.path.join(self.dir_data,'spot','spot_b2i_broad_test.csv'), data_load_seed=self.seed)
             
             dataloader_spotalign = DataLoader(dset_records, batch_size=self.batch_size_inf,
                                     shuffle=False,
@@ -539,16 +611,22 @@ class DataModule(pl.LightningDataModule):
         return args
 
 class PairedEarlyStopping(EarlyStopping):
-    """Early Stopping that requires both metrics to improve over patience steps"""
+    """Early Stopping that requires at least one of two metrics to improve over patience steps"""
 
-    def __init__(self, patience: int, verbose: bool = False, monitor_1: str = 'val_nt/loss', monitor_2: str = 'val_spot/acc', mode: str = 'min'):
-        super().__init__(monitor=monitor_1, patience=patience, verbose=verbose, mode=mode, check_finite=False)
+    def __init__(self, verbose: bool = False, monitor_1: str = 'val_nt/loss', monitor_2: str = 'val_spot/acc', 
+                 mode_1: str = 'min', mode_2:str = 'max',
+                 patience_1: int = 3, patience_2: int = 3):
+        
+        super().__init__(monitor=monitor_1, patience=patience_1, verbose=verbose, mode=mode_1, check_finite=False)
         self.monitor_2 = monitor_2
-        self.patience = patience
+        self.patience_1 = patience_1
+        self.patience_2 = patience_2
         self.wait_count_1 = 0
         self.wait_count_2 = 0
         self.best_score_1 = None
         self.best_score_2 = None
+        self.mode_1 = mode_1
+        self.mode_2 = mode_2
         self.check_finite = False
 
     def _validate_condition_metric(self, logs):
@@ -558,14 +636,18 @@ class PairedEarlyStopping(EarlyStopping):
         if current_1 is None or current_2 is None:
             return False
         
-        if self.best_score_1 is None or self.best_score_2 is None:
+        if self.best_score_1 is None :
             self.best_score_1 = current_1
-            self.best_score_2 = current_2
-            self.wait_count = 0
-            return False
+            self.wait_count_1 = 0
 
-        cond_1 = ( self.mode == "min" and (current_1 < self.best_score_1) ) or (self.mode == "max" and (current_1 > self.best_score_1))
-        cond_2 = ( self.mode == "min" and (current_2 < self.best_score_2) ) or (self.mode == "max" and (current_2 > self.best_score_2))
+        
+        if self.best_score_2 is None :
+            self.best_score_2 = current_2
+            self.wait_count_2 = 0
+            # return False
+
+        cond_1 = ( self.mode_1 == "min" and (current_1 < self.best_score_1) ) or (self.mode_1 == "max" and (current_1 > self.best_score_1))
+        cond_2 = ( self.mode_2 == "min" and (current_2 < self.best_score_2) ) or (self.mode_2 == "max" and (current_2 > self.best_score_2))
 
         if cond_1:
             self.best_score_1 = current_1
@@ -579,7 +661,7 @@ class PairedEarlyStopping(EarlyStopping):
         else:
             self.wait_count_2 += 1
 
-        return ( self.wait_count_1 >= self.patience) or ( self.wait_count_2 >= self.patience)
+        return ( self.wait_count_1 >= self.patience_1) and ( self.wait_count_2 >= self.patience_2)
 
     def on_validation_end(self, trainer, pl_module):
         logs = trainer.callback_metrics

@@ -42,7 +42,13 @@ def main(model_id, json_file, max_tokens_per_chunk=None):
     fn = json_file.split('.')[0]
 
     dataset_dict['train'].set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
-    dataset_dict['test'].set_format(type='torch', columns=[ "input_ids", "attention_mask", "labels"] )
+    dataset_dict['test'].set_format(type='torch', columns=[ "input_ids", "attention_mask", "labels"] ) 
+
+    dataset_dict['train'].split = 'train'
+    dataset_dict['test'].split = 'test'
+
+    dataset_dict['train'].dataset_size = len(dataset_dict['train'])
+    dataset_dict['test'].dataset_size = len(dataset_dict['test'])
 
     
     dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_{model_id.replace("/","_")}_train.arrow'))
@@ -61,14 +67,14 @@ def format_for_lm(data, llm_name, json_file):
         response = data['output']
 
     
-    text = map_llmname_input_format(llm_name, system_message=system_message, user_message=user_message, response=response)
+    text = map_llmname_input_format(llm_name, system_message=system_message, user_message=user_message, response=response).strip(' ')
 
     return {'text':text}
 
 def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
     # Tokenize each row of the dataset
     tokenizer.padding_side = 'right'
-    tokenizer.truncation_side = 'left'
+    tokenizer.truncation_side = 'right'
     outp = tokenizer(batch['text'], truncation=True, padding='max_length', max_length=max_len, return_offsets_mapping=True )
     
     # Create labels for masked language modeling
@@ -90,13 +96,13 @@ def tokenize_create_labels(batch, tokenizer, max_len:int|None=None):
     try:
         output_end_token_index = next(i for i, (start_pos, end_pos) in enumerate(outp['offset_mapping']) if start_pos < output_end_char_pos <= end_pos)
     except StopIteration:
-        output_end_token_index =len(outp['input_ids'])
+        output_end_token_index = len(outp['input_ids'])
 
     # Replace the labels from token start index to token end index with the corresponding 'input_ids'
     # We do + 1 to account for the eos_token that needs to be predicted
     labels[output_start_token_index:(output_end_token_index+1)+1] = outp['input_ids'][output_start_token_index:(output_end_token_index+1)+1]
 
-    labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
+    # labels = labels[1:] + [-100]  # shift labels to the left, append -100 to the end
 
     outp['labels'] = labels
 
@@ -112,7 +118,7 @@ def parse_args():
     
     parser.add_argument('--json_file', type=str, default='wLM70k_nofilt.json', choices=['wLM70k_nofilt.json'])
 
-    parser.add_argument('--max_tokens_per_chunk', type=int, default=350)
+    parser.add_argument('--max_tokens_per_chunk', type=int, default=256)
 
     args = parser.parse_known_args()[0]
 
