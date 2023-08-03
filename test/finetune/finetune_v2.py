@@ -1,5 +1,5 @@
 from torch.utils.data import DataLoader
-from prompt_engineering.finetune.finetune_v2 import DataModule
+from prompt_engineering.finetune.finetune import DataModule
 
 
 def test_train_dataloader():
