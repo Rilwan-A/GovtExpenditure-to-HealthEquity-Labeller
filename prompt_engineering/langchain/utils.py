@@ -30,14 +30,36 @@ HUGGINGFACE_MODELS = [
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF',
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF',
     'CalderaAI/30B-Lazarus',
-    'TheBloke/Wizard-Vicuna-30B-Uncensored-fp16'
+    'TheBloke/Wizard-Vicuna-30B-Uncensored-fp16',
+
+    'stabilityai/StableBeluga-7B',
+    'NousResearch/Nous-Hermes-llama-2-7b',
+
+    'stabilityai/StableBeluga-13B',
+    'NousResearch/Nous-Hermes-Llama2-13b',
+    'openaccess-ai-collective/minotaur-13b-fixed',
+
+    'upstage/llama-30b-instruct-2048',
+    'upstage/Llama-2-70b-instruct-v2',
+    'stabilityai/StableBeluga2',
     ]
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF':4,
     'CalderaAI/30B-Lazarus':4,
-    'TheBloke/Wizard-Vicuna-30B-Uncensored-fp16':4
+    'TheBloke/Wizard-Vicuna-30B-Uncensored-fp16':4,
+
+    'stabilityai/StableBeluga-7B':4,
+    'NousResearch/Nous-Hermes-llama-2-7b':4,
+
+    'stabilityai/StableBeluga-13B':4,
+    'NousResearch/Nous-Hermes-Llama2-13b':4,
+    'openaccess-ai-collective/minotaur-13b-fixed':4,
+
+    'upstage/llama-30b-instruct-2048':4,
+    'upstage/Llama-2-70b-instruct-v2':4,
+    'stabilityai/StableBeluga2':4,
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
@@ -45,7 +67,7 @@ ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
        
-def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1):
+def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, finetune_dir='./finetune/finetuned_models/', exp_name='', finetune_version=0 ):
     from  langchain.chat_models import ChatOpenAI
     from  langchain.llms import HuggingFaceHub
     from langchain import HuggingFacePipeline
@@ -75,15 +97,45 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                 bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
             )
 
-            model_id = llm_name if not finetuned else './finetune/finetuned_models/' + llm_name + '/checkpoints/'
+            if not finetuned:
+                model_id = llm_name
+                llm = HuggingFacePipeline.from_model_id(
+                    model_id=model_id,
+                    task="text-generation",
+                    model_kwargs={'trust_remote_code':True,
+                                    'quantization_config':quant_config,
+                                    'do_sample':False,
+                                    'device_map':'auto'
+                                    },
+                    )
+            else:
+                # load pytorch lightning LightningModule from finetune_dir then extract the llm as lightningModule.model
+                # Load the best checkpoint automatically
 
-            llm = HuggingFacePipeline.from_model_id(
-                model_id=model_id,
-                task="text-generation",
-                model_kwargs={'trust_remote_code':True,
-                                'quantization_config':quant_config,
-                                'do_sample':False},
-                )
+                from prompt_engineering.finetune import PromptEngineeringLM
+                import re
+
+                # Set your checkpoints directory
+                ckpt_dir = os.path.join(finetune_dir, exp_name, f'version_{str(finetune_version)}/checkpoints')
+
+                # Get list of all checkpoint files
+                ckpt_files = os.listdir(ckpt_dir)
+
+                # Filter out non-checkpoint files
+                ckpt_files = [f for f in ckpt_files if f.endswith(".ckpt")]
+
+                # Find the checkpoint with the highest accuracy
+                best_ckpt = max(ckpt_files, key=lambda f: float(re.search(r"val_spot_acc=(\d+(.\d+)?)", f).group(1)) if re.search(r"val_spot_acc=(\d+(.\d+)?)", f) else 0)
+
+                best_ckpt_path = os.path.join(ckpt_dir, best_ckpt)
+
+                # Load the best model
+                model = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path)
+
+                # Extract the llm
+                llm = model.model
+
+
 
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
@@ -282,12 +334,10 @@ class PredictionGenerator():
                                         system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] )
                                     for filledtemplate in li_filledtemplate ] #Added some base model formatting
         
-
         # For each template, create a set of templates that ask a categorical question about the LLMs answer to if Budget Item affects an indiciator 
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         answers = list(  map_category_answer.keys() )
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
-
 
         # For each filled template set calcualte the relative probability of each answer
         li_li_probability = []

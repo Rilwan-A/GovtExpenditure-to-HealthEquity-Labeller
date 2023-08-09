@@ -53,15 +53,18 @@ def print_trainable_parameters(model):
 # TODO: Add the other models to this dict mebe
 map_modelid_targetmodule = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF': ['k_proj', 'v_proj'],
-    'TheBloke/Wizard-Vicuna-13B-Uncensored-HF': ['k_proj', 'v_proj']
+    'TheBloke/Wizard-Vicuna-13B-Uncensored-HF': ['k_proj', 'v_proj'],
+
+    # '':['q_proj','v_proj'],
+
 }
 
 class PromptEngineeringLM(pl.LightningModule):
     """LightningModule for prompt engineering LM training and evaluation."""
     def __init__(self,
                  model,
-                 tokenizer,
-                 val_tasks:list[str],
+                 tokenizer=None,
+                 val_tasks:list[str]=['next_token', 'spot_alignment'],
                  **kwargs
                  ):
         super().__init__()
@@ -69,7 +72,11 @@ class PromptEngineeringLM(pl.LightningModule):
 
         # NOTE: Model should be able to be loaded locally, if it is already trained
         self.model = model
-        self.tokenizer = tokenizer
+        if tokenizer is None:
+            #load using FastTokenizer
+            self.tokenizer = transformers.FastTokenizer.from_pretrained(self.model.name_or_path)
+        else:
+            self.tokenizer = tokenizer
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self.val_tasks = val_tasks
@@ -276,9 +283,9 @@ class PromptEngineeringLM(pl.LightningModule):
         # Implementing Lora version
         peft_config = LoraConfig(
             r=8, 
-            lora_alpha=32, 
-            target_modules=map_modelid_targetmodule[config_trainer.model_id], 
-            lora_dropout=0, 
+            lora_alpha=16, 
+            target_modules=map_modelid_targetmodule.get(config_trainer.model_id,['k_proj','q_proj','v_proj']), 
+            lora_dropout=0.05, 
             bias="none", 
             inference_mode=False,
             task_type=TaskType.CAUSAL_LM

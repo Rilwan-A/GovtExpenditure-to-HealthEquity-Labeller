@@ -133,7 +133,6 @@ li_prompts_yes_no_template_i2i = [
     'Do improvements in {indicator1} {effect_type} affect \"{indicator2}\"?, Yes or No',
     
     'Answer the following question with yes or no: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
-
 ]
 
 li_prompts_categories_answer_i2i = []
@@ -216,8 +215,13 @@ map_relationship_sysprompt_categoriesanswer = {
 # region BaseModelFormat - The format required by the underlying language model
 format_vicuna_1_1 = "{system_message}\nUSER: {user_message}\nASSISTANT: "
 format_vicuna_1_1_no_sysmessage = "USER: {user_message}\nASSISTANT: "
-format_alpaca = "### Instruction:\n{system_message}\n\n### Input:\n{user_message}\n\n### Response:\n"
-format_alpaca_no_sysmessage = "### Input:\n{user_message}\n\n### Response:\n"
+
+format_alpaca = "{system_message}\n\n### Instruction:\n{user_message}\n\n### Response:\n"
+format_alpaca_no_sysmessage = "### Instruction:\n{user_message}\n\n### Response:\n"
+
+format_beluga = "### System:\n{system_message}\n\n### User:\n{user_message}\n\n### Assistant:\n"
+format_beluga_no_sysmessage = "### User: {user_message}\n\n### Assistant:\n"
+
 format_dummy = "{system_message}\n\n{user_message}\n\n"
 format_dummy_no_sysmessage = "{user_message}\n\n"
 
@@ -229,9 +233,14 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
         system_message = system_message.strip(' ')
 
     llm_name = llm_name.lower()
-
     
-    if any(x in llm_name for x in ['vicuna', 'lazarus']):
+    if any(x in llm_name for x in ['hermes-llama-2','hermes-llama2']):
+        if system_message is not None:
+            template = format_alpaca
+        else:
+            template = format_alpaca_no_sysmessage
+    
+    elif any(x in llm_name for x in ['vicuna', 'lazarus', 'minotaur']):
         if system_message is not None:
             template = format_vicuna_1_1
         else:
@@ -243,6 +252,11 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
         else:
             template = format_alpaca_no_sysmessage
     
+    elif any( x in llm_name for x in ['beluga','llama-2-70b-instruct-v2', 'llama-30b-instruct-2048']):
+        if system_message is not None:
+            template = format_beluga
+        else:
+            template = format_beluga_no_sysmessage
     
     elif any(x in llm_name for x in ['dummy', 'test']) :
         if system_message is not None:
@@ -527,10 +541,11 @@ class PromptBuilder():
             for li_prompts in li_li_prompts:
                 sleep(20)
                 batch_messages = [
-                    [   SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type]),
-                        HumanMessage(content=map_relationship_system_prompt[self.relationship][self.prompt_style] + ' ' + prompt) ]
-                        for prompt in li_prompts
-                        ]
+                        [   
+                            SystemMessage(content=map_relationship_system_prompt[self.relationship][self.effect_type]),
+                            HumanMessage(content=map_relationship_system_prompt[self.relationship][self.prompt_style] + ' ' + prompt)
+                            ] for prompt in li_prompts
+                    ]
                 
                 
                 outputs = self.llm.generate( batch_messages )
