@@ -50,10 +50,10 @@ def print_trainable_parameters(model):
         f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
     )
 
-# TODO: Add the other models to this dict mebe
+# TODO: Add the other models to this dict methos
 map_modelid_targetmodule = {
-    'TheBloke/Wizard-Vicuna-7B-Uncensored-HF': ['k_proj', 'v_proj'],
-    'TheBloke/Wizard-Vicuna-13B-Uncensored-HF': ['k_proj', 'v_proj'],
+    'TheBloke/Wizard-Vicuna-7B-Uncensored-HF': ['k_proj', 'v_proj', 'q_proj'],
+    'TheBloke/Wizard-Vicuna-13B-Uncensored-HF': ['k_proj', 'v_proj', 'q_proj'],
 
     # '':['q_proj','v_proj'],
 
@@ -337,20 +337,14 @@ class PromptEngineeringLM(pl.LightningModule):
                                     mode_1='min',
                                     mode_2='max' )
                                     )
-        # callbacks.append(
-        #     EarlyStopping(monitor='val')
-        #     )
 
-        # setting up strategy
-        strategy = config_trainer.strategy
-
-
+        
         # Create trainer
         trainer = pl.Trainer(
-            strategy=strategy,
-
+            strategy=config_trainer.strategy,
             accelerator=config_trainer.accelerator,
             devices=config_trainer.devices,
+            num_nodes=config_trainer.num_nodes,
 
             callbacks=callbacks,
             logger=pl_loggers.TensorBoardLogger(
@@ -475,8 +469,8 @@ class PromptEngineeringLM(pl.LightningModule):
                             default='Adam8bitPaged' )
         parser.add_argument('--lr', type=float, default=1e-4)
 
-        
-        parser.add_argument('--devices', type=int, default=1)
+        parser.add_argument('--num_nodes', type=int, default=1)
+        parser.add_argument('--devices', type=int, default=1, nargs='+')
         parser.add_argument('--accelerator', type=str, default='gpu', choices=['gpu'])
         parser.add_argument('--strategy', type=str, default='auto',
                             choices=['auto', 'ddp', 'fsdp', 'deepspeed_stage_2', 'deepspeed_stage_2_offload',
@@ -703,6 +697,21 @@ if __name__ == "__main__":
     config_trainer = PromptEngineeringLM.parse_args(parent_parser)
     config_data = DataModule.parse_args(parent_parser)
     config_model = Namespace()
+
+    # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(i) for i in config_trainer.devices])
+
+    # Conditional exports
+    if config_trainer.strategy == 'ddp':
+        # os.environ['NCCL_SOCKET_IFNAME']='eth0'
+        # os.environ["MASTER_ADDR"] = "localhost"
+        # os.environ["MASTER_PORT"] = "29501"
+        # pass
+        
+
+        if config_trainer.debugging:
+            os.environ['NCCL_DEBUG']='INFO'
+            os.environ["TORCH_CPP_LOG_LEVEL"]="INFO"
+
 
     if config_trainer.test_only:
         PromptEngineeringLM.test_model(

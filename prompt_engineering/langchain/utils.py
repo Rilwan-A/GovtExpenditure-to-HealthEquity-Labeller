@@ -26,6 +26,8 @@ import openai
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
+    'mlabonne/dummy-llama-2',
+    
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF',
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF',
     'CalderaAI/30B-Lazarus',
