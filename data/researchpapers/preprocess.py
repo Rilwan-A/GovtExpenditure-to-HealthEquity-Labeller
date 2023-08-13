@@ -24,7 +24,7 @@ import multiprocessing as mp
 
 import math
 import re
-
+import torch
 from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
 
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
@@ -39,6 +39,7 @@ def main(
     languages_to_include:list[str],
     split_combined_words:bool,
     split_combined_words_model:str='',
+    gpus:list[int]=[0],
     debugging:bool=False,
     ):
 
@@ -89,7 +90,10 @@ def main(
 
     # Fixing lack of spaces between parts of text
     if split_combined_words:
+        
         logging.info('Fixing lack of spaces between parts of text')
+        
+        # slow method
         llm = load_llm( split_combined_words_model, False, 'local', 0 )
         llm.pipeline.tokenizer.pad_token = llm.pipeline.tokenizer.eos_token
         # TODO: test the maximum batch size that can be used here
@@ -98,6 +102,19 @@ def main(
         del llm
         gc.collect()
         empty_cache()
+
+        # Fast method
+        dataset_dict['train'] = dataset_dict['train'].map( lambda batch: fix_text_parallel(batch, max_tokens_per_chunk, gpus, split_combined_words_model), 
+                                                          batched=True,
+                                                          batch_size=int( math.ceil( len(dataset_dict['train'])/len(gpus) ) ),
+                                                            remove_columns=dataset_dict.column_names['train'], num_proc=1 )
+
+        dataset_dict['test'] = dataset_dict['test'].map( lambda batch: fix_text_parallel(batch, max_tokens_per_chunk, gpus, split_combined_words_model), 
+                                                          batched=True,
+                                                          batch_size= int( math.ceil( len(dataset_dict['test'])/len(gpus) ) ) ,
+                                                            remove_columns=dataset_dict.column_names['test'], num_proc=1 )
+
+
         logging.info('Finished Fixing lack of spaces between parts of text')
 
 
@@ -278,6 +295,55 @@ def _filter_on_language_parallel(texts: list[str], languages_to_include: list[st
 
     return outp_batch_text
 
+# def fix_text(batch, llm, max_tokens_per_chunk):
+    """ 
+        1) First remove unicode control characters
+        2) Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
+
+    # Part 1)
+    texts = []
+    for text in batch['text']:
+        text = remove_unicode_directionality(text)
+        texts.append(text)
+
+    # Part 1b)
+    # Truncating any text to max_tokens_per_chunk tokens
+    llm.pipeline.tokenizer.padding_side = 'left'
+    llm.pipeline.tokenizer.truncation_side = 'right'
+    _ = llm.pipeline.tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=max_tokens_per_chunk )
+    texts = llm.pipeline.tokenizer.batch_decode(_['input_ids'], skip_special_tokens=True)
+
+    # Part 2)
+    li_split_text = []
+    user_message = 'Fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
+    li_prompts_fmtd = [
+        map_llmname_input_format(llm.model_id, 
+                                    user_message = user_message + ' ' + text,
+                                    system_message = None) for text in texts
+    ]
+
+    inputs = llm.pipeline.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', max_length=None, truncation=False )
+    output_ids = llm.pipeline.model.generate( **inputs, max_new_tokens=max_tokens_per_chunk+len(llm.pipeline.tokenizer.encode('Corrected Text: \n'))+1 )
+    output_txts = llm.pipeline.tokenizer.batch_decode( output_ids, skip_special_tokens=True )
+
+
+    for text in output_txts:
+        # Check if text starts with 'Corrected Text:'
+        # if not text.startswith('Corrected Text:'):\
+        #     continue
+        # strip all text before and including 'Corrected Text:',
+        # text = text.split('Corrected Text:')[-1]
+        splits = text.split('Corrected Text:')
+        if len(splits) <= 1:
+            continue
+        text = splits[-1]   
+        # remove any double spaces / new lines are start or end of text
+        text = text.strip(' \n')
+
+        li_split_text.append(text)
+
+    return {'text':li_split_text}
+
 def fix_text(batch, llm, max_tokens_per_chunk):
     """ 
         1) First remove unicode control characters
@@ -327,6 +393,87 @@ def fix_text(batch, llm, max_tokens_per_chunk):
 
     return {'text':li_split_text}
 
+def fix_text_parallel(batch, max_tokens_per_chunk, gpus, split_combined_words_model):
+    procs = min(mp.cpu_count(), 6)
+
+    inp_batch_text = list(chunks(batch['text'], math.ceil(len(batch['text']) / procs)))
+
+    with mp.Pool(procs) as p:
+        outp_batches_text = p.starmap(_fix_text_parallel, [(texts, gpu, max_tokens_per_chunk, split_combined_words_model) for texts, gpu in zip(inp_batch_text,gpus) ])
+
+    # Flatten list of batches
+    outp_batch_text = [text for batch in outp_batches_text for text in batch]
+
+    return {'text': outp_batch_text}
+
+def _fix_text_parallel(texts, gpu, max_tokens_per_chunk, split_combined_words_model):
+    # Part 1)
+    for text in texts:
+        text = remove_unicode_directionality(text)
+
+    # Part 1b) Loaing LLM
+    torch.cuda.set_device(gpu)
+    llm = load_llm( split_combined_words_model, False, 'local', 0 )
+    llm.pipeline.tokenizer.pad_token = llm.pipeline.tokenizer.eos_token
+    
+    llm.pipeline.tokenizer.padding_side = 'left'
+    llm.pipeline.tokenizer.truncation_side = 'right'
+
+    # Part 2) Batch converting
+    # _ = llm.pipeline.tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=max_tokens_per_chunk)
+    # texts = llm.pipeline.tokenizer.batch_decode(_['input_ids'], skip_special_tokens=True)
+
+    li_split_text = []
+    user_message = 'Fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
+    li_prompts_fmtd = [
+        map_llmname_input_format(llm.model_id,
+                                    user_message=user_message + ' ' + text,
+                                    system_message=None) for text in texts
+    ]
+
+    inputs = llm.pipeline.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', max_length=None, truncation=False)
+    output_ids = llm.pipeline.model.generate(**inputs, max_new_tokens=max_tokens_per_chunk + len(llm.pipeline.tokenizer.encode('Corrected Text: \n')) + 1)
+    output_txts = llm.pipeline.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+
+    batch_size = 24  # Define your desired batch size
+
+    # Splitting the texts into chunks of batch_size
+    for start_idx in range(0, len(output_txts), batch_size):
+        batch_texts = texts[start_idx:start_idx + batch_size]
+
+        # Part 1b) Cutting text down to correct length
+        _ = llm.pipeline.tokenizer(batch_texts, return_tensors='pt', padding=True, truncation=True, max_length=max_tokens_per_chunk)
+        batch_texts = llm.pipeline.tokenizer.batch_decode(_['input_ids'], skip_special_tokens=True)
+
+        # Part 2)
+        user_message = 'Fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
+        li_prompts_fmtd = [
+            map_llmname_input_format(llm.model_id,
+                                        user_message=user_message + ' ' + text,
+                                        system_message=None) for text in batch_texts
+        ]
+
+        inputs = llm.pipeline.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', max_length=None, truncation=False)
+        output_ids = llm.pipeline.model.generate(**inputs, max_new_tokens=max_tokens_per_chunk + len(llm.pipeline.tokenizer.encode('Corrected Text: \n')) + 1)
+        output_batch_txts = llm.pipeline.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+
+
+        for text in output_batch_txts:
+            splits = text.split('Corrected Text:')
+            if len(splits) <= 1:
+                continue
+            text = splits[-1]
+            text = text.strip(' \n')
+            li_split_text.append(text)
+        
+            # li_split_text.extend(output_batch_txts)  # Collecting the results from each batch
+
+
+    return li_split_text
+
+
 def remove_unicode_directionality(s):
     s = re.sub(r'[\u202B\u202A\u202C]\n?', '', s)
     return s
@@ -371,7 +518,7 @@ def parse_args():
     parser.add_argument('--prop_chunk_overlap', type=float, default=0.45, help='Number of tokens to overlap between chunks')
 
     parser.add_argument('--split_combined_words', action='store_true', help='Whether to split combined words. Uses a language model to split words combined due to parsing errors from pdf parser', default=False)
-    parser.add_argument('--split_combined_words_model', type=str, default='TheBloke/Wizard-Vicuna-7B-Uncensored-HF', choices=HUGGINGFACE_MODELS)
+    parser.add_argument('--split_combined_words_model', type=str, default='stabilityai/StableBeluga2', choices=HUGGINGFACE_MODELS)
 
     parser.add_argument('--debugging', action='store_true', help='Whether to run in debugging mode', default=False)
 
