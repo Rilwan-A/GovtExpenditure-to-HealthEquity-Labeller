@@ -44,11 +44,11 @@ def main(model_id, json_file, max_tokens_per_chunk=None):
     dataset_dict['train'].set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
     dataset_dict['test'].set_format(type='torch', columns=[ "input_ids", "attention_mask", "labels"] ) 
 
-    dataset_dict['train'].split = 'train'
-    dataset_dict['test'].split = 'test'
+    # dataset_dict['train'].split = 'train'
+    # dataset_dict['test'].split = 'test'
 
-    dataset_dict['train'].dataset_size = len(dataset_dict['train'])
-    dataset_dict['test'].dataset_size = len(dataset_dict['test'])
+    # dataset_dict['train'].dataset_size = len(dataset_dict['train'])
+    # dataset_dict['test'].dataset_size = len(dataset_dict['test'])
 
     
     dataset_dict['train'].save_to_disk(os.path.join(dir_, f'{fn}_{model_id.replace("/","_")}_train.arrow'))
