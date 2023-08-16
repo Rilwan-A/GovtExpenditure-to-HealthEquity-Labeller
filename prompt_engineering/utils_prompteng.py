@@ -24,100 +24,90 @@ from functools import lru_cache
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
-li_prompts_yes_no_question = [    
-    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
-
-    # "Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?",
-    # 'Give me a yes or no answer to the following question, Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
-    # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
-    # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?',    
+li_prompts_yes_no_question_b2i = [    
+    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
 ]
 
-li_prompts_openended_question = [    
+li_prompts_openended_question_b2i = [    
     'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
-    # 'Is local government spending on \"{budget_item}\" {effect_type} related to the state of \"{indicator}\"?',
-    # 'Does local government spending on \"{budget_item}\" {effect_type} relate to the level of \"{indicator}\"?'
-    # 'Is the state of \"{indicator}\" {effect_type} related to local government spending on \"{budget_item}\"?',
-    # 'Does local government spending on \"{budget_item}\" {effect_type} improve the level of \"{indicator}\"?'
 ]
 
-li_prompts_reasoning_question = [
+li_prompts_reasoning_question_b2i = [
     'To what extent, if any, does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
 ]
 
 # region Prompts for the open prompt style methodology with categorical parse style
-# map_category_answer = { 'A':'Is Related', 'B':'Is Not Related', 'C':'Not Sure' }
-# map_category_label = { 'A':'Yes', 'B':'No', 'C':'NA'}
-# map_category_answer = { 'A':'Does Affect', 'B':'Does Not Affect', 'C':'Not Sure' }
-
-map_category_answer = { '1':'Local government spending on "{budget_item}" does {effect_type} affect "{indicator}".', 
+map_category_answer_b2i = { '1':'Local government spending on "{budget_item}" does {effect_type} affect "{indicator}".', 
                                         '2':'Local government spending on "{budget_item}" does not {effect_type} affect "{indicator}"' }
-map_category_label = {'1':'Yes',
+map_category_label_b2i = {'1':'Yes',
                        '2':'No'}
 
-li_prompts_categorical_question_w_reasoning: list[str] = [
+li_prompts_categorical_question_w_reasoning_b2i: list[str] = [
     # "Below is a list of \"Categories\" and a \"Statement\" regarding whether local government spending on a government budget item has a causal relationship with a socio-economic/health indicator. Please select the category, that best describes the relationship between the government budget item and socio-economic/health indicator.\n\"Categories\":\n- A Relationship Exists\n- No Relationship Exists\n- Indetermined\n\"Statement\": {statement}"
     # "Select the letter that best categorizes the claim made in the statement regarding whether or not there is a causal link between local government spending on a particular budget item and a socio-economic or health indicator. The statement will be provided to you, and you must choose from the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your answer should consist of the letter corresponding to the most appropriate category.\n Answer: ",
     # "Please choose the letter that accurately classifies the assertion made in the statement regarding the potential causal relationship between local government spending on a specific budget item and a socio-economic or health indicator. The statement will be presented to you, and you must select one of the three categories provided: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should consist of the letter that corresponds to the most suitable classification."
     # "Please evaluate the statement provided, which discusses a potential causal link between local government spending on a specific budget item and a socio-economic or health indicator. Based on the information in the statement, classify the relationship into one of the following categories: A) A Relationship Exists, B) No Relationship Exists, or C) Relationship Indeterminate. Your response should be the letter that best represents your classification."
-    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter of the selected category: A) {map_category_answer["A"]}, B) {map_category_answer["B"]}, or C) {map_category_answer["C"]}.\nStatement: {"{statement}"}',
-    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter (A, B or C) of the selected category: A) {map_category_answer["A"]}, B) {map_category_answer["B"]}, or C) {map_category_answer["C"]}.\nStatement: {"{statement}"}'
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" is related to a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter of the selected category: A) {map_category_answer_b2i["A"]}, B) {map_category_answer_b2i["B"]}, or C) {map_category_answer_b2i["C"]}.\nStatement: {"{statement}"}',
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion into one of the following categories and respond only with the letter (A, B or C) of the selected category: A) {map_category_answer_b2i_b2i["A"]}, B) {map_category_answer_b2i_b2i_b2i["B"]}, or C) {map_category_answer_b2i["C"]}.\nStatement: {"{statement}"}'
     # NOTE: All the above prompts included a NA category e.g. if the model was not sure. The issue was that the NA category always attracted too much weight during prediction so we removed it.
     # NOTE: All the above prompts included a letters for the category labels, issue with this is that when using perplexity method then the perplexity of category labels can also include probability of the model produce open answers that start with label lettter.
-    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
-    # f'The statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
-    # f'The Statement below expresses an opinion on whether government spending on "{{budget_item}}" affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.\nStatement: {"{statement}"}'
-    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\t2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement'
-    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}\n\nWrite the number of the category that fits the statement',
-    # f'Write "1" if the following statement implies {map_category_answer["1"]} or write "2" if it implies {map_category_answer["2"]}.\nStatement: {"{statement}"}',
-    f'Write only the number of the category that fits the following statement.\nStatement: {"{statement}"}\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
+    # f'The statement below expresses an opinion on whether local government spending on a specific "government budget item" affects a "socio-economic/health indicator". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i_b2i["1"]}, 2) {map_category_answer_b2i["2"]}.\nStatement: {"{statement}"}'
+    # f'The statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer_b2i["1"]}, 2) {map_category_answer_b2i["2"]}.\nStatement: {"{statement}"}'
+    # f'The Statement below expresses an opinion on whether government spending on "{{budget_item}}" affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer_b2i["1"]}, 2) {map_category_answer_b2i["2"]}.\nStatement: {"{statement}"}'
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i["1"]}\t2) {map_category_answer_b2i["2"]}\n\nWrite the number of the category that fits the statement'
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i["1"]}\n2) {map_category_answer_b2i["2"]}\n\nWrite the number of the category that fits the statement',
+    # f'Write "1" if the following statement implies {map_category_answer_b2i["1"]} or write "2" if it implies {map_category_answer_b2i["2"]}.\nStatement: {"{statement}"}',
+    f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\n1) {map_category_answer_b2i["1"]}\n2) {map_category_answer_b2i["2"]}'
 ]
 
-li_prompts_categorical_question_w_reasoning_reversed: list[str] = [
-        # f'The Statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer["2"]}, 2) {map_category_answer["1"]}.\nStatement: {"{statement}"}'
-    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\t2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
-    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}\n\nWrite the number of the category that fits the statement'
-    # f'Write "1" if the following statement implies {map_category_answer["2"]} or write "2" if it implies {map_category_answer["1"]}.\nStatement: {"{statement}"}',
-    f'Write only the number of the category that fits the following statement.\nStatement: {"{statement}"}\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
+li_prompts_categorical_question_w_reasoning_reversed_b2i: list[str] = [
+        # f'The Statement below expresses an opinion on whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}". Classify the statement\'s opinion using one of the following categories and respond only with the category number: 1) {map_category_answer_b2i["2"]}, 2) {map_category_answer_b2i["1"]}.\nStatement: {"{statement}"}'
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i_b2i_b2i_b2i_b2i_b2i["2"]}\t2) {map_category_answer_b2i["1"]}\n\nWrite the number of the category that fits the statement'
+    # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_answer_b2i["1"]}\n\nWrite the number of the category that fits the statement'
+    # f'Write "1" if the following statement implies {map_category_answer_b2i["2"]} or write "2" if it implies {map_category_answer_b2i["1"]}.\nStatement: {"{statement}"}',
+    f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_label_b2i["1"]}'
         ]
 
 
-li_prompts_categorical_question: list[str] = [
-    # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.'
-    # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
-    # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}',
-    # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
-    # f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
-    # f'Categories:\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}\nWrite the number of the category that best answers whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
-    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer["1"]}\n\t2) {map_category_answer["2"]}.'
-    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label["1"]}" or "2" if the answer is "{map_category_label["2"]}".',
-    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Answers: 1) {map_category_label["1"]} 2) {map_category_label["2"]}',
+li_prompts_categorical_question_b2i: list[str] = [
+    # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer_b2i["1"]}, 2) {map_category_answer_b2i_b2i["2"]}.'
+    # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer_b2i_b2i["1"]}\n2) {map_category_answer_b2i["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
+    # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer_b2i["2"]}\n2) {map_category_answer_b2i_b2i_b2i_b2i["1"]}',
+    # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer_b2i["1"]}\n2) {map_category_answer_b2i["2"]}'
+    # f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer_b2i_b2i_b2i["1"]}\n2) {map_category_answer_b2i["2"]}'
+    # f'Categories:\n1) {map_category_answer_b2i_b2i_b2i["1"]}\n2) {map_category_answer_b2i["2"]}\nWrite the number of the category that best answers whether local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i["1"]}\n\t2) {map_category_answer_b2i_b2i["2"]}.'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["1"]}" or "2" if the answer is "{map_category_label_b2i["2"]}".',
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Answers: 1) {map_category_label_b2i["1"]} 2) {map_category_label_b2i["2"]}',
     f'Write "1" if the following statement is True or "2" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
     ]
 
-li_prompts_categorical_question_reversed: list[str] = [
-    # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer["1"]}, 2) {map_category_answer["2"]}.'
-    # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
-    # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["1"]}\n2) {map_category_answer["2"]}'
-    # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
-    # f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}'
-    # f'Categories:\n1) {map_category_answer["2"]}\n2) {map_category_answer["1"]}\nWrite the number of the category that best answers whether government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
-    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer["2"]}\n\t2) {map_category_answer["1"]}.'
-    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label["2"]}" or "2" if the answer is "{map_category_label["1"]}".'
+li_prompts_categorical_question_reversed_b2i: list[str] = [
+    # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer_b2i["1"]}, 2) {map_category_answer_b2i["2"]}.'
+    # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_answer_b2i_b2i["1"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
+    # f'Select the category that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer_b2i["1"]}\n2) {map_category_answer_b2i["2"]}'
+    # f'Select the category number that answers the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer_b2i["2"]}\n2) {map_category_answer_b2i_b2i_b2i["1"]}'
+    # f'Write the number of the category that fits the question. Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?\n1) {map_category_answer_b2i["2"]}\n2) {map_category_answer_b2i["1"]}'
+    # f'Categories:\n1) {map_category_answer_b2i_b2i_b2i_b2i["2"]}\n2) {map_category_answer_b2i["1"]}\nWrite the number of the category that best answers whether government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i_b2i["2"]}\n\t2) {map_category_answer_b2i["1"]}.'
+    # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["2"]}" or "2" if the answer is "{map_category_label_b2i["1"]}".'
     f'Write "2" if the following statement is True or "1" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
 ]
 
 # endregion
 budgetitem_to_indicator_prompts = {
-    'li_prompts_yes_no_question':li_prompts_yes_no_question,
-    'li_prompts_openended_question':li_prompts_openended_question,
-    'li_prompts_reasoning_question':li_prompts_reasoning_question,
-    'li_prompts_categorical_question_w_reasoning':li_prompts_categorical_question_w_reasoning,
-    'li_prompts_categorical_question_w_reasoning_reversed':li_prompts_categorical_question_w_reasoning_reversed,
+    'li_prompts_yes_no_question':li_prompts_yes_no_question_b2i,
+    'li_prompts_openended_question':li_prompts_openended_question_b2i,
+    'li_prompts_reasoning_question':li_prompts_reasoning_question_b2i,
+    'li_prompts_categorical_question_w_reasoning':li_prompts_categorical_question_w_reasoning_b2i,
+    'li_prompts_categorical_question_w_reasoning_reversed':li_prompts_categorical_question_w_reasoning_reversed_b2i,
     
 
-    'li_prompts_categorical_question':li_prompts_categorical_question,
-    'li_prompts_categorical_question_reversed':li_prompts_categorical_question_reversed
+    'li_prompts_categorical_question':li_prompts_categorical_question_b2i,
+    'li_prompts_categorical_question_reversed':li_prompts_categorical_question_reversed_b2i,
+
+    'map_cateogry_answer':map_category_answer_b2i,
+    'map_category_label':map_category_label_b2i
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
 #endregion
@@ -135,39 +125,51 @@ li_prompts_yes_no_template_i2i = [
     'Answer the following question with yes or no: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
 ]
 
-li_prompts_categories_answer_i2i = []
-
-li_prompts_open_template_i2i = [
-    'Does the level of \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?',
-
-    'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?',
-
-    'Is the level of \"{indicator1}\" {effect_type} related to the level of \"{indicator2}\"?',
-
-    'Do improvements in {indicator1} {effect_type} affect \"{indicator2}\"?',
-
-    'Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
-
+li_prompts_yes_no_question_i2i = [
+    "Do changes in the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?"
+    ]
+li_prompts_openended_question_i2i = [
+    "Do changes in the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?"
 ]
-li_prompts_open_template_open_response_i2i = [
-    {'Yes':'The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_type} influential to the state of \"{indicator2}\".'},
 
-    {'Yes':'Local government spending on improving the level of \"{indicator1}\" does {effect_type} affect the level of \"{indicator2}\".', 'No':'Local government spending on improving the level of \"{indicator1}\" does not {effect_type} affect the level of \"{indicator2}\".'},
-
-    {'Yes':'The level of \"{indicator1}\" is {effect_type} related to the level of \"{indicator2}\".', 'No':'The level of \"{indicator1}\" is not {effect_type} related to the level of \"{indicator2}\".'},
-
-    {'Yes':'Improvements in {indicator1} do {effect_type} affect \"{indicator2}\".', 'No':'Improvements in {indicator1} do not {effect_type} affect \"{indicator2}\".'},
-
-    {'Yes':'Local government spending aimed at affecting \"{indicator1}\" does {effect_type} affect \"{indicator2}\".', 'No':'Local government spending aimed at affecting \"{indicator1}\" does not {effect_type} affect \"{indicator2}\".'}
-
+li_prompts_reasoning_question_i2i = [
+    "To what extent, if any, do changes in the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?"
 ]
+
+# Prompts for the open prompt style methodology with categorical parse style
+map_category_answer_i2i = { '1':'The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".',
+                                        '2':'The level of \"{indicator1}\" is not {effect_type} influential to the state of \"{indicator2}\".' }
+map_category_label_i2i = {'1':'Yes',
+                          '2':'No'}
+
+li_prompts_categorical_question_w_reasoning_i2i: list[str] = [
+    f'Write only the number of the category that fits the following statement.\nStatement: "{{statement}}"\nCategories:\n1) {map_category_answer_i2i["1"]}\n2) {map_category_answer_i2i["2"]}'
+]
+
+li_prompts_categorical_question_w_reasoning_reversed_i2i: list[str] = [
+    f'Write only the number of the category that fits the following statement.\nStatement: "{{statement}}"\nCategories:\n1) {map_category_answer_i2i["2"]}\n2) {map_category_label_i2i["1"]}'
+]
+
+li_prompts_categorical_question_i2i: list[str] = [
+    f'Write "1" if the following statement is True or "2" if it is False. The level of "{{indicator1}}" is {{effect_type}} influential to the state of "{{indicator2}}".'
+    ]
+
+li_prompts_categorical_question_reversed_i2i: list[str] = [
+    'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
+    ]
+
 
 indicator_to_indicator_prompts = {
-    'li_prompts_yes_no_template_i2i':li_prompts_yes_no_template_i2i,
-    'li_prompts_open_template_i2i':li_prompts_open_template_i2i,
-    'li_prompts_open_template_open_response_i2i':li_prompts_open_template_open_response_i2i,
-    'li_prompts_categories_answer_i2i':li_prompts_categories_answer_i2i
+    'li_prompts_yes_no_question': li_prompts_yes_no_question_i2i,
+    'li_prompts_openended_question': li_prompts_openended_question_i2i,
+    'li_prompts_reasoning_question': li_prompts_reasoning_question_i2i,
+    'li_prompts_categorical_question_w_reasoning': li_prompts_categorical_question_w_reasoning_i2i,
+    'li_prompts_categorical_question_w_reasoning_reversed': li_prompts_categorical_question_w_reasoning_reversed_i2i,
+
+    'li_prompts_categorical_question': li_prompts_categorical_question_i2i,
+    'li_prompts_categorical_question_reversed': li_prompts_categorical_question_reversed_i2i
 }
+
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
 
@@ -176,7 +178,10 @@ system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with a
 system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" directly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
 system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
 
-system_prompt_i2i = 'You are an analyst tasked with determining if there is a causal relationship between a specific "socio-economic/health indicator" and another "socio-economic/health indicator". Both socio-economic/health indicators will be presented within quotation marks as "indicator1" and "indicator2". Your analysis should consider potential direct and indirect impacts, as well as confounding factors that could influence this relationship. Use your expertise to provide the correct answer to the following question. Please make sure to only evaluate for a causal relationship in the direction implied by the question.'
+
+system_prompt_i2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" directly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" indirectly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
 
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
@@ -191,11 +196,14 @@ map_system_prompts_b2i = {
 
 
 map_system_prompts_i2i = {
-    'indirectly':system_prompt_i2i,
-    'directly':system_prompt_i2i,
-    'arbitrary':system_prompt_i2i,
-    'yes_no':'Please provide a Yes or No answer the following question.',
-    'open':'Please use your expertise to answer the following question with a very short one sentence answer.',
+    'indirectly':system_prompt_i2i_indirectly,
+    'directly':system_prompt_i2i_directly,
+    'arbitrary':system_prompt_i2i_arbitrary,
+    'yes_no':'Answer the following question with "Yes" or "No".',
+    'open':'Write a conclusive, one sentence answer to the following question.',
+    'categorise':'',
+    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.'
+
 }
 
 map_relationship_system_prompt = {
@@ -281,9 +289,10 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
 
 # endregion
 
-def create_negative_examples(dset:pd.DataFrame, random_state=None) -> pd.DataFrame:
-    """Create negative examples for the Spot Datasetby randomly selecting a budget item and indicator
-    from the dataset and then swapping them
+def create_negative_examples_b2i(dset:pd.DataFrame, random_state=None) -> pd.DataFrame:
+    """Create negative examples of budget items that affect indicators
+         for the Spot Dataset by randomly selecting a budget item and indicator
+        from the dataset and then swapping them
     
     dset: pd.DataFrame
         The dataset to create negative examples from
@@ -599,16 +608,11 @@ class PromptBuilder():
 
             self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id
             self.llm.generation_config.bos_token_id = self.tokenizer.bos_token_id
-            self.llm.generation_config.eos_token_id = self.tokenizer.eos_token_id 
-            # if hasattr(self.llm.generation_config, 'max_length'):
-            #     delattr(self.llm.generation_config, 'max_length')
+            self.llm.generation_config.eos_token_id = self.tokenizer.eos_token_id
             self.llm.generation_config.max_length = None
-            # self.llm.generation_config.max_new_tokens = generation_params['max_new_tokens'] 
 
             for k,v in generation_params.items():
                 setattr(self.llm.generation_config, k, v)
-
-
             
             for li_prompts in li_li_prompts:
                 
@@ -822,8 +826,12 @@ class PromptBuilder():
 
     def fill_template_open(self, templates:list[str], batch:list[dict])->tuple[list[list[str]], list[list[str]]]:
         
-        assert self.ensemble_size == 1, "Open ended questions only support ensemble_size=1, since map_category_answer is has one dictionary"
-        li_answer_templates = [map_category_answer]
+        assert self.ensemble_size == 1, "Open ended questions only support ensemble_size=1, since map_category_answer_b2i is has one dictionary"
+        # li_answer_templates = [  map_category_answer_b2i]
+        map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
+
+        li_answer_templates = [ map_category_answer ]
 
         template_responses = copy.deepcopy( sample(li_answer_templates, self.ensemble_size)  )
 
@@ -911,7 +919,8 @@ class PromptBuilder():
         """Fill in the template with the target and k_shot context"""
 
         li_li_prompts = []
-
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
+        
         # for each row in batch
         for row in batch:
             

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from prompt_engineering.utils_prompteng import create_negative_examples
+from prompt_engineering.utils_prompteng import create_negative_examples_b2i
 from sklearn.model_selection import train_test_split
 """
 This file is used to preprocess the spot data in an improved manner.
@@ -165,7 +165,7 @@ def create_train_test_split(spot_indicator_mapping_table_outcome, random_state_s
     spot_indicator_mapping_table_outcome['budget_item'] = spot_indicator_mapping_table_outcome['budget_item'].replace('Central', 'Central Services')
 
     # create negative examples
-    spot_indicator_mapping_table_outcome = create_negative_examples(spot_indicator_mapping_table_outcome, random_state=random_state )
+    spot_indicator_mapping_table_outcome = create_negative_examples_b2i(spot_indicator_mapping_table_outcome, random_state=random_state )
 
     # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
     spot_indicator_mapping_table_outcome = spot_indicator_mapping_table_outcome.groupby(['budget_item','related']).filter(lambda x: len(x) > 1)

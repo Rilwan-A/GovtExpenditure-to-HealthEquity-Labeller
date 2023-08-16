@@ -120,24 +120,22 @@ def main(
 
     # Load Annotated Examples to use in K-Shot context for Prompt
     logging.info("\tLoading Annotated Examples")
-    annotated_examples_b2i =  None if predict_b2i is False else  load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
+    annotated_examples_b2i = None if predict_b2i is False else load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
     annotated_examples_i2i = None if predict_i2i is False else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
     logging.info("\Annotated Examples Loaded")
 
     # Create Prompt Builders
     logging.info("\tCreating Prompt Builders")
-    prompt_builder_b2i = None if predict_b2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_b2i,
+    prompt_builder_b2i: PromptBuilder | None = None if predict_b2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_b2i,
                                         ensemble_size, annotated_examples_b2i, 
-                                        effect_type,
-                                        relationship='budgetitem_to_indicator',
+                                        effect_type, relationship='budgetitem_to_indicator',
                                         seed=data_load_seed,
 
                                         )
     
     prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
-                                                                           effect_type,
-                                                                           relationship='indicator_to_indicator',
+                                                                           effect_type, relationship='indicator_to_indicator',
                                                                            seed=data_load_seed)
     logging.info("\tPrompt Builders Created")
 

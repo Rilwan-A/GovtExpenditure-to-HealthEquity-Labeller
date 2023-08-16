@@ -10,8 +10,7 @@ from langchain.schema import (
 from prompt_engineering.utils_prompteng import (map_relationship_system_prompt, map_relationship_promptsmap, 
                                                 map_relationship_sysprompt_categoriesanswer,
                                                 map_llmname_input_format,
-                                                  joint_probabilities_for_category, nomalized_probabilities,
-                                                   map_category_answer, map_category_label )
+                                                  joint_probabilities_for_category, nomalized_probabilities )
 import random
 
 import copy
@@ -272,7 +271,8 @@ class PredictionGenerator():
         """
             # Parse desired category from prediction based on category number present in the answer or if category name is present in the answer
         """
-        
+        map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer'] 
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
         def parse_outp_from_catpred(pred:str)->dict[str,float]:
             # Parse desired category from prediction based on category number present in the answer or if category name is present in the answer
 
@@ -326,7 +326,9 @@ class PredictionGenerator():
         #   - For each datum we repeat the experiment with the numbers for the categorical answers swapped
         #   - Then we average the two sets of probabilities for each Yes / No
         #   - This is done to account for the fact that the model may be biased towards one of the categorical numbers
-   
+        
+        map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate_fmtd = [

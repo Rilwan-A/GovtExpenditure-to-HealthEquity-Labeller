@@ -2,7 +2,7 @@ import sys, os
 sys.path.append(os.getcwd())
 import pandas as pd
 import numpy as np
-from prompt_engineering.utils_prompteng import create_negative_examples
+from prompt_engineering.utils_prompteng import create_negative_examples_b2i
 from sklearn.model_selection import train_test_split
 
 """
@@ -40,7 +40,7 @@ if remove_public_health:
 dset['budget_item'] = dset['budget_item'].replace('Central', 'Central Services')
 
 # create negative examples
-dset = create_negative_examples(dset, random_state=random_state )
+dset = create_negative_examples_b2i(dset, random_state=random_state )
 
 # Removing rows that can not be stratified due to less than 2 unique examples of budget_item and label combination
 dset = dset.groupby(['budget_item','related']).filter(lambda x: len(x) > 1)
