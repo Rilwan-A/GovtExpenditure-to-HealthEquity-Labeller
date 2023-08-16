@@ -133,11 +133,11 @@ def main(
     dataset_train.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
     dataset_test.set_format(type='torch', columns=["input_ids", "attention_mask", "labels"] )
 
-    dataset_dict['train'].split = 'train'
-    dataset_dict['test'].split = 'test'
+    # dataset_dict['train'].split = 'train'
+    # dataset_dict['test'].split = 'test'
 
-    dataset_dict['train'].dataset_size = len(dataset_dict['train'])
-    dataset_dict['test'].dataset_size = len(dataset_dict['test'])
+    # dataset_dict['train'].dataset_size = len(dataset_dict['train'])
+    # dataset_dict['test'].dataset_size = len(dataset_dict['test'])
 
     # Saving to disk
     dir_ = f'./data/researchpapers/preprocessed'
@@ -298,54 +298,6 @@ def _filter_on_language_parallel(texts: list[str], languages_to_include: list[st
 
     return outp_batch_text
 
-# def fix_text(batch, llm, max_tokens_per_chunk):
-#     """ 
-#         1) First remove unicode control characters
-#         2) Due to pdf parsing package, sometimes words are joined to gether in parsed text"""
-
-#     # Part 1)
-#     texts = []
-#     for text in batch['text']:
-#         text = remove_unicode_directionality(text)
-#         texts.append(text)
-
-#     # Part 1b)
-#     # Truncating any text to max_tokens_per_chunk tokens
-#     llm.pipeline.tokenizer.padding_side = 'left'
-#     llm.pipeline.tokenizer.truncation_side = 'right'
-#     _ = llm.pipeline.tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=max_tokens_per_chunk )
-#     texts = llm.pipeline.tokenizer.batch_decode(_['input_ids'], skip_special_tokens=True)
-
-#     # Part 2)
-#     li_split_text = []
-#     user_message = 'Fix grammatical and lexical mistakes in the following text. Start the corrected text with the phrase, "Corrected Text:". \nText:'
-#     li_prompts_fmtd = [
-#         map_llmname_input_format(llm.model_id, 
-#                                     user_message = user_message + ' ' + text,
-#                                     system_message = None) for text in texts
-#     ]
-
-#     inputs = llm.pipeline.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', max_length=None, truncation=False )
-#     output_ids = llm.pipeline.model.generate( **inputs, max_new_tokens=max_tokens_per_chunk+len(llm.pipeline.tokenizer.encode('Corrected Text: \n'))+1 )
-#     output_txts = llm.pipeline.tokenizer.batch_decode( output_ids, skip_special_tokens=True )
-
-
-#     for text in output_txts:
-#         # Check if text starts with 'Corrected Text:'
-#         # if not text.startswith('Corrected Text:'):\
-#         #     continue
-#         # strip all text before and including 'Corrected Text:',
-#         # text = text.split('Corrected Text:')[-1]
-#         splits = text.split('Corrected Text:')
-#         if len(splits) <= 1:
-#             continue
-#         text = splits[-1]   
-#         # remove any double spaces / new lines are start or end of text
-#         text = text.strip(' \n')
-
-#         li_split_text.append(text)
-
-#     return {'text':li_split_text}
 
 def fix_text(batch, llm, max_tokens_per_chunk):
     """ 
