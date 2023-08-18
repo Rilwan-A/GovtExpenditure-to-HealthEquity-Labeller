@@ -431,12 +431,12 @@ def save_experiment(
         df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
                            'indicator_2': [ d['indicator_2'] for d in li_record],
                         #    'related': [ d['related'] for d in li_record],
-                        'prediction_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
-                       'predictions':encode(li_pred_ensemble), 'discourse':encode(li_discourse_ensemble)})
+                        'pred_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
+                       'predictions':encode(li_pred_ensemble),
+                       'discourse':encode(li_discourse_ensemble)})
         if 'related' in li_record[0].keys():
             df['related'] = [ d['related'] for d in li_record]
-            # reorder df columns to be 'budget_item', 'indicator', 'related', 'prediction_aggregated', 'prompts', 'predictions', 'predictions_parsed'
-            df = df[['indicator1', 'indicator2', 'related', 'prediction_aggregated', 'prompts', 'predictions']]
+            df = df[['indicator1', 'indicator2', 'related', 'pred_aggregated', 'prompts', 'predictions','discourse']]
                 
     else:
         raise ValueError("relationship must be one of ['budgetitem_to_indicator', 'indicator_to_indicator']")
