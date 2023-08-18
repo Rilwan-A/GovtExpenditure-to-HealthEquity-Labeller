@@ -42,7 +42,8 @@ HUGGINGFACE_MODELS = [
     'upstage/llama-30b-instruct-2048',
     'upstage/Llama-2-70b-instruct-v2',
     'stabilityai/StableBeluga2',
-    ]
+    
+    'trl-internal-testing/dummy-GPT2-correct-vocab']
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
@@ -60,6 +61,7 @@ MAP_LOAD_IN_NBIT = {
     'upstage/llama-30b-instruct-2048':4,
     'upstage/Llama-2-70b-instruct-v2':4,
     'stabilityai/StableBeluga2':4,
+
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
@@ -86,16 +88,20 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
             
             bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
             bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
-            quant_config = BitsAndBytesConfig(
-                
-                load_in_8bit=bool_8,
-                llm_int8_has_fp16_weights=bool_8,
-                
-                load_in_4bit=bool_4,
-                bnb_4bit_quant_type="nf4" ,
-                bnb_4bit_use_double_quant=bool_4,
-                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
-            )
+            
+            if bool_8 or bool_4:
+                quant_config = BitsAndBytesConfig(
+                    
+                    load_in_8bit=bool_8,
+                    llm_int8_has_fp16_weights=bool_8,
+                    
+                    load_in_4bit=bool_4,
+                    bnb_4bit_quant_type="nf4" ,
+                    bnb_4bit_use_double_quant=bool_4,
+                    bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
+                )
+            else:
+                quant_config = None
 
             if not finetuned:
                 model_id = llm_name

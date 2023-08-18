@@ -9,7 +9,7 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import glob
 from torch.utils.data import DataLoader, Dataset as TorchDataset
 import yaml
-from datasets import Dataset  # type: ignore
+from datasets import Dataset, concatenate_datasets  # type: ignore
 import torch
 from argparse import ArgumentParser
 from lightning.pytorch import loggers as pl_loggers
@@ -54,7 +54,7 @@ def print_trainable_parameters(model):
 map_modelid_targetmodule = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF': ['k_proj', 'v_proj', 'q_proj'],
     'TheBloke/Wizard-Vicuna-13B-Uncensored-HF': ['k_proj', 'v_proj', 'q_proj'],
-
+    'trl-internal-testing/dummy-GPT2-correct-vocab':['c_proj']
     # '':['q_proj','v_proj'],
 
 }
@@ -179,56 +179,114 @@ class PromptEngineeringLM(pl.LightningModule):
         if 'spot_alignment' in self.val_tasks:
             preds_agg = sum([d['pred_agg'] for d in self.val_step_outputs_spotalign], [])
             labels = sum([d['related'] for d in self.val_step_outputs_spotalign], [])
+            budget_items:list[str] = [ bi for d in self.val_step_outputs_spotalign for bi in d['budget_item']]
+            indicators:list[str] = [ i for d in self.val_step_outputs_spotalign for i in d['indicator'] ]
 
-            # compute metrics between binary labels and predictions
-            (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None, zero_division=0)
-            
-            acc = accuracy_score(labels, preds_agg)
+            # if there is more than one rank can you join the preds_agg and labels together and compute metrics only on rank 0
+            if self.trainer.world_size > 1:
+                world_size = self.trainer.world_size
 
+                # Convert aggregated predictions and labels to tensors
+                # preds_agg_tensor = torch.tensor(preds_agg, device=self.device)
+                # labels_tensor = torch.tensor(labels, device=self.device)
+                preds_agg_tensor = PromptEngineeringLM.serialize_string_convert_tensor(preds_agg, device=self.device)
+                labels_tensor = PromptEngineeringLM.serialize_string_convert_tensor(labels, device=self.device)
+                budget_items_tensor = PromptEngineeringLM.serialize_string_convert_tensor(budget_items, device=self.device)
+                indicators_tensor = PromptEngineeringLM.serialize_string_convert_tensor(indicators, device=self.device)
 
-            # self.log('val_loss', -acc, on_step=False, on_epoch=True,
-            #         prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
-            
-            # Logging General Metrics
-            self.log('val_spot/acc', acc, on_step=False, on_epoch=True,
-                    prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True)
-            
-            # Logging positive class metrics
-            self.log('val_spot/f1/pos', f1_yes, on_step=False, on_epoch=True,
-                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-            self.log('val_spot/prec/pos', prec_yes, on_step=False, on_epoch=True,
-                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-            self.log('val_spot/rec/pos', recall_yes, on_step=False, on_epoch=True,
-                    prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
+                # Initialize empty tensors on rank 0 to collect data from all processes
+                if self.trainer.global_rank == 0:
+                    preds_agg_gather = [torch.zeros_like(preds_agg_tensor) for _ in range(world_size)]
+                    labels_gather = [torch.zeros_like(labels_tensor) for _ in range(world_size)]
+                    budget_items_gather = [torch.zeros_like(budget_items_tensor) for _ in range(world_size)]
+                    indicators_gather = [torch.zeros_like(indicators_tensor) for _ in range(world_size)]
+                    torch.distributed.barrier()
 
-            # Logging negative class metrics
-            self.log('val_spot/f1/neg', f1_no, on_step=False, on_epoch=True,
-                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-            self.log('val_spot/prec/neg', prec_no, on_step=False, on_epoch=True,
-                    prog_bar=False, logger=True,  rank_zero_only=False, sync_dist=True)
-            self.log('val_spot/rec/neg', recall_no, on_step=False, on_epoch=True,
-                    prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-            
-            # Saving the predictions to file
-            df = pd.DataFrame({'pred_agg': preds_agg, 
-                               'label': labels, 
-                               'budget_item': [ bi for d in self.val_step_outputs_spotalign for bi in d['budget_item']],
-                                'indicator': [ i for d in self.val_step_outputs_spotalign for i in d['indicator'] ]
-                                 })
-            # make a csv path that is a combination of current epoch and absolute step
-            save_path = os.path.join( os.path.dirname(self.trainer.checkpoint_callback.dirpath), 'val_outputs' ,f'val_preds_epoch_{self.current_epoch}_step_{self.global_step}.csv')
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            df.to_csv( save_path, index=False)
+                else:
+                    preds_agg_gather = labels_gather = None
+                    budget_items_gather = indicators_gather = None
+                    torch.distributed.barrier()
 
-            self.val_step_outputs_spotalign.clear()
-            
-        else:
-            pass
+                # Gather data from all processes to rank 0
+                torch.distributed.gather(preds_agg_tensor, gather_list=preds_agg_gather, dst=0)
+                torch.distributed.gather(labels_tensor, gather_list=labels_gather, dst=0)
+                torch.distributed.gather(budget_items_tensor, gather_list=budget_items_gather, dst=0)
+                torch.distributed.gather(indicators_tensor, gather_list=indicators_gather, dst=0)
+                
+                # Concatenate data from all processes
+                # preds_agg = torch.cat(preds_agg_gather).cpu().tolist()
+                # labels = torch.cat(labels_gather).cpu().tolist()
+                
+
+            # Make sure the rest is only done on rank 0 
+            if self.trainer.global_rank == 0:
+
+                preds_agg = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(preds_agg_gather))
+                labels = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(labels_gather))
+                budget_items = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(budget_items_gather))
+                indicators = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(indicators_gather))
+
+                # compute metrics between binary labels and predictions
+                (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None, zero_division=0)
+                
+                acc = accuracy_score(labels, preds_agg)
+
+                # Logging General Metrics
+                self.log('val_spot/acc', acc, on_step=False, on_epoch=True,
+                        prog_bar=True, logger=True, rank_zero_only=True, sync_dist=False)
+                
+                # Logging positive class metrics
+                self.log('val_spot/f1/pos', f1_yes, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+                self.log('val_spot/prec/pos', prec_yes, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+                self.log('val_spot/rec/pos', recall_yes, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=True,  rank_zero_only=True, sync_dist=False)
+
+                # Logging negative class metrics
+                self.log('val_spot/f1/neg', f1_no, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+                self.log('val_spot/prec/neg', prec_no, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=True,  rank_zero_only=True, sync_dist=False)
+                self.log('val_spot/rec/neg', recall_no, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+                
+                # Saving the predictions to file
+                df = pd.DataFrame({'pred_agg': preds_agg, 
+                                'label': labels, 
+                                'budget_item': budget_items,
+                                    'indicator': indicators
+                                    })
+                # make a csv path that is a combination of current epoch and absolute step
+                save_path = os.path.join( os.path.dirname(self.trainer.checkpoint_callback.dirpath), 'val_outputs' ,f'val_preds_epoch_{self.current_epoch}_step_{self.global_step}.csv')
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                df.to_csv( save_path, index=False)
+                
+            else:
+                pass
         
-        self.val_dataloader = self.trainer.datamodule.val_dataloader()
+        # Insert a barrier to make sure all processes wait for rank 0
+        # torch.distributed.barrier()
+        self.val_step_outputs_spotalign.clear()
+        # self.val_dataloader = self.trainer.datamodule.val_dataloader()
         return None
     
+    @staticmethod
+    def serialize_string_convert_tensor(li_str:list[str], device):
+        divider_symbol = '||#'    
+        str_ = divider_symbol.join(li_str)
+        str_enc = [ord(c) for c in str_]
+        str_enc_tensor = torch.tensor(str_enc, device=device)
+        return str_enc_tensor
+    
+    @staticmethod
+    def tensor_convert_string_deserialize(tensor:torch.Tensor):
+        divider_symbol = '||#'
+        str_enc = tensor.to('cpu').tolist()
+        str_ = ''.join([chr(c) for c in str_enc])
+        li_str = str_.split(divider_symbol)
+        return li_str
+
     def configure_optimizers(self):
         # optimal params for Adafactor https://github.com/huggingface/transformers/pull/10526#issuecomment-804652154
 
@@ -255,7 +313,7 @@ class PromptEngineeringLM(pl.LightningModule):
 
             # add warmup
             scheduler = get_constant_schedule_with_warmup(optimizer, 
-                                                        num_warmup_steps=25)
+                                                        num_warmup_steps=100)
 
             # return {'optimizer': optimizer, 'monitor': 'val_loss', 'lr_scheduler': scheduler}
             return {'optimizer': optimizer, 'monitor': 'val_loss/acc', 'lr_scheduler': scheduler}
@@ -273,12 +331,11 @@ class PromptEngineeringLM(pl.LightningModule):
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16)
         
+        device_map = {'':0} if 'LOCAL_RANK' not in os.environ else {'':int(os.environ['LOCAL_RANK'])}
         model = transformers.AutoModelForCausalLM.from_pretrained(config_trainer.model_id,
                                                                 trust_remote_code=True,
                                                                 quantization_config=bnb_config,
-                                                                # device_map={'':0},  
-                                                                  device_map = 'auto'
-                                                                )
+                                                                device_map=device_map)
         
         # Implementing Lora version
         peft_config = LoraConfig(
@@ -326,7 +383,7 @@ class PromptEngineeringLM(pl.LightningModule):
                 save_last=False,
                 auto_insert_metric_name=False,
                 save_weights_only=True,
-                save_top_k=2))
+                save_top_k=3))
         
         callbacks.append(
             PairedEarlyStopping(
@@ -343,7 +400,7 @@ class PromptEngineeringLM(pl.LightningModule):
         trainer = pl.Trainer(
             strategy=config_trainer.strategy,
             accelerator=config_trainer.accelerator,
-            devices=config_trainer.devices,
+            # devices=config_trainer.devices,
             num_nodes=config_trainer.num_nodes,
 
             callbacks=callbacks,
@@ -354,30 +411,35 @@ class PromptEngineeringLM(pl.LightningModule):
             precision= 32,
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
-            max_epochs=5 if config_trainer.debugging else config_trainer.max_epochs,
+            max_epochs= 1 if config_trainer.debugging else config_trainer.max_epochs,
             num_sanity_val_steps=0,
             
-            limit_train_batches=1 if config_trainer.debugging else None,
+            limit_train_batches=5 if config_trainer.debugging else None,
             # limit_val_batches=2 if config_trainer.debugging else None,
             log_every_n_steps=1 if config_trainer.debugging else 10,
             
-            val_check_interval=config_trainer.val_check_interval
+            val_check_interval=config_trainer.val_check_interval,
+            # reload_dataloaders_every_n_epochs=1,
+            # fast_dev_run= 5 if config_trainer.debugging else False,
             )
 
         # Train model
-        for p in lightning_module.model.parameters():
-            p = p.contiguous()
+        # for p in lightning_module.model.parameters():
+        #     p = p.contiguous()
         trainer.fit(lightning_module, data_module)
 
+        # if trainer.is_global_zero:
+        if trainer.global_rank == 0:
         # Saving configs relating to experiment
-        os.makedirs(trainer.checkpoint_callback.dirpath, exist_ok=True)
-        yaml.dump(vars(config_trainer), open(os.path.join(
-            trainer.checkpoint_callback.dirpath, 'config_trainer.yaml'), 'w'))  # type: ignore
-        yaml.dump(vars(config_data), open(os.path.join(
-            trainer.checkpoint_callback.dirpath, 'config_data.yaml'), 'w'))  # type: ignore
-        yaml.dump(vars(config_model), open(os.path.join(
-            trainer.checkpoint_callback.dirpath, 'config_model.yaml'), 'w'))  # type: ignore
-    
+            os.makedirs(trainer.checkpoint_callback.dirpath, exist_ok=True)
+            yaml.dump(vars(config_trainer), open(os.path.join(
+                trainer.checkpoint_callback.dirpath, 'config_trainer.yaml'), 'w'))  # type: ignore
+            yaml.dump(vars(config_data), open(os.path.join(
+                trainer.checkpoint_callback.dirpath, 'config_data.yaml'), 'w'))  # type: ignore
+            yaml.dump(vars(config_model), open(os.path.join(
+                trainer.checkpoint_callback.dirpath, 'config_model.yaml'), 'w'))  # type: ignore
+        # torch.distributed.barrier()
+
     @staticmethod
     def test_model(config_trainer, config_data, config_model=None):
         """Test model on test set"""
@@ -461,7 +523,7 @@ class PromptEngineeringLM(pl.LightningModule):
         
 
         # parser.add_argument('--dir_ckpt', type=str, default='./prompt_engineering/finetune/ckpt')
-        parser.add_argument('--dir_ckpt', type=str, default='/mnt/Data1/akann1w0w1ck/AlanTuring/prompt_engineering/finetune/ckpt')
+        parser.add_argument('--dir_ckpt', type=str, default='/mnt/Data1/akann1warw1ck/AlanTuring/prompt_engineering/finetune/ckpt')
 
      
         parser.add_argument('--optimizer', type=str,
@@ -470,7 +532,7 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--lr', type=float, default=1e-4)
 
         parser.add_argument('--num_nodes', type=int, default=1)
-        parser.add_argument('--devices', type=int, default=1, nargs='+')
+        # parser.add_argument('--devices', type=int, default="auto")
         parser.add_argument('--accelerator', type=str, default='gpu', choices=['gpu'])
         parser.add_argument('--strategy', type=str, default='auto',
                             choices=['auto', 'ddp', 'fsdp', 'deepspeed_stage_2', 'deepspeed_stage_2_offload',
@@ -479,7 +541,7 @@ class PromptEngineeringLM(pl.LightningModule):
         parser.add_argument('--patience_2', type=int, default=6)
         
         parser.add_argument('--accumulate_grad_batches', type=int, default=4)
-        parser.add_argument('--max_epochs', type=int, default=2)
+        parser.add_argument('--max_epochs', type=int, default=3)
         parser.add_argument('--val_check_interval', type=lambda x: float(x) if '.' in x else int(x),  default=None )
     
         args = parser.parse_known_args()[0]
@@ -492,7 +554,7 @@ class DataModule(pl.LightningDataModule):
                     batch_size_inf_nt, batch_size_inf_sa, train_dset_names, val_tasks,
                     num_workers=4, seed=10, val_nt_batch_count=None):
         super().__init__()
-        self.model_id = model_id
+        self.model_id = model_id if 'dummy' not in model_id else 'dummy'
         self.dir_data = dir_data
         self.num_workers = num_workers
 
@@ -531,9 +593,18 @@ class DataModule(pl.LightningDataModule):
         else:
             dataset = datasets[0]
 
+        
+        # # if self.trainer.use_ddp or self.trainer.use_ddp2:
+        #     sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+        #     dataloader = DataLoader(dataset, batch_size=self.batch_size,
+        #                         shuffle=True, num_workers=self.num_workers, 
+        #                         sampler = sampler,
+        #                         pin_memory=False, drop_last=False)
+        # else:
+
         dataloader = DataLoader(dataset, batch_size=self.batch_size,
                                 shuffle=True, num_workers=self.num_workers, 
-                                pin_memory=False, drop_last=False)
+                                pin_memory=True, drop_last=False)
         
         return dataloader
 
@@ -559,18 +630,14 @@ class DataModule(pl.LightningDataModule):
                     self.dir_data, 'instruct', 'preprocessed' , f"wLM70k_nofilt_{self.model_id.replace('/','_')}_test.arrow"))
                 datasets.append(dataset)
                 
-            # datasets interleave two datasets in a 1:1 proportion
-            # Combine into one dataset
+            # datasets concatenate datasets 
             if len(datasets) > 1:
                 if self.val_nt_batch_count is not None:
                     li_indices  = [ torch.randperm(len(datasets[i]))[:(self.val_nt_batch_count*self.batch_size_inf_nt)//len(datasets)] for i in range(len(datasets))]
                     
                     datasets = [ dataset.select(indices) for dataset, indices in zip(datasets, li_indices) ]
 
-                dataset = interleave_datasets(datasets, 
-                                            #   probabilities=[0.5, 0.5], 
-                                            #   seed=self.seed,
-                                              stopping_strategy="first_exhausted")
+                dataset = concatenate_datasets(datasets)
             
             else:
                 dataset = datasets[0]
@@ -582,7 +649,7 @@ class DataModule(pl.LightningDataModule):
 
 
             dataloader_nexttoken = DataLoader(dataset, batch_size=self.batch_size_inf_nt,   
-                        shuffle=True, num_workers=self.num_workers//2, 
+                        shuffle=True, num_workers=max(1,self.num_workers//2), 
                         pin_memory=False, drop_last=False)
             
             dataloaders.append(dataloader_nexttoken)
@@ -593,7 +660,7 @@ class DataModule(pl.LightningDataModule):
             
             dataloader_spotalign = DataLoader(dset_records, batch_size=self.batch_size_inf_sa,
                                     shuffle=False,
-                                    num_workers=self.num_workers//2,
+                                    num_workers=max(1,self.num_workers//2),
                                     pin_memory=False,
                                     collate_fn= lambda batch: batch,
                                     drop_last=False)

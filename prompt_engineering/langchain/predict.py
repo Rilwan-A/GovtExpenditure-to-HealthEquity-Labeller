@@ -463,7 +463,7 @@ def parse_args():
     parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
-    parser.add_argument('--finetune_dir', type=str, default='/mnt/Data1/akann1w0w1ck/AlanTuring/prompt_engineering/finetune/ckpt', help='Directory where finetuned model is stored' )
+    parser.add_argument('--finetune_dir', type=str, default='/mnt/Data1/akann1warw1ck/AlanTuring/prompt_engineering/finetune/ckpt', help='Directory where finetuned model is stored' )
     
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot_categorise' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rules', 'categories_rules', 'categories_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
