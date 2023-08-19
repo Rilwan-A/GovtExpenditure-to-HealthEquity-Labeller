@@ -34,6 +34,10 @@ from prompt_engineering.langchain.predict import prepare_data_b2i, predict_batch
 from transformers import get_constant_schedule_with_warmup
 import pandas as pd
 import warnings
+import time
+from lightning.pytorch.utilities.rank_zero import rank_prefixed_message, rank_zero_warn
+from typing import Any, Callable, Dict, Optional, Tuple
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 def print_trainable_parameters(model):
@@ -141,7 +145,7 @@ class PromptEngineeringLM(pl.LightningModule):
             loss = outputs.loss
             if torch.isnan(loss):
                 return None
-            self.log('val_nt/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, add_dataloader_idx=False)
+            self.log('val_nt/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, rank_zero_only=False, sync_dist=True, add_dataloader_idx=False)
 
             outp = None
 
@@ -182,64 +186,57 @@ class PromptEngineeringLM(pl.LightningModule):
             budget_items:list[str] = [ bi for d in self.val_step_outputs_spotalign for bi in d['budget_item']]
             indicators:list[str] = [ i for d in self.val_step_outputs_spotalign for i in d['indicator'] ]
 
-            # if there is more than one rank can you join the preds_agg and labels together and compute metrics only on rank 0
-            if self.trainer.world_size > 1:
-                world_size = self.trainer.world_size
+            # serializing strings to tensors
+            preds_agg_tensor = PromptEngineeringLM.serialize_string_convert_tensor(preds_agg, device=self.device, serialize_map={'Yes':0, 'No':1, 'NA':2} )
+            labels_tensor = PromptEngineeringLM.serialize_string_convert_tensor(labels, device=self.device, serialize_map={'Yes':0, 'No':1, 'NA':2}  )
 
-                # Convert aggregated predictions and labels to tensors
-                # preds_agg_tensor = torch.tensor(preds_agg, device=self.device)
-                # labels_tensor = torch.tensor(labels, device=self.device)
-                preds_agg_tensor = PromptEngineeringLM.serialize_string_convert_tensor(preds_agg, device=self.device)
-                labels_tensor = PromptEngineeringLM.serialize_string_convert_tensor(labels, device=self.device)
-                budget_items_tensor = PromptEngineeringLM.serialize_string_convert_tensor(budget_items, device=self.device)
-                indicators_tensor = PromptEngineeringLM.serialize_string_convert_tensor(indicators, device=self.device)
 
-                # Initialize empty tensors on rank 0 to collect data from all processes
-                if self.trainer.global_rank == 0:
-                    preds_agg_gather = [torch.zeros_like(preds_agg_tensor) for _ in range(world_size)]
-                    labels_gather = [torch.zeros_like(labels_tensor) for _ in range(world_size)]
-                    budget_items_gather = [torch.zeros_like(budget_items_tensor) for _ in range(world_size)]
-                    indicators_gather = [torch.zeros_like(indicators_tensor) for _ in range(world_size)]
-                    torch.distributed.barrier()
+            bi_serial_map =  [ d['budget_item'] for d in  self.trainer.datamodule.val_dataloader()[-1].dataset ]
+            bi_serial_map  = {k:v for k,v in zip(bi_serial_map, range(len(bi_serial_map)))}
 
-                else:
-                    preds_agg_gather = labels_gather = None
-                    budget_items_gather = indicators_gather = None
-                    torch.distributed.barrier()
+            ind_serial_map =  [ d['indicator'] for d in  self.trainer.datamodule.val_dataloader()[-1].dataset ]
+            ind_serial_map  = {k:v for k,v in zip(ind_serial_map, range(len(ind_serial_map)))}
 
-                # Gather data from all processes to rank 0
-                torch.distributed.gather(preds_agg_tensor, gather_list=preds_agg_gather, dst=0)
-                torch.distributed.gather(labels_tensor, gather_list=labels_gather, dst=0)
-                torch.distributed.gather(budget_items_tensor, gather_list=budget_items_gather, dst=0)
-                torch.distributed.gather(indicators_tensor, gather_list=indicators_gather, dst=0)
-                
-                # Concatenate data from all processes
-                # preds_agg = torch.cat(preds_agg_gather).cpu().tolist()
-                # labels = torch.cat(labels_gather).cpu().tolist()
-                
+            budget_items_tensor = PromptEngineeringLM.serialize_string_convert_tensor(budget_items, device=self.device, serialize_map=bi_serial_map)
+            indicators_tensor = PromptEngineeringLM.serialize_string_convert_tensor(indicators, device=self.device, serialize_map=ind_serial_map)
 
+            # gather tensors
+            preds_agg_gather = self.all_gather( [preds_agg_tensor] )
+            labels_gather = self.all_gather( [labels_tensor] )
+            budget_items_gather = self.all_gather( [budget_items_tensor] )
+            indicators_gather = self.all_gather( [indicators_tensor] )
+            
             # Make sure the rest is only done on rank 0 
             if self.trainer.global_rank == 0:
+                
+                # flatten tensors
+                preds_agg_gather = [ t.reshape(-1) for t in preds_agg_gather]
+                labels_gather = [ t.reshape(-1) for t in labels_gather]
+                budget_items_gather = [ t.reshape(-1) for t in budget_items_gather]
+                indicators_gather = [ t.reshape(-1) for t in indicators_gather]
 
-                preds_agg = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(preds_agg_gather))
-                labels = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(labels_gather))
-                budget_items = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(budget_items_gather))
-                indicators = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(indicators_gather))
+                # convert tensors to strings
+                preds_agg = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(preds_agg_gather), serialize_map={'Yes':0, 'No':1, 'NA':2})
+                labels = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(labels_gather), serialize_map={'Yes':0, 'No':1, 'NA':2})
+                budget_items = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(budget_items_gather), serialize_map=bi_serial_map)
+                indicators = PromptEngineeringLM.tensor_convert_string_deserialize(torch.cat(indicators_gather), serialize_map=ind_serial_map)
 
                 # compute metrics between binary labels and predictions
-                (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'], average=None, zero_division=0)
+                (prec_yes, prec_no), (recall_yes, recall_no), (f1_yes, f1_no), _ = precision_recall_fscore_support(labels, preds_agg, labels=['Yes', 'No'],
+                                                                                                                   average=None, zero_division=0)
                 
                 acc = accuracy_score(labels, preds_agg)
 
-                # Logging General Metrics
+                # # Logging General Metrics
                 self.log('val_spot/acc', acc, on_step=False, on_epoch=True,
-                        prog_bar=True, logger=True, rank_zero_only=True, sync_dist=False)
+                        prog_bar=True, logger=True, rank_zero_only=False, sync_dist=False)
+
                 
                 # Logging positive class metrics
                 self.log('val_spot/f1/pos', f1_yes, on_step=False, on_epoch=True,
-                        prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+                         prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
                 self.log('val_spot/prec/pos', prec_yes, on_step=False, on_epoch=True,
-                        prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+                         prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
                 self.log('val_spot/rec/pos', recall_yes, on_step=False, on_epoch=True,
                         prog_bar=False, logger=True,  rank_zero_only=True, sync_dist=False)
 
@@ -253,38 +250,81 @@ class PromptEngineeringLM(pl.LightningModule):
                 
                 # Saving the predictions to file
                 df = pd.DataFrame({'pred_agg': preds_agg, 
-                                'label': labels, 
-                                'budget_item': budget_items,
+                                    'label': labels, 
+                                    'budget_item': budget_items,
                                     'indicator': indicators
                                     })
+                
                 # make a csv path that is a combination of current epoch and absolute step
-                save_path = os.path.join( os.path.dirname(self.trainer.checkpoint_callback.dirpath), 'val_outputs' ,f'val_preds_epoch_{self.current_epoch}_step_{self.global_step}.csv')
+                save_path = os.path.join( os.path.dirname(self.trainer.checkpoint_callback.dirpath), 
+                                         'val_outputs',
+                                         f'val_preds_epoch_{self.current_epoch}_step_{self.global_step}.csv')
+                
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 df.to_csv( save_path, index=False)
                 
             else:
+                self.log('val_spot/acc', 0.0, on_step=False, on_epoch=True,
+                        prog_bar=False, logger=False, rank_zero_only=False, sync_dist=False)
                 pass
+            
+            # metric_tensor = torch.broadcast_ broadcast(metric_tensor, src=0)
+
+            # Logging General Metrics
+
+
+            
+            # # Logging positive class metrics
+            # self.log('val_spot/f1/pos', f1_yes, on_step=False, on_epoch=True,
+            #         prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+            # self.log('val_spot/prec/pos', prec_yes, on_step=False, on_epoch=True,
+            #         prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+            # self.log('val_spot/rec/pos', recall_yes, on_step=False, on_epoch=True,
+            #         prog_bar=False, logger=True,  rank_zero_only=True, sync_dist=False)
+
+            # # Logging negative class metrics
+            # self.log('val_spot/f1/neg', f1_no, on_step=False, on_epoch=True,
+            #         prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+            # self.log('val_spot/prec/neg', prec_no, on_step=False, on_epoch=True,
+            #         prog_bar=False, logger=True,  rank_zero_only=True, sync_dist=False)
+            # self.log('val_spot/rec/neg', recall_no, on_step=False, on_epoch=True,
+            #         prog_bar=False, logger=True, rank_zero_only=True, sync_dist=False)
+            
         
-        # Insert a barrier to make sure all processes wait for rank 0
-        # torch.distributed.barrier()
-        self.val_step_outputs_spotalign.clear()
-        # self.val_dataloader = self.trainer.datamodule.val_dataloader()
+            # Insert a barrier to make sure all processes wait for rank 0
+            self.val_step_outputs_spotalign.clear()
         return None
     
     @staticmethod
-    def serialize_string_convert_tensor(li_str:list[str], device):
-        divider_symbol = '||#'    
-        str_ = divider_symbol.join(li_str)
-        str_enc = [ord(c) for c in str_]
-        str_enc_tensor = torch.tensor(str_enc, device=device)
-        return str_enc_tensor
+    def serialize_string_convert_tensor(li_str:list[str], device, serialize_map=None):
+        if serialize_map is not None:
+            # Use the provided serialization map to convert strings to integers
+            int_enc = [serialize_map[s] for s in li_str]
+        else:
+            # Default to using the ord methodology if no serialization map is provided
+            divider_symbol = '||#'
+            str_ = divider_symbol.join(li_str)
+            int_enc = [ord(c) for c in str_]
+        
+        # Convert the list of integers to a PyTorch tensor
+        int_enc_tensor = torch.tensor(int_enc, device=device)
+        return int_enc_tensor
     
     @staticmethod
-    def tensor_convert_string_deserialize(tensor:torch.Tensor):
-        divider_symbol = '||#'
-        str_enc = tensor.to('cpu').tolist()
-        str_ = ''.join([chr(c) for c in str_enc])
-        li_str = str_.split(divider_symbol)
+    def tensor_convert_string_deserialize(tensor:torch.Tensor, serialize_map=None):
+        if serialize_map is not None:
+            # Construct the inverse of the serialization map
+            inverse_map = {v: k for k, v in serialize_map.items()}
+            # Convert tensor to a list of integers and map them back to strings
+            int_enc = tensor.to('cpu').tolist()
+            li_str = [inverse_map[i] for i in int_enc]
+        else:
+            # Default to using the chr methodology if no serialization map is provided
+            divider_symbol = '||#'
+            str_enc = tensor.to('cpu').tolist()
+            str_ = ''.join([chr(c) for c in str_enc])
+            li_str = str_.split(divider_symbol)
+        
         return li_str
 
     def configure_optimizers(self):
@@ -297,7 +337,6 @@ class PromptEngineeringLM(pl.LightningModule):
                     betas=(0.9, 0.95),
                     eps=1e-5,
                     )
-            # return {'optimizer': optimizer, 'monitor': 'val_loss'}
             return {'optimizer': optimizer, 'monitor': 'val_loss/acc'}
         
         
@@ -384,7 +423,7 @@ class PromptEngineeringLM(pl.LightningModule):
                 auto_insert_metric_name=False,
                 save_weights_only=True,
                 save_top_k=3))
-        
+    
         callbacks.append(
             PairedEarlyStopping(
                                 patience_1=config_trainer.patience_1,
@@ -392,7 +431,9 @@ class PromptEngineeringLM(pl.LightningModule):
                                     monitor_1='val_nt/loss',
                                     monitor_2='val_spot/acc',
                                     mode_1='min',
-                                    mode_2='max' )
+                                    mode_2='max',
+                                    stop_on_rank_zero_only=True, 
+                                      )
                                     )
 
         
@@ -411,15 +452,15 @@ class PromptEngineeringLM(pl.LightningModule):
             precision= 32,
             accumulate_grad_batches=config_trainer.accumulate_grad_batches,
 
-            max_epochs= 1 if config_trainer.debugging else config_trainer.max_epochs,
+            max_epochs= 20 if config_trainer.debugging else config_trainer.max_epochs,
             num_sanity_val_steps=0,
             
-            limit_train_batches=5 if config_trainer.debugging else None,
-            # limit_val_batches=2 if config_trainer.debugging else None,
+            limit_train_batches=2 if config_trainer.debugging else None,
+            limit_val_batches=3 if config_trainer.debugging else None,
             log_every_n_steps=1 if config_trainer.debugging else 10,
             
             val_check_interval=config_trainer.val_check_interval,
-            # reload_dataloaders_every_n_epochs=1,
+            reload_dataloaders_every_n_epochs=10,
             # fast_dev_run= 5 if config_trainer.debugging else False,
             )
 
@@ -587,20 +628,11 @@ class DataModule(pl.LightningDataModule):
         # datasets interleave two datasets in a 2:1 proportion
         if len(datasets) > 1:
             dataset = interleave_datasets(datasets, 
-                                        #   probabilities=[0.5, 0.5], 
+                                          probabilities=[0.5, 0.5], 
                                           seed=self.seed, 
                                           stopping_strategy="first_exhausted" )
         else:
             dataset = datasets[0]
-
-        
-        # # if self.trainer.use_ddp or self.trainer.use_ddp2:
-        #     sampler = torch.utils.data.distributed.DistributedSampler(dataset)
-        #     dataloader = DataLoader(dataset, batch_size=self.batch_size,
-        #                         shuffle=True, num_workers=self.num_workers, 
-        #                         sampler = sampler,
-        #                         pin_memory=False, drop_last=False)
-        # else:
 
         dataloader = DataLoader(dataset, batch_size=self.batch_size,
                                 shuffle=True, num_workers=self.num_workers, 
@@ -700,9 +732,14 @@ class PairedEarlyStopping(EarlyStopping):
 
     def __init__(self, verbose: bool = False, monitor_1: str = 'val_nt/loss', monitor_2: str = 'val_spot/acc', 
                  mode_1: str = 'min', mode_2:str = 'max',
-                 patience_1: int = 3, patience_2: int = 3):
+                 patience_1: int = 3, patience_2: int = 3,
+                 stop_on_rank_zero_only=True,
+                 log_rank_zero_only: bool = True):
         
-        super().__init__(monitor=monitor_1, patience=patience_1, verbose=verbose, mode=mode_1, check_finite=False)
+        super().__init__(monitor=monitor_1, patience=patience_1,
+                            verbose=verbose, mode=mode_1, check_finite=False,
+                            log_rank_zero_only=log_rank_zero_only)
+        self.monitor_1 = monitor_1
         self.monitor_2 = monitor_2
         self.patience_1 = patience_1
         self.patience_2 = patience_2
@@ -713,10 +750,32 @@ class PairedEarlyStopping(EarlyStopping):
         self.mode_1 = mode_1
         self.mode_2 = mode_2
         self.check_finite = False
+        self.stop_on_rank_zero_only = stop_on_rank_zero_only
 
-    def _validate_condition_metric(self, logs):
-        current_1 = logs.get(self.monitor)
-        current_2 = logs.get(self.monitor_2)
+        self.min_delta_1 = self.min_delta*1 if self.monitor_op_1 == torch.gt else self.min_delta*-1
+        self.min_delta_2 = self.min_delta*1 if self.monitor_op_2 == torch.gt else self.min_delta*-1
+
+    def _validate_condition_metric(self, logs: dict[str, torch.Tensor]) -> bool:
+        monitor_val_1 = logs.get(self.monitor_1)
+        monitor_val_2 = logs.get(self.monitor_2)
+
+        error_msg = (
+            f"Early stopping conditioned on metric `{self.monitor}` which is not available."
+            " Pass in or modify your `EarlyStopping` callback to use any of the following:"
+            f' `{"`, `".join(list(logs.keys()))}`'
+        )
+
+        if monitor_val_1 is None or monitor_val_2 is None:
+            if self.strict:
+                raise RuntimeError(error_msg)
+            if self.verbose > 0:
+                rank_zero_warn(error_msg, category=RuntimeWarning)
+
+            return False
+
+        return True
+    
+    def _criteria_check(self, current_1, current_2):
         
         if current_1 is None or current_2 is None:
             return False
@@ -731,8 +790,11 @@ class PairedEarlyStopping(EarlyStopping):
             self.wait_count_2 = 0
             # return False
 
-        cond_1 = ( self.mode_1 == "min" and (current_1 < self.best_score_1) ) or (self.mode_1 == "max" and (current_1 > self.best_score_1))
-        cond_2 = ( self.mode_2 == "min" and (current_2 < self.best_score_2) ) or (self.mode_2 == "max" and (current_2 > self.best_score_2))
+        # cond_1 = ( self.mode_1 == "min" and (current_1 < self.best_score_1) ) or (self.mode_1 == "max" and (current_1 > self.best_score_1))
+        # cond_2 = ( self.mode_2 == "min" and (current_2 < self.best_score_2) ) or (self.mode_2 == "max" and (current_2 > self.best_score_2))
+
+        cond_1 = self.monitor_op_1(current_1 - self.min_delta_1, self.best_score_1.to(current_1.device))
+        cond_2 = self.monitor_op_2(current_2 - self.min_delta_2, self.best_score_2.to(current_2.device))
 
         if cond_1:
             self.best_score_1 = current_1
@@ -745,16 +807,84 @@ class PairedEarlyStopping(EarlyStopping):
             self.wait_count_2 = 0
         else:
             self.wait_count_2 += 1
+        
+        # Evaluating stopping cond
+        reason = None
+        bool_metric1_stop =  ( self.wait_count_1 >= self.patience_1)
+        bool_metric2_stop = ( self.wait_count_2 >= self.patience_2)
+        if bool_metric1_stop:
+            reason = (
+                    f"Monitored metric {self.monitor} did not improve in the last {self.wait_count} records."
+                    f" Best score: {self.best_score:.3f}."
+                )
+        if bool_metric2_stop:
+            _reason = (
+                    f"Monitored metric {self.monitor} did not improve in the last {self.wait_count} records."
+                    f" Best score: {self.best_score:.3f}."
+                )
+            reason = reason + '\n' + _reason if reason is not None else _reason
+        
+        
+        return bool_metric1_stop and bool_metric2_stop, reason
 
-        return ( self.wait_count_1 >= self.patience_1) and ( self.wait_count_2 >= self.patience_2)
+    @property
+    def monitor_op_1(self) -> Callable:
+        return self.mode_dict[self.mode_1]
 
-    def on_validation_end(self, trainer, pl_module):
+    @property
+    def monitor_op_2(self) -> Callable:
+        return self.mode_dict[self.mode_2]
+    
+    def _evaluate_stopping_criteria(self, current_1: torch.Tensor, current_2:torch.Tensor) -> tuple[bool, Optional[str]]:
+        should_stop = False
+        reason = None
+        if self.check_finite and not torch.isfinite(current_1):
+            should_stop = True
+            reason = (
+                f"Monitored metric {self.monitor_1} = {current_1} is not finite."
+                f" Previous best value was {self.best_score_1:.3f}. Signaling Trainer to stop."
+            )
+        elif self.check_finite and not torch.isfinite(current_2) :
+            should_stop = True
+            reason = (
+                f"Monitored metric {self.monitor_2} = {current_2} is not finite."
+                f" Previous best value was {self.best_score_2:.3f}. Signaling Trainer to stop."
+            )
+        else:
+            should_stop, reason = self._criteria_check(current_1, current_2)
+
+        return should_stop, reason
+    
+    def _run_early_stopping_check(self, trainer: "pl.Trainer") -> None:
+        """Checks whether the early stopping condition is met and if so tells the trainer to stop the training."""
         logs = trainer.callback_metrics
-        if self._validate_condition_metric(logs):
+
+        if trainer.fast_dev_run or not self._validate_condition_metric(  # disable early_stopping with fast_dev_run
+            logs
+        ):  # short circuit if metric not present
+            return
+
+        current1 = logs[self.monitor_1].squeeze()
+        current2 = logs[self.monitor_2].squeeze()
+        
+        if not self.stop_on_rank_zero_only:
+            # stop every ddp process if any world process decides to stop
+            should_stop, reason = self._evaluate_stopping_criteria(current1, current2)
+            should_stop = trainer.strategy.reduce_boolean_decision(should_stop, all=False)
+        else:
+            # only rank 0 should decide
+            if trainer.is_global_zero:
+                should_stop, reason = self._evaluate_stopping_criteria(current1, current2)
+            else:
+                should_stop, reason = False, None
+            
+            should_stop = trainer.strategy.reduce_boolean_decision(should_stop, all=False)
+            
+        trainer.should_stop = trainer.should_stop or should_stop
+        if should_stop:
             self.stopped_epoch = trainer.current_epoch
-            trainer.should_stop = True
-            if self.verbose:
-                print(f'\nEpoch {self.stopped_epoch}: early stopping triggered.')
+        if reason and self.verbose:
+            self._log_info(trainer, reason, self.log_rank_zero_only)
 
 if __name__ == "__main__":
     parent_parser = ArgumentParser(allow_abbrev=False, add_help=False)
