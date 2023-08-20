@@ -17,7 +17,7 @@ def setup_logging(filename, debugging=False):
 
     # Configure logging
     logging.basicConfig(filename=log_filename, level=logging.INFO, 
-                        format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+                        format='%(asctime)s - %(filename)s:%(lineo)d - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
     return logging
 
 def setup_logging_predict( llm_name, debugging=False ):

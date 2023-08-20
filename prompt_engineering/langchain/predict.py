@@ -496,7 +496,7 @@ def parse_args():
 
     parser.add_argument('--data_load_seed', type=int, default=10, help='The seed to use when loading the data' )
 
-    parser.add_argument('--save_output', action='store_true', default=False, help='Indicates whether the output should be saved' )
+    parser.add_argument('--save_output', action='store_true', default=True, help='Indicates whether the output should be saved' )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
 
