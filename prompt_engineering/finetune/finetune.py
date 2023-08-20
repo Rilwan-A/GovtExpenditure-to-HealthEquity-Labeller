@@ -20,12 +20,12 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 from sklearn.metrics import precision_recall_fscore_support
 
-from prompt_engineering.langchain.utils import PredictionGenerator
+from prompt_engineering.langchain.utils import PredictionGenerator, load_llm
 from prompt_engineering.utils_prompteng import PromptBuilder
 
-from transformers import BitsAndBytesConfig
+from transformers import BitsAndBytesConfig, AutoTokenizer
 
-from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
+from peft import get_peft_model, LoraConfig, TaskType, PeftModel
 
 from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
 from datasets import interleave_datasets, load_dataset
@@ -66,19 +66,31 @@ map_modelid_targetmodule = {
 class PromptEngineeringLM(pl.LightningModule):
     """LightningModule for prompt engineering LM training and evaluation."""
     def __init__(self,
-                 model,
+                 model=None,
                  tokenizer=None,
                  val_tasks:list[str]=['next_token', 'spot_alignment'],
+                 llm_name=None,
                  **kwargs
                  ):
         super().__init__()
-        # self.model_id = model_id
+        assert model is not None or llm_name is not None, 'Either model or llm_name must be provided'
 
         # NOTE: Model should be able to be loaded locally, if it is already trained
-        self.model = model
+        if model is not None:
+            self.model = model
+        else:
+            self.model = load_llm(llm_name, finetuned=False, local_or_remote='local',
+                                    loraConfig=LoraConfig(
+                                            r=8, 
+                                            lora_alpha=16, 
+                                            target_modules=map_modelid_targetmodule.get(llm_name,['k_proj','q_proj','v_proj']), 
+                                            lora_dropout=0.05, 
+                                            bias="none", 
+                                            inference_mode=False))
+
         if tokenizer is None:
-            #load using FastTokenizer
-            self.tokenizer = transformers.FastTokenizer.from_pretrained(self.model.name_or_path)
+            
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model.name_or_path, use_fast=True)
         else:
             self.tokenizer = tokenizer
         self.tokenizer.pad_token = self.tokenizer.eos_token

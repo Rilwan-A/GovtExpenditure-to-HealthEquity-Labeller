@@ -22,6 +22,7 @@ import warnings
 import os
 from contextlib import redirect_stdout
 import openai
+from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
@@ -69,7 +70,10 @@ ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
        
-def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, finetune_dir='./finetune/finetuned_models/', exp_name='', finetune_version=0 ):
+def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, 
+             finetune_dir='./finetune/finetuned_models/', exp_name='',
+             finetune_version=0,
+             loraConfig=None ):
     from  langchain.chat_models import ChatOpenAI
     from  langchain.llms import HuggingFaceHub
     from langchain import HuggingFacePipeline
@@ -112,13 +116,17 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                                     'quantization_config':quant_config,
                                     'do_sample':False,
                                     'device_map':'auto'
-                                    },
-                    )
+                                    },)
+
+                if loraConfig is not None:
+                    llm = get_peft_model(llm.pipeline.model, loraConfig)
+                
+
             else:
                 # load pytorch lightning LightningModule from finetune_dir then extract the llm as lightningModule.model
                 # Load the best checkpoint automatically
 
-                from prompt_engineering.finetune import PromptEngineeringLM
+                from prompt_engineering.finetune.finetune import PromptEngineeringLM
                 import re
 
                 # Set your checkpoints directory
@@ -136,13 +144,11 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                 best_ckpt_path = os.path.join(ckpt_dir, best_ckpt)
 
                 # Load the best model
-                model = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path)
+                model = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path, llm_name=llm_name, 
+                    map_location={'':'cuda:0'})
 
                 # Extract the llm
                 llm = model.model
-
-
-
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
         
@@ -375,6 +381,9 @@ class PredictionGenerator():
         return li_map_probability
     
     def parse_outp_categories_perplexity(self, li_filledtemplate:list[str], reverse_categories=False)->  list[dict[str,float]] :
+        
+        map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate_fmtd = [

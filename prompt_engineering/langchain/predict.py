@@ -71,7 +71,9 @@ def main(
     debugging:bool= False,
     data_load_seed:int = 10,
     
-    finetune_dir:str|None=None):
+    finetune_dir:str|None=None,
+    finetune_version:int=0,
+    ):
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
     
@@ -93,6 +95,8 @@ def main(
     logging.info(f"\tllm_name: {llm_name}")
     logging.info(f"\texp_name: {exp_name}")
     logging.info(f"\tfinetuned: {finetuned}")
+    if finetuned:
+        logging.info(f"\tfinetune_version: {str(finetune_version)}")
     logging.info(f"\tpredict_b2i: {predict_b2i}")
     logging.info(f"\tpredict_i2i: {predict_i2i}")
     logging.info(f"\tprompt_style: {prompt_style}")
@@ -113,7 +117,7 @@ def main(
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir)
+        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir, exp_name, finetune_version=finetune_version)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -208,6 +212,8 @@ def main(
                             "local_or_remote": local_or_remote,
                             "unbias_categorisations": unbias_categorisations,
                         }
+        if finetuned:
+            experiment_config['finetune_version'] = finetune_version
         
         # Save experiment config
         dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
@@ -459,12 +465,13 @@ def parse_args():
     parser.add_argument('--exp_name', type=str, default='mpt7b', required=True )
 
     
-    parser.add_argument('--predict_b2i', action='store_true', default=True, help='Indicates whether to predict budgetitem to indicator' )
+    parser.add_argument('--predict_b2i', action='store_true', default=False, help='Indicates whether to predict budgetitem to indicator' )
     parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
     parser.add_argument('--finetune_dir', type=str, default='/mnt/Data1/akann1warw1ck/AlanTuring/prompt_engineering/finetune/ckpt', help='Directory where finetuned model is stored' )
-    
+    parser.add_argument('--finetune_version', type=int, default=0, help='Version of finetuned model to use')
+
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot_categorise' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rules', 'categories_rules', 'categories_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
 
