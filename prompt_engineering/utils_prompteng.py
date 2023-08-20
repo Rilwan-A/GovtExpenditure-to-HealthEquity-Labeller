@@ -21,7 +21,7 @@ from time import sleep
 import peft
 from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
-
+from transformers import AutoTokenizer
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -338,9 +338,10 @@ def joint_probabilities_for_category(
     """
 
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
+    from peft import PeftModel
     from torch.nn.functional import log_softmax
 
-    assert isinstance(model, PreTrainedModel)
+    assert isinstance(model, PreTrainedModel) or isinstance(model, PeftModel)
     assert isinstance(tokenizer, PreTrainedTokenizerBase)
     assert category_token_len == 1, "Currently only supports category tokens of length 1"
 
@@ -607,7 +608,7 @@ class PromptBuilder():
         
         elif  isinstance(self.llm, PeftModel): #type: ignore
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
-            
+
             generation_params = self.get_generation_params(self.prompt_style)
 
             self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id

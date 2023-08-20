@@ -117,7 +117,7 @@ def main(
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir, exp_name, finetune_version=finetune_version)
+        llm, tokenizer =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir, exp_name, finetune_version=finetune_version)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -134,13 +134,13 @@ def main(
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type, relationship='budgetitem_to_indicator',
                                         seed=data_load_seed,
-
+                                        tokenizer = tokenizer
                                         )
     
     prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type, relationship='indicator_to_indicator',
-                                                                           seed=data_load_seed)
+                                                                           seed=data_load_seed, tokenizer=tokenizer)
     logging.info("\tPrompt Builders Created")
 
     # Create Prediction Generators

@@ -68,7 +68,7 @@ class PromptEngineeringLM(pl.LightningModule):
     def __init__(self,
                  model=None,
                  tokenizer=None,
-                 val_tasks:list[str]=['next_token', 'spot_alignment'],
+                 val_tasks:list[str]|None=['next_token', 'spot_alignment'],
                  llm_name=None,
                  **kwargs
                  ):
@@ -79,7 +79,7 @@ class PromptEngineeringLM(pl.LightningModule):
         if model is not None:
             self.model = model
         else:
-            self.model = load_llm(llm_name, finetuned=False, local_or_remote='local',
+            self.model, tokenizer = load_llm(llm_name, finetuned=False, local_or_remote='local',
                                     loraConfig=LoraConfig(
                                             r=8, 
                                             lora_alpha=16, 
@@ -87,19 +87,21 @@ class PromptEngineeringLM(pl.LightningModule):
                                             lora_dropout=0.05, 
                                             bias="none", 
                                             inference_mode=False))
+            self.model = self.model.pipeline.model
 
-        if tokenizer is None:
-            
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model.name_or_path, use_fast=True)
-        else:
+        # if tokenizer is None:
+        #     self.tokenizer = AutoTokenizer.from_pretrained(self.model.name_or_path, use_fast=True)
+        # else:
+        #     self.tokenizer = tokenizer
+        if tokenizer is not None:
             self.tokenizer = tokenizer
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self.val_tasks = val_tasks
         self.optimizer = kwargs.get('optimizer', 'auto')
         self.lr = kwargs.get('lr', 1e-6)
     
-        if 'spot_alignment' in self.val_tasks:
+        if self.val_tasks is not None and 'spot_alignment' in self.val_tasks:
             self.val_step_outputs_spotalign = []
             self.prompt_builder_b2i = PromptBuilder( self.model,
                                                      self.model.name_or_path,  
