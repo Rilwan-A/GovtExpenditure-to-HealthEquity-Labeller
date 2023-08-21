@@ -218,7 +218,10 @@ def main(
             experiment_config['finetune_version'] = finetune_version
         
         # Save experiment config
-        dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
+        if not debugging:
+            dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
+        else:
+            dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs_debug' )
         os.makedirs(dir_experiments, exist_ok=True )
 
         existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(dir_experiments) if x.startswith(f'exp_{exp_name}') ]
