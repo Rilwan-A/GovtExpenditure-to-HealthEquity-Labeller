@@ -442,8 +442,8 @@ def save_experiment(
 
 
     elif relationship == 'indicator_to_indicator':
-        df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
-                           'indicator_2': [ d['indicator_2'] for d in li_record],
+        df = pd.DataFrame({ 'indicator1': [ d['indicator1'] for d in li_record],
+                           'indicator2': [ d['indicator2'] for d in li_record],
                         #    'related': [ d['related'] for d in li_record],
                         'pred_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble),
