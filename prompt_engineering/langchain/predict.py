@@ -41,7 +41,6 @@ def main(
     exp_group:str,
     finetuned:bool,
     
-    
     predict_b2i:bool,
     predict_i2i:bool,
 
@@ -53,6 +52,7 @@ def main(
     edge_value:str,
 
     input_file:str|UploadedFile,
+    line_range:str|None=None,
 
     k_shot_b2i:int=2,
     k_shot_i2i:int=0,
@@ -181,6 +181,15 @@ def main(
                                                             logging=logging )
     logging.info("\tData Prepared")
     
+    if line_range is not None:
+        start, end = line_range.split(',')
+        start, end = int(start), int(end)
+        
+        if li_record_b2i is not None:
+            li_record_b2i = li_record_b2i[start:end]
+        
+        if li_record_i2i is not None:
+            li_record_i2i = li_record_i2i[start:end]
 
     # run predictions
     logging.info("\tRunning Predictions")
@@ -201,6 +210,7 @@ def main(
                             "exp_name": exp_name,
                             "exp_group": exp_group,
                             'codebase': 'langchain',
+                            'line_range': line_range,
                             "finetuned": finetuned,
                             "prompt_style": prompt_style,
                             "parse_style": parse_style,
@@ -214,8 +224,7 @@ def main(
                             "k_shot_example_dset_name_b2i": k_shot_example_dset_name_b2i,
                             "k_shot_example_dset_name_i2i": k_shot_example_dset_name_i2i,
                             "local_or_remote": local_or_remote,
-                            "unbias_categorisations": unbias_categorisations,
-                        }
+                            "unbias_categorisations": unbias_categorisations}
         if finetuned:
             experiment_config['finetune_version'] = finetune_version
         
@@ -504,6 +513,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=1 )
 
     parser.add_argument('--data_load_seed', type=int, default=10, help='The seed to use when loading the data' )
+    parser.add_argument('--line_range', type=str, default=None, help='The range of lines to load from the input file' )
 
     parser.add_argument('--save_output', action='store_true', default=True, help='Indicates whether the output should be saved' )
 
