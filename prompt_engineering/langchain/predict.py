@@ -205,6 +205,8 @@ def main(
                             "ensemble_size": ensemble_size,
                             "effect_type": effect_type,
                             "edge_value": edge_value,
+                            "predict_b2i": predict_b2i,
+                            "predict_i2i": predict_i2i,
                             "k_shot_b2i": k_shot_b2i,
                             "k_shot_i2i": k_shot_i2i,
                             "k_shot_example_dset_name_b2i": k_shot_example_dset_name_b2i,
