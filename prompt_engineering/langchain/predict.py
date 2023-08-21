@@ -468,6 +468,7 @@ def parse_args():
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
     parser.add_argument('--exp_name', type=str, default='mpt7b', required=True )
+    parser.add_argument('--exp_group', type=str, default='exp_run', required=True )
 
     
     parser.add_argument('--predict_b2i', action='store_true', default=False, help='Indicates whether to predict budgetitem to indicator' )
