@@ -4,6 +4,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 import os, sys
 from datetime import datetime
+import traceback
 
 def setup_logging(filename, debugging=False):
     if not debugging:
@@ -17,7 +18,7 @@ def setup_logging(filename, debugging=False):
 
     # Configure logging
     logging.basicConfig(filename=log_filename, level=logging.INFO, 
-                        format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+                        format='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S', )
     return logging
 
 def setup_logging_predict( llm_name, debugging=False ):
@@ -25,12 +26,15 @@ def setup_logging_predict( llm_name, debugging=False ):
     dt_string = now.strftime("%Y%m%d_%H%M%S")
 
     llm_name = ''.join(llm_name.split('/')[1:])
-
     log_filename = f'{llm_name}_{dt_string}.log'
-
     logging = setup_logging(log_filename, debugging)
 
-    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
+    def handle_exception(exctype, value, tb):
+        exception_str = ''.join(traceback.format_exception(exctype, value, tb))
+
+        logging.error("Unhandled exception:\n%s", exception_str)
+
+    sys.excepthook = handle_exception
 
     return logging
 

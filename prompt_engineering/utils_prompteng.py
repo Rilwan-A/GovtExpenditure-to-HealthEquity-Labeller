@@ -19,8 +19,9 @@ from langchain.schema import (
 from time import sleep
 
 import peft
+from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
-
+from transformers import AutoTokenizer
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -106,7 +107,7 @@ budgetitem_to_indicator_prompts = {
     'li_prompts_categorical_question':li_prompts_categorical_question_b2i,
     'li_prompts_categorical_question_reversed':li_prompts_categorical_question_reversed_b2i,
 
-    'map_cateogry_answer':map_category_answer_b2i,
+    'map_category_answer':map_category_answer_b2i,
     'map_category_label':map_category_label_b2i
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
@@ -167,7 +168,10 @@ indicator_to_indicator_prompts = {
     'li_prompts_categorical_question_w_reasoning_reversed': li_prompts_categorical_question_w_reasoning_reversed_i2i,
 
     'li_prompts_categorical_question': li_prompts_categorical_question_i2i,
-    'li_prompts_categorical_question_reversed': li_prompts_categorical_question_reversed_i2i
+    'li_prompts_categorical_question_reversed': li_prompts_categorical_question_reversed_i2i,
+
+    'map_category_answer': map_category_answer_i2i,
+    'map_category_label': map_category_label_i2i
 }
 
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
@@ -334,9 +338,10 @@ def joint_probabilities_for_category(
     """
 
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
+    from peft import PeftModel
     from torch.nn.functional import log_softmax
 
-    assert isinstance(model, PreTrainedModel)
+    assert isinstance(model, PreTrainedModel) or isinstance(model, PeftModel)
     assert isinstance(tokenizer, PreTrainedTokenizerBase)
     assert category_token_len == 1, "Currently only supports category tokens of length 1"
 
@@ -514,7 +519,7 @@ class PromptBuilder():
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str, **gen_kwargs):
         generation_params = {}
-        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
+        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, PeftModel )*'max_new_tokens'
         if prompt_style == 'yes_no':
             generation_params[k] = 10
         elif prompt_style == 'open':
@@ -601,9 +606,9 @@ class PromptBuilder():
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         
-        elif  isinstance(self.llm, peft.peft_model.PeftModelForCausalLM): #type: ignore
+        elif  isinstance(self.llm, PeftModel): #type: ignore
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
-            
+
             generation_params = self.get_generation_params(self.prompt_style)
 
             self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id

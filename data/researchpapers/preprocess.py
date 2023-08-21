@@ -93,15 +93,6 @@ def main(
         
         logging.info('Fixing lack of spaces between parts of text')
         
-        # # slow method
-        # llm = load_llm( split_combined_words_model, False, 'local', 0 )
-        # llm.pipeline.tokenizer.pad_token = llm.pipeline.tokenizer.eos_token
-        # # TODO: test the maximum batch size that can be used here
-        # dataset_dict = dataset_dict.map( lambda batch: fix_text(batch, llm, max_tokens_per_chunk), batched=True, batch_size=24 , remove_columns=dataset_dict.column_names['train'], num_proc=1 )
-        # # release the memory used by the llm
-        # del llm
-        # gc.collect()
-        # empty_cache()
 
         # Fast method
         dataset_dict['train'] = dataset_dict['train'].map( lambda batch: fix_text_parallel(batch, max_tokens_per_chunk, split_combined_words_model), 
@@ -385,7 +376,7 @@ def _fix_text_parallel(texts, gpu, max_tokens_per_chunk, split_combined_words_mo
 
     # Part 1b) Loaing LLM
     torch.cuda.set_device(gpu)
-    llm = load_llm( split_combined_words_model, False, 'local', 0 )
+    llm, tokenizer = load_llm( split_combined_words_model, False, 'local', 0 )
     llm.pipeline.tokenizer.pad_token = llm.pipeline.tokenizer.eos_token
     
     llm.pipeline.tokenizer.padding_side = 'left'

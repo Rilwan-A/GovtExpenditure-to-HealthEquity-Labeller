@@ -2,7 +2,7 @@ from time import sleep
 import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
-from langchain import PromptTemplate, LLMChain
+from langchain import HuggingFacePipeline, PromptTemplate, LLMChain
 from langchain.schema import (
     HumanMessage,
     SystemMessage
@@ -22,6 +22,13 @@ import warnings
 import os
 from contextlib import redirect_stdout
 import openai
+from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
+
+from  langchain.chat_models import ChatOpenAI
+from  langchain.llms import HuggingFaceHub
+from langchain import HuggingFacePipeline
+from transformers import PreTrainedTokenizer, pipeline
+from langchain.llms import HuggingFacePipeline
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
@@ -42,7 +49,8 @@ HUGGINGFACE_MODELS = [
     'upstage/llama-30b-instruct-2048',
     'upstage/Llama-2-70b-instruct-v2',
     'stabilityai/StableBeluga2',
-    ]
+    
+    'trl-internal-testing/dummy-GPT2-correct-vocab']
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
@@ -60,6 +68,7 @@ MAP_LOAD_IN_NBIT = {
     'upstage/llama-30b-instruct-2048':4,
     'upstage/Llama-2-70b-instruct-v2':4,
     'stabilityai/StableBeluga2':4,
+
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
@@ -67,11 +76,12 @@ ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
        
-def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, finetune_dir='./finetune/finetuned_models/', exp_name='', finetune_version=0 ):
-    from  langchain.chat_models import ChatOpenAI
-    from  langchain.llms import HuggingFaceHub
-    from langchain import HuggingFacePipeline
-    import torch
+def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, 
+             finetune_dir='./finetune/finetuned_models/', exp_name='',
+             finetune_version=0,
+             loraConfig=None ) -> tuple[HuggingFacePipeline|ChatOpenAI, PreTrainedTokenizer|None]:
+    
+    
 
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
@@ -80,22 +90,27 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
+        from torch import bfloat16
 
         if llm_name in HUGGINGFACE_MODELS:
             from transformers import BitsAndBytesConfig
             
             bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
             bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
-            quant_config = BitsAndBytesConfig(
-                
-                load_in_8bit=bool_8,
-                llm_int8_has_fp16_weights=bool_8,
-                
-                load_in_4bit=bool_4,
-                bnb_4bit_quant_type="nf4" ,
-                bnb_4bit_use_double_quant=bool_4,
-                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
-            )
+            
+            if bool_8 or bool_4:
+                quant_config = BitsAndBytesConfig(
+                    
+                    load_in_8bit=bool_8,
+                    llm_int8_has_fp16_weights=bool_8,
+                    
+                    load_in_4bit=bool_4,
+                    bnb_4bit_quant_type="nf4" ,
+                    bnb_4bit_use_double_quant=bool_4,
+                    bnb_4bit_compute_dtype=bfloat16 if bool_4 else None
+                )
+            else:
+                quant_config = None
 
             if not finetuned:
                 model_id = llm_name
@@ -106,13 +121,18 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                                     'quantization_config':quant_config,
                                     'do_sample':False,
                                     'device_map':'auto'
-                                    },
-                    )
+                                    },)
+
+                tokenizer = llm.pipeline.tokenizer
+                if loraConfig is not None:
+                    # llm = get_peft_model(llm.pipeline.model, loraConfig)
+                    llm.pipeline.model = get_peft_model(llm.pipeline.model, loraConfig)
+                    
             else:
                 # load pytorch lightning LightningModule from finetune_dir then extract the llm as lightningModule.model
                 # Load the best checkpoint automatically
 
-                from prompt_engineering.finetune import PromptEngineeringLM
+                from prompt_engineering.finetune.finetune import PromptEngineeringLM
                 import re
 
                 # Set your checkpoints directory
@@ -130,13 +150,14 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                 best_ckpt_path = os.path.join(ckpt_dir, best_ckpt)
 
                 # Load the best model
-                model = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path)
+                prompt_engineering_lm = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path, llm_name=llm_name, 
+                    map_location={'':'cuda:0'}, val_tasks=None)
 
                 # Extract the llm
-                llm = model.model
-
-
-
+                # llm = prompt_engineering_lm.model
+                tokenizer = prompt_engineering_lm.tokenizer
+                llm = HuggingFacePipeline( pipeline=pipeline('text-generation', model=prompt_engineering_lm.model, tokenizer=tokenizer ))
+                
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
         
@@ -153,11 +174,12 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                     repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'do_sample':False } ) #type: ignore
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for remote use")
-
+        tokenizer = None
     else:
         llm = None
+        tokenizer = None
 
-    return llm 
+    return llm, tokenizer
 
 class PredictionGenerator():
     """
@@ -196,24 +218,6 @@ class PredictionGenerator():
         self.local_or_remote = local_or_remote
       
         self.effect_type = effect_type
-
-    # @lru_cache(maxsize=2)
-    # def get_generation_params(self, prompt_style:str):
-    #     generation_params = {}
-    #     k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
-    #     if prompt_style == 'yes_no':
-    #         generation_params[k] = 10
-    #     elif prompt_style == 'open':
-    #         generation_params[k] = 10
-    #     elif prompt_style == 'categorise':
-    #         generation_params[k] = 10
-    #     elif prompt_style == 'cot_categorise':
-    #         generation_params[k] = 250
-
-    #     if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
-    #         generation_params['early_stopping'] = True
-        
-    #     return generation_params
 
     def predict(self, li_li_filled_template:list[list[str]], reverse_categories=False)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
@@ -369,6 +373,9 @@ class PredictionGenerator():
         return li_map_probability
     
     def parse_outp_categories_perplexity(self, li_filledtemplate:list[str], reverse_categories=False)->  list[dict[str,float]] :
+        
+        map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate_fmtd = [
