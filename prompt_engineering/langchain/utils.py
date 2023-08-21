@@ -69,6 +69,7 @@ MAP_LOAD_IN_NBIT = {
     'upstage/Llama-2-70b-instruct-v2':4,
     'stabilityai/StableBeluga2':4,
 
+    'trl-internal-testing/dummy-GPT2-correct-vocab':4
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']

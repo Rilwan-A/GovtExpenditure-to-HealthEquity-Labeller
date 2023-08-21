@@ -8,14 +8,37 @@
 
 import csv
 import os
-
+import re
 # Function to create intuitive concatenation of indicator name and age
-def concatenate_name_age(name, age):
-    # If age is not in the indicator name, then concatenate the name and age
+def concatenate_name_age(name, age, group):
+
+    # Check if the name string as any form of the age string in it and if not, add it
     if age in name:
-        return name
+        pass
+    elif re.search(r'\d+', age) and re.search(r'\d+', age).group() in name:
+        # check if any number extracted from the age string is in the name string
+        pass
+    # elif re.search(r'\d+[- ]\d?', age) and re.search(r'\d+[- ]\d?', age).group() in name:
+    #     # check if there is an age / age range in the name string already
+    #     pass
+    elif re.search(r'\d+', name) is not None:
+        # check if there is any age in the string already
+        pass
     else:
-        return f"{name} ({age})"
+        name = f"{name} ({age})"         
+
+
+    # Adding information on the decile
+    if 'Most deprived decile' in group:
+        name = name + ' for the most deprived decile of the population.'
+    elif 'Least deprived decile' in group:
+        name = name + ' for the least deprived decile of the population.'
+    else:
+        pass
+         
+    # remove double spaces
+    name = name.replace("  ", " ")
+    return name
 
 
 
@@ -36,7 +59,7 @@ for i in range(len(indicators)):
         
         candidate = {
             "indicator1_name": indicator1["seriesName"],
-            "indicator1": concatenate_name_age(indicator1["seriesName"], indicator1["Age"]),
+            "indicator1": concatenate_name_age(indicator1["seriesName"], indicator1["Age"], indicator1["group"]),
             "seriesCode1": indicator1["seriesCode"],
             "idx1": i,
             "seriesName1": indicator1["seriesName"],
@@ -45,7 +68,7 @@ for i in range(len(indicators)):
             "group1": indicator1["group"],
             
             "indicator2_name": indicator2["seriesName"],
-            "indicator2": concatenate_name_age(indicator2["seriesName"], indicator2["Age"]),
+            "indicator2": concatenate_name_age(indicator2["seriesName"], indicator2["Age"], indicator2["group"]),
             "seriesCode2": indicator2["seriesCode"],
             "idx2": j,
             "seriesName2": indicator2["seriesName"],

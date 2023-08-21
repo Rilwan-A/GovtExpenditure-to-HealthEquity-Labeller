@@ -38,6 +38,7 @@ import random
 def main(
     llm_name:str,
     exp_name:str,
+    exp_group:str,
     finetuned:bool,
     
     
@@ -56,8 +57,8 @@ def main(
     k_shot_b2i:int=2,
     k_shot_i2i:int=0,
 
-    k_shot_example_dset_name_b2i:str = 'spot',
-    k_shot_example_dset_name_i2i:str|None = None,
+    k_shot_example_dset_name_b2i:str|None = 'spot',
+    k_shot_example_dset_name_i2i:str|None = 'spot',
 
     unbias_categorisations:bool = False,
 
@@ -198,6 +199,7 @@ def main(
         experiment_config = {
                             "llm_name": llm_name,
                             "exp_name": exp_name,
+                            "exp_group": exp_group,
                             'codebase': 'langchain',
                             "finetuned": finetuned,
                             "prompt_style": prompt_style,
@@ -219,9 +221,10 @@ def main(
         
         # Save experiment config
         if not debugging:
-            dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
+            dir_experiments = os.path.join('prompt_engineering','output','spot', exp_group )
         else:
-            dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs_debug' )
+            dir_experiments = os.path.join('prompt_engineering','output','spot', f'{exp_group}_debug' )
+
         os.makedirs(dir_experiments, exist_ok=True )
 
         existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(dir_experiments) if x.startswith(f'exp_{exp_name}') ]
@@ -491,7 +494,7 @@ def parse_args():
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
 
     parser.add_argument('--k_shot_example_dset_name_b2i', type=lambda inp: None if inp.lower()=="none" else str(inp), default='spot', choices=['spot','england', None], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
-    parser.add_argument('--k_shot_example_dset_name_i2i', type= lambda inp: None if inp.lower()=="none" else str(inp), default=None, choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_i2i', type= lambda inp: None if inp.lower()=="none" else str(inp), default='spot', choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
 
     parser.add_argument('--unbias_categorisations', action='store_true', default=False, help='Indicates whether to take measures to reduce bias towards category N when using categorisation type methods to answer questions' )
 
