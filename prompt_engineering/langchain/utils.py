@@ -485,8 +485,10 @@ def load_annotated_examples(k_shot_example_dset_name:str|None,
                             relationship_type:str='budgetitem_to_indicator') -> list[dict[str,str]] | None:
     
     li_records: list[dict[str,str]] | None = None
+    if k_shot_example_dset_name is None:
+        pass
 
-    if k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
+    elif k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
         # Load spot dataset as pandas dataframe
         dset = pd.read_csv('./data/spot/spot_b2i_broad_train.csv')
         

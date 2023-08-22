@@ -186,10 +186,10 @@ def main(
         start, end = int(start), int(end)
         
         if li_record_b2i is not None:
-            li_record_b2i = li_record_b2i[start:end]
+            li_record_b2i = li_record_b2i[start:end+1]
         
         if li_record_i2i is not None:
-            li_record_i2i = li_record_i2i[start:end]
+            li_record_i2i = li_record_i2i[start:end+1]
 
     # run predictions
     logging.info("\tRunning Predictions")
@@ -503,7 +503,7 @@ def parse_args():
     parser.add_argument('--k_shot_i2i', type=int, default=0, help='Number of examples to use for each prompt for the indicator to indicator predictions' )
 
     parser.add_argument('--k_shot_example_dset_name_b2i', type=lambda inp: None if inp.lower()=="none" else str(inp), default='spot', choices=['spot','england', None], help='The dataset to use for the k_shot examples for the budget_item to indicator predictions' )
-    parser.add_argument('--k_shot_example_dset_name_i2i', type= lambda inp: None if inp.lower()=="none" else str(inp), default='spot', choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
+    parser.add_argument('--k_shot_example_dset_name_i2i', type= lambda inp: None if inp.lower()=="none" else str(inp), default=None, choices=['spot','england',None], help='The dataset to use for the k_shot examples for the indicator to indicator predictions' )
 
     parser.add_argument('--unbias_categorisations', action='store_true', default=False, help='Indicates whether to take measures to reduce bias towards category N when using categorisation type methods to answer questions' )
 
