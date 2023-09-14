@@ -34,6 +34,7 @@ from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
 import random
+import time
 
 def main(
     llm_name:str,
@@ -111,6 +112,8 @@ def main(
     logging.info(f"\tk_shot_example_dset_name_b2i: {k_shot_example_dset_name_b2i}")
     logging.info(f"\tk_shot_example_dset_name_i2i: {k_shot_example_dset_name_i2i}")
     logging.info(f"\tunbias_categorisations: {unbias_categorisations}")
+    if line_range is not None:
+        logging.info(f"\tline_range: {line_range}")
     
 
     logging.info("Starting Prediction Script with model: {}".format(llm_name))
@@ -390,10 +393,16 @@ def predict_batches(prompt_builder:PromptBuilder,
 
     li_li_record = [ li_record[i:i+batch_size] for i in range(0, len(li_record), batch_size) ]
 
+    last_log_time = time.time() - 30
+
     for idx, batch in enumerate(li_li_record):
         if logger is not None:
-            logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
-
+            # Make it log at a minimal rate of 1 per 30seconds to avoid spamming the log file
+            current_time = time.time()
+            if current_time - last_log_time > 30:
+                logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
+                last_log_time = current_time
+                
         # Create prompts
         batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch)
         

@@ -28,6 +28,9 @@ temp*
 # Data / Document files
 **/**.txt
 **/**.csv
+**/**.png
+**/**.jpg
+**/**.jpeg
 **/**.html
 **/**.pdf
 **/**.yml

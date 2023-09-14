@@ -417,21 +417,6 @@ def joint_probabilities_for_category(
 
     return joint_probs
 
-def perplexity_to_normalised_probability( perplexities: dict[str,float]) -> dict[str,float]:
-
-    """Converts a dictionary of perplexity scores to normalised probabilities"""
-    # Convert perplexity to probabilities
-    probs = {}
-    for k,v in perplexities.items():
-        probs[k] = 1/v
-
-    # Normalise probabilities
-    total = sum(probs.values())
-    for k,v in probs.items():
-        probs[k] = v/total
-
-    return probs
-
 def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
     
         """Normalises a dictionary of probabilities"""
