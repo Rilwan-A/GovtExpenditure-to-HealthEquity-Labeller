@@ -23,7 +23,6 @@ import os
 from contextlib import redirect_stdout
 import openai
 from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
-
 from  langchain.chat_models import ChatOpenAI
 from  langchain.llms import HuggingFaceHub
 from langchain import HuggingFacePipeline
@@ -234,6 +233,8 @@ class PredictionGenerator():
                 li_li_pred = [ self.parse_outp_categories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'cot_categorise':
                 li_li_pred = [ self.parse_outp_cotcategories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
+            elif self.prompt_style == 'categories_scale':
+                li_li_pred = [ self.parse_outp_categories_scale(li_filled_template) for li_filled_template in li_li_filled_template]'
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
@@ -419,7 +420,49 @@ class PredictionGenerator():
 
         return li_map_probability
 
-    def aggregate_predictions(self, li_li_dict_preds:list[list[dict[str,int|float]]] )->  list[float | dict[str,float] ] :
+    def parse_outp_categories_scale(self, li_filledtemplate:list[str])->  list[dict[str,float]] :
+        # returns a multinomial distribution over the values 1-10
+
+        category_scale = copy.deepcopy( map_relationship_promptsmap[self.relationship]['category_scale'] )
+        
+        # Formatting prompts to adhere to format required by Base Language Model
+        li_filledtemplate_fmtd = [
+                map_llmname_input_format(self.llm_name,
+                                        user_message = prompt, 
+                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] 
+                                        )
+                                    for prompt in li_filledtemplate ] #Added some base model formatting
+
+        # For each template, create the set of 2 filled templates with each of the possible answers
+        # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
+        answers = category_scale
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
+
+
+        # For each filled template set calcualte the relative probability of each answer
+        li_li_probability = []
+        for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
+
+            li_probability = joint_probabilities_for_category(
+                li_filledtemplates_with_answers, 
+                self.llm.pipeline.model, 
+                self.llm.pipeline.tokenizer,
+                batch_size=len(answers), 
+                category_token_len=1 ) 
+            
+            li_li_probability.append(li_probability)
+        
+        # Convert set of perplexities into a list of list with each sublist having a probability for each category of answer
+        _categorise_response_labels = copy.deepcopy(map_category_label)
+
+        li_map_probability = [ { ans:li_probability[idx] for idx,ans enmumerate(answers) } for li_probability in li_li_probability ]
+
+        # Convert this to normalised probabilities
+        li_map_probability = [  nomalized_probabilities(map_probability) for map_probability in li_map_probability ]
+
+        return li_map_probability
+
+    def aggregate_predictions(self, li_li_dict_preds:list[list[dict[str,int|float]]], **kwargs )->  list[float | dict[str,float] ] :
         
         """            
             For Each prediction we have a list of samples.
@@ -473,6 +516,23 @@ class PredictionGenerator():
                 return {'Yes':avg_relative_yes, 'No':avg_relative_no, 'NA':avg_relative_na}
             
             li_pred_agg = [ avg_relative_y(li_dict_pred) for li_dict_pred in li_li_dict_preds ]
+
+            li_pred_agg = [{key: round(value, 3) for key, value in nested_dict.items()} for nested_dict in li_pred_agg]
+        
+        elif self.edge_value == 'scale':
+            # Given assigned probabilites for each value in the scale, calculate the mean for the predictions
+            
+            
+            sc = kwargs.get('scale_max', 5)
+
+            def create_mean_of_scale_preds(li_dict_pred):
+
+                li_mean = [ sum( val*prob for val, prob in dict_pred.items() )/len(dict_pred) for dict_pred in li_dict_pred ]
+                mean = sum(li_mean)/len(li_mean)
+
+                return {'mean':mean, 'scaled_mean':mean/sc}
+
+            li_pred_agg = [ create_mean_of_scale_preds(li_dict_pred) for li_dict_pred in li_li_dict_preds]
 
             li_pred_agg = [{key: round(value, 3) for key, value in nested_dict.items()} for nested_dict in li_pred_agg]
 

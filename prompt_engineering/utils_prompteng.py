@@ -69,7 +69,6 @@ li_prompts_categorical_question_w_reasoning_reversed_b2i: list[str] = [
     f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_label_b2i["1"]}'
         ]
 
-
 li_prompts_categorical_question_b2i: list[str] = [
     # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer_b2i["1"]}, 2) {map_category_answer_b2i_b2i["2"]}.'
     # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer_b2i_b2i["1"]}\n2) {map_category_answer_b2i["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
@@ -159,6 +158,12 @@ li_prompts_categorical_question_reversed_i2i: list[str] = [
     'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
     ]
 
+li_prompts_categories_scale_question_i2i: list[str] = [
+    'On a scale of 1 to \"{scale_max}\", how strong is the influence of changes in \"{indicator1}\" on changes in \"{indicator2}\"?'
+]
+
+# Prompts for the scaling categorisation method
+category_scale_i2i = list(range(1,6))
 
 indicator_to_indicator_prompts = {
     'li_prompts_yes_no_question': li_prompts_yes_no_question_i2i,
@@ -170,12 +175,17 @@ indicator_to_indicator_prompts = {
     'li_prompts_categorical_question': li_prompts_categorical_question_i2i,
     'li_prompts_categorical_question_reversed': li_prompts_categorical_question_reversed_i2i,
 
+    'li_prompts_categories_scale_question': li_prompts_categories_scale_question_i2i,
+
     'map_category_answer': map_category_answer_i2i,
     'map_category_label': map_category_label_i2i
+
+    'category_scale':category_scale_i2i
 }
 
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
+
 
 # region SystemMessages
 system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
@@ -435,7 +445,7 @@ class PromptBuilder():
                  k_shot:int,
                  ensemble_size:int, 
                  examples_dset:list[dict]|None=None, 
-                 effect_type:str="arbitrary", 
+                 effect_type:str="arb'itrary", 
                  relationship:str="budgetitem_to_indicator",
                  seed:int=10,
                  **kwargs ) -> None:
@@ -443,7 +453,7 @@ class PromptBuilder():
             unbias_categorisations (bool): If true, the PromptBuilder builds two categorical answer prompts with the order of categories reversed in order to remove any bias towards select 1st of 2nd answer  
         """
         
-        assert prompt_style in ['yes_no','open', 'categorise', 'cot_categorise' ], "Prompt style must be either yes_no, open, categorise or cot_categorise"
+        assert prompt_style in ['yes_no','open', 'categorise', 'cot_categorise', ], "Prompt style must be either yes_no, open, categorise or cot_categorise"
         assert effect_type in ['arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
@@ -468,7 +478,7 @@ class PromptBuilder():
     def effect_type_str(self) -> str:
         return '' if self.effect_type == 'arbitrary' else self.effect_type 
     
-    def __call__(self, batch:list[dict], reverse_categories_order:Optional[bool]=False) -> list[list[str]]:
+    def __call__(self, batch:list[dict], reverse_categories_order:Optional[bool]=False, **kwargs) -> list[list[str]]:
         """
             Given a batch of examples, this function returns a list of prompts for each example in the batch
         """
@@ -483,6 +493,9 @@ class PromptBuilder():
             templates = self._categorise_template(reverse_categories_order=reverse_categories_order, seed=self.seed)
         elif self.prompt_style == 'cot_categorise':
             templates = self._cot_template(seed=self.seed)
+        elif self.prompt_style == 'categories_scale':
+            scale_max = kwargs.get('scale_max', 5)
+            templates = self._categories_scale_template(scale_max=scale_max)
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
     
@@ -495,7 +508,9 @@ class PromptBuilder():
             li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'cot_categorise':
             li_filled_templates, li_li_discourse = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
-        
+        elif self.prompt_style == 'categories_scale':
+            li_filled_template, li_li_discourse = self.fill_template_categories_scale(templates, batch)
+
         else:
             li_filled_templates = []
          
@@ -770,6 +785,20 @@ class PromptBuilder():
         
         return templates
 
+    def _categories_scale_template(self, seed=None, scale_max=scale_max) -> list[str]:
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categories_scale_question']
+        templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
+        
+        for ens_idx in range(self.enemble_size):
+            
+            if self.relationship == 'budgetitem_to_indicator':
+                raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', scale_max=scale_max ).replace('  ',' ')
+
+            templates[ens_idx] = prompt
+        return templates
+
     def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> tuple[list[list[str]], list[list[str]]]:
         """Fill in the template with the target and k_shot context"""
 
@@ -1024,3 +1053,31 @@ class PromptBuilder():
         
         return li_li_filledtemplate
 
+    def _fil_template_categories_scale(self, tempalates, batch ) -> tuple[list[list[str]], list[list[str]]]:
+        
+        """ fill in the template with the indicators """
+
+        li_li_prompts = []
+        
+        for row in batch:
+
+            li_prompts = []
+            prompt = None
+
+            for ens_idx in range(self.ensemble_size):
+
+                if self.relationship == 'budgetitem_to_indicator':
+                    raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
+
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                    )
+                li_prompts.append(prompt)
+
+            li_li_prompts.append(li_prompts)
+        
+        li_filled_prompt = li_li_prompts
+        li_discourse = [] # No discourse was needed for this output
+
+        return li_fi#lled_prompt, li_discourse
