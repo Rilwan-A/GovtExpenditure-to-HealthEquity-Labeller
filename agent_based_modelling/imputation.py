@@ -22,7 +22,7 @@ import numpy as np
 import yaml
 from ppi import run_ppi
 import pickle
-from prompt_engineering.langchain.utils import ALL_MODELS
+from prompt_engineering.utils import ALL_MODELS
 
 def main( impute_periods:int, spillover_predictor_model_name, exp_num:int=0):
 

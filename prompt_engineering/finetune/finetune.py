@@ -20,16 +20,16 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 from sklearn.metrics import precision_recall_fscore_support
 
-from prompt_engineering.langchain.utils import PredictionGenerator, load_llm
+from prompt_engineering.utils import PredictionGenerator, load_llm
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from transformers import BitsAndBytesConfig, AutoTokenizer
 
 from peft import get_peft_model, LoraConfig, TaskType, PeftModel
 
-from prompt_engineering.langchain.utils import HUGGINGFACE_MODELS
+from prompt_engineering.utils import HUGGINGFACE_MODELS
 from datasets import interleave_datasets, load_dataset
-from prompt_engineering.langchain.predict import prepare_data_b2i, predict_batches
+from prompt_engineering.predict import prepare_data_b2i, predict_batches
 
 from transformers import get_constant_schedule_with_warmup
 import pandas as pd

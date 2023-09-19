@@ -9,7 +9,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 import argparse 
 import ppi
-from prompt_engineering.langchain.utils import ALL_MODELS
+from prompt_engineering.utils import ALL_MODELS
 import yaml
 warnings.simplefilter("ignore")
 import time
