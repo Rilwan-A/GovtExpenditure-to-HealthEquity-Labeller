@@ -2,6 +2,7 @@ import pandas as pd
 import math
 import torch
 from torch.nn import CrossEntropyLoss
+
 import numpy as np
 from contextlib import nullcontext
 import random
@@ -159,11 +160,11 @@ li_prompts_categorical_question_reversed_i2i: list[str] = [
     ]
 
 li_prompts_categories_scale_question_i2i: list[str] = [
-    'On a scale of 1 to \"{scale_max}\", how strong is the influence of changes in \"{indicator1}\" on changes in \"{indicator2}\"?'
+    'On a scale of 0 to {scale_max}, how strong is the influence of changes in \"{indicator1}\" on changes in \"{indicator2}\"?'
 ]
 
 # Prompts for the scaling categorisation method
-category_scale_i2i = list(range(1,6))
+category_scale_i2i = list(range(0,6))
 
 indicator_to_indicator_prompts = {
     'li_prompts_yes_no_question': li_prompts_yes_no_question_i2i,
@@ -178,7 +179,7 @@ indicator_to_indicator_prompts = {
     'li_prompts_categories_scale_question': li_prompts_categories_scale_question_i2i,
 
     'map_category_answer': map_category_answer_i2i,
-    'map_category_label': map_category_label_i2i
+    'map_category_label': map_category_label_i2i,
 
     'category_scale':category_scale_i2i
 }
@@ -193,9 +194,9 @@ system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with an
 system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
 
 
-system_prompt_i2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
-system_prompt_i2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" directly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
-system_prompt_i2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" indirectly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of a "socio-economic/health indicator" affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of a "socio-economic/health indicator" directly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of a "socio-economic/health indicator" indirectly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
 
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
@@ -204,10 +205,8 @@ map_system_prompts_b2i = {
     'yes_no':'Answer the following question with "Yes" or "No".',
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.'
-
+    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
 }
-
 
 map_system_prompts_i2i = {
     'indirectly':system_prompt_i2i_indirectly,
@@ -216,7 +215,9 @@ map_system_prompts_i2i = {
     'yes_no':'Answer the following question with "Yes" or "No".',
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.'
+    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
+    'categories_scale':'Answer the following question with only a number between 0 and {scale_max}.',
+    'verbalize_scale':'Answer the following question with only a number.'
 
 }
 
@@ -453,7 +454,7 @@ class PromptBuilder():
             unbias_categorisations (bool): If true, the PromptBuilder builds two categorical answer prompts with the order of categories reversed in order to remove any bias towards select 1st of 2nd answer  
         """
         
-        assert prompt_style in ['yes_no','open', 'categorise', 'cot_categorise', ], "Prompt style must be either yes_no, open, categorise or cot_categorise"
+        assert prompt_style in ['yes_no','open', 'categorise', 'cot_categorise', 'categories_scale', 'verbalize_scale' ], "Prompt style must be either yes_no, open, categorise or cot_categorise"
         assert effect_type in ['arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
@@ -496,6 +497,10 @@ class PromptBuilder():
         elif self.prompt_style == 'categories_scale':
             scale_max = kwargs.get('scale_max', 5)
             templates = self._categories_scale_template(scale_max=scale_max)
+        elif self.prompt_style == 'verbalize_scale':
+            scale_max = kwargs.get('scale_max', 5)
+            templates = self._categories_scale_template(scale_max=scale_max)
+
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
     
@@ -509,7 +514,9 @@ class PromptBuilder():
         elif self.prompt_style == 'cot_categorise':
             li_filled_templates, li_li_discourse = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'categories_scale':
-            li_filled_template, li_li_discourse = self.fill_template_categories_scale(templates, batch)
+            li_filled_templates, li_li_discourse = self._fill_template_categories_scale(templates, batch)
+        elif self.prompt_style == 'verbalize_scale':
+            li_filled_templates, li_li_discourse = self._fill_template_verbalize_scale(templates, batch)
 
         else:
             li_filled_templates = []
@@ -528,11 +535,15 @@ class PromptBuilder():
             generation_params[k] = 2
         elif prompt_style == 'cot_categorise':
             generation_params[k] = 300
+        elif prompt_style == 'verbalize_scale':
+            generation_params[k] = 2
         
         if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
             generation_params['early_stopping'] = True
             generation_params['do_sample'] = False
 
+        if isinstance(self.llm, PeftModel ):
+            generation_params['do_sample'] = False
         
         # Overriding any set keys with k,v in gen_kwargs
         for k,v in gen_kwargs.items():
@@ -785,11 +796,11 @@ class PromptBuilder():
         
         return templates
 
-    def _categories_scale_template(self, seed=None, scale_max=scale_max) -> list[str]:
+    def _categories_scale_template(self, seed=None, scale_max=5) -> list[str]:
         li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categories_scale_question']
         templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
         
-        for ens_idx in range(self.enemble_size):
+        for ens_idx in range(self.ensemble_size):
             
             if self.relationship == 'budgetitem_to_indicator':
                 raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
@@ -1053,7 +1064,7 @@ class PromptBuilder():
         
         return li_li_filledtemplate
 
-    def _fil_template_categories_scale(self, tempalates, batch ) -> tuple[list[list[str]], list[list[str]]]:
+    def _fill_template_categories_scale(self, templates, batch ) -> tuple[list[list[str]], list[list[str]]]:
         
         """ fill in the template with the indicators """
 
@@ -1071,7 +1082,8 @@ class PromptBuilder():
 
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                        target_indicator1= row['indicator1'], 
+                        target_indicator2=row['indicator2']
                     )
                 li_prompts.append(prompt)
 
@@ -1080,4 +1092,37 @@ class PromptBuilder():
         li_filled_prompt = li_li_prompts
         li_discourse = [] # No discourse was needed for this output
 
-        return li_fi#lled_prompt, li_discourse
+        return li_filled_prompt, li_discourse
+
+    def _fill_template_verbalize_scale(self, templates, batch ) -> tuple[list[list[str]], list[list[str]]]:
+        
+        """ fill in the template with the indicators """
+
+        li_li_prompts = []
+        
+        for row in batch:
+
+            li_prompts = []
+            prompt = None
+
+            for ens_idx in range(self.ensemble_size):
+
+                if self.relationship == 'budgetitem_to_indicator':
+                    raise NotImplementedError("Scale question not implemented for budgetitem_to_indicator relationship")
+
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_indicator1= row['indicator1'], 
+                        target_indicator2=row['indicator2']
+                    )
+                li_prompts.append(prompt)
+                
+            li_li_prompts.append(li_prompts)
+        
+
+        li_li_prompts_fmtd, li_li_preds = self.generate(li_li_prompts)
+
+        li_li_statement = li_li_preds
+        li_li_discourse = [ [ prompts_fmtd+pred for prompts_fmtd, pred in zip(li_prompts, li_preds) ] for li_prompts, li_preds in zip(li_li_prompts_fmtd, li_li_preds) ]
+        
+        return li_li_statement, li_li_discourse
