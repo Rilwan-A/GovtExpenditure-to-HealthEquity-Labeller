@@ -17,8 +17,9 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
+from transformers import PreTrainedModel
 from time import sleep
-
+from itertools import islice
 import peft
 from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
@@ -516,7 +517,7 @@ class PromptBuilder():
         elif self.prompt_style == 'categories_scale':
             li_filled_templates, li_li_discourse = self._fill_template_categories_scale(templates, batch)
         elif self.prompt_style == 'verbalize_scale':
-            li_filled_templates, li_li_discourse = self._fill_template_verbalize_scale(templates, batch)
+            li_filled_templates, li_li_discourse = self._fill_template_verbalize_scale(templates, batch, **kwargs)
 
         else:
             li_filled_templates = []
@@ -526,7 +527,15 @@ class PromptBuilder():
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str, **gen_kwargs):
         generation_params = {}
-        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, PeftModel )*'max_new_tokens'
+        _ = {
+            langchain.llms.huggingface_pipeline.HuggingFacePipeline:'max_new_tokens',
+            langchain.chat_models.ChatOpenAI:'max_tokens',
+            PeftModel:'max_new_tokens',
+            PreTrainedModel:'max_new_tokens'
+        }
+        k = _.get( next( (k for k in _.keys() if isinstance(self.llm, k)) ), None  )        
+        
+        
         if prompt_style == 'yes_no':
             generation_params[k] = 10
         elif prompt_style == 'open':
@@ -545,6 +554,11 @@ class PromptBuilder():
         if isinstance(self.llm, PeftModel ):
             generation_params['do_sample'] = False
         
+        if isinstance(self.llm, PreTrainedModel ):
+            generation_params['do_sample'] = False
+            generation_params['early_stopping'] = True
+
+        
         # Overriding any set keys with k,v in gen_kwargs
         for k,v in gen_kwargs.items():
             if k in generation_params:
@@ -552,7 +566,7 @@ class PromptBuilder():
             
         return generation_params
 
-    def generate(self, li_li_prompts, include_user_message_pre_prompt=True, include_system_message=True, **gen_kwargs):
+    def generate(self, li_li_prompts, include_user_message_pre_prompt=True, include_system_message=True, add_suffix_space=False,**gen_kwargs):
         li_li_preds= []
         li_li_prompts_fmtd = []
 
@@ -617,12 +631,29 @@ class PromptBuilder():
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         
-        elif  isinstance(self.llm, PeftModel): #type: ignore
-            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
+        elif  isinstance(self.llm, PeftModel) or isinstance(self.llm, PreTrainedModel): #type: ignore
+            
+            # Setting Batch size for llm to process
+            gpu_batch_size = gen_kwargs.get('gpu_batch_size', None)
+            if gpu_batch_size is not None:
+                # Flatten the list
+                flattened = [item for sublist in li_li_prompts for item in sublist]
+                
+                # Backup the original shape of li_li_prompts for reshaping later
+                original_shapes = [len(inner) for inner in li_li_prompts]
+
+                # Split the flattened list into chunks of gpu_batch_size
+                li_li_prompts = [flattened[i:i + gpu_batch_size] for i in range(0, len(flattened), gpu_batch_size)]
+
 
             generation_params = self.get_generation_params(self.prompt_style)
 
-            self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id
+            if self.llm.generation_config.pad_token_id is None and self.tokenizer.pad_token_id is not None:
+                self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id
+            elif self.tokenizer.pad_token_id is None and self.llm.generation_config.pad_token_id is not None:
+                self.tokenizer.pad_token_id = self.llm.generation_config.pad_token_id
+            
+
             self.llm.generation_config.bos_token_id = self.tokenizer.bos_token_id
             self.llm.generation_config.eos_token_id = self.tokenizer.eos_token_id
             self.llm.generation_config.max_length = None
@@ -630,6 +661,7 @@ class PromptBuilder():
             for k,v in generation_params.items():
                 setattr(self.llm.generation_config, k, v)
             
+
             for li_prompts in li_li_prompts:
                 
                 li_prompts_fmtd = []
@@ -652,7 +684,10 @@ class PromptBuilder():
                     )
 
                 # Removing trailing space from end: (for some reason a space at the end causes to model to instaly stop generating)
-                li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
+                if add_suffix_space is True:
+                    li_prompts_fmtd = [ prompt + ' ' for prompt in li_prompts_fmtd ]
+                else:
+                    li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
 
                 # Decide how to pad and truncate the inputs
                 self.tokenizer.padding_side = 'left'
@@ -668,7 +703,28 @@ class PromptBuilder():
 
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
-        
+            
+            if gpu_batch_size is not None:
+                reshaped_li_prompts_fmtd = []
+                reshaped_li_preds = []
+
+                li_li_prompts_fmtd_flattened =  [item for sublist in li_li_prompts_fmtd for item in sublist] 
+                li_li_preds_flattened =  [item for sublist in li_li_preds for item in sublist] 
+
+                idx = 0
+                for shape in original_shapes:
+                    _1 = li_li_prompts_fmtd_flattened[idx:idx+shape]
+                    _2 = li_li_preds_flattened[idx:idx+shape]
+
+                    reshaped_li_prompts_fmtd.append( _1 )
+                    reshaped_li_preds.append( _2 )
+                    idx += shape
+
+                li_li_prompts_fmtd = reshaped_li_prompts_fmtd
+                li_li_preds = reshaped_li_preds
+
+            inputs = inputs.to('cpu')    
+            outputs = outputs.to('cpu')
         else:
             raise ValueError(f"llm type {type(self.llm)} not recognized")
             
@@ -1094,7 +1150,7 @@ class PromptBuilder():
 
         return li_filled_prompt, li_discourse
 
-    def _fill_template_verbalize_scale(self, templates, batch ) -> tuple[list[list[str]], list[list[str]]]:
+    def _fill_template_verbalize_scale(self, templates, batch, **kwargs ) -> tuple[list[list[str]], list[list[str]]]:
         
         """ fill in the template with the indicators """
 
@@ -1114,13 +1170,13 @@ class PromptBuilder():
                     prompt = templates[ens_idx].format(
                         target_indicator1= row['indicator1'], 
                         target_indicator2=row['indicator2']
-                    )
+                    ) 
                 li_prompts.append(prompt)
                 
             li_li_prompts.append(li_prompts)
         
 
-        li_li_prompts_fmtd, li_li_preds = self.generate(li_li_prompts)
+        li_li_prompts_fmtd, li_li_preds = self.generate(li_li_prompts, add_suffix_space=True, **kwargs)
 
         li_li_statement = li_li_preds
         li_li_discourse = [ [ prompts_fmtd+pred for prompts_fmtd, pred in zip(li_prompts, li_preds) ] for li_prompts, li_preds in zip(li_li_prompts_fmtd, li_li_preds) ]
