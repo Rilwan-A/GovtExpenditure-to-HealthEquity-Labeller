@@ -399,20 +399,20 @@ def predict_batches(prompt_builder:PromptBuilder,
         if logger is not None:
             # Make it log at a minimal rate of 1 per 30seconds to avoid spamming the log file
             current_time = time.time()
-            if current_time - last_log_time > 30:
+            if current_time - last_log_time > 120:
                 logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
                 last_log_time = current_time
                 
         # Create prompts
-        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch)
+        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch, gpu_batch_size=batch_size)
         
         # Generate predictions
-        batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement) 
+        batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement, gpu_batch_size=batch_size) 
 
         # Generate any predictions with category order reversed
         if unbias_categorisations:
             batch_li_li_statement_reversed, batch_li_li_discourse_reversed = prompt_builder(batch, reverse_categories_order=True)
-            batch_pred_ensembles_reversed = prediction_generator.predict(batch_li_li_statement_reversed, reverse_categories=True)
+            batch_pred_ensembles_reversed = prediction_generator.predict(batch_li_li_statement_reversed, reverse_categories=True, gpu_batch_size=batch_size)
 
             # Merge the two sets of outputs, datum for datum merge
             batch_li_li_statement = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_li_li_statement, batch_li_li_statement_reversed) ]
