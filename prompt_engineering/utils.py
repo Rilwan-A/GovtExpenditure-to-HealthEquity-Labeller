@@ -25,9 +25,9 @@ import openai
 from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
 from  langchain.chat_models import ChatOpenAI
 from  langchain.llms import HuggingFaceHub
-from langchain import HuggingFacePipeline
+
 from transformers import PreTrainedTokenizer, pipeline
-from langchain.llms import HuggingFacePipeline
+
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
@@ -573,9 +573,12 @@ class PredictionGenerator():
 
             def create_mean_of_scale_preds(li_dict_pred):
 
-                li_mean = [  int(dict_pred['mean']) for dict_pred in li_dict_pred ]
+                li_mean = [  int(dict_pred['mean']) for dict_pred in li_dict_pred if dict_pred['mean'] is not None ]
                 
-                mean = sum(li_mean)/len(li_mean)
+                if len(li_mean)>0:
+                    mean = sum(li_mean)/len(li_mean)
+                else:
+                    mean = 0
 
                 return {'mean':mean, 'scaled_mean':mean/sc}
 
