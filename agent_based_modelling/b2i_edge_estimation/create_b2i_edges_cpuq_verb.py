@@ -51,6 +51,7 @@ parser = ArgumentParser()
 parser.add_argument('--exp_idx', type=int, choices=[0,1,2], default=0)
 parser.add_argument('--cpuq_verbalize', type=str, choices=['cpuq','verbalize'] )
 parser.add_argument('--debugging', action='store_true')
+parser.add_argument('--batch_size', type=int, default=1)
 parse_kwargs = parser.parse_args()
 
 model_kwargs = exps_kwargs[parse_kwargs.exp_idx]
