@@ -233,7 +233,7 @@ class PredictionGenerator():
             li_li_pred = [ self.parse_outp_categories_rules(li_filled_template) for li_filled_template in li_li_filled_template]        
         elif self.parse_style == 'categories_perplexity':
             if self.prompt_style == 'categorise':
-                li_li_pred = [ self.parse_outp_categories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
+                li_li_pred = [ self.parse_outp_categories_perplexity(li_filled_template, reverse_categories=reverse_categories, **kwargs) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'cot_categorise':
                 li_li_pred = [ self.parse_outp_cotcategories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'categories_scale':
@@ -400,7 +400,7 @@ class PredictionGenerator():
 
         return li_map_probability
     
-    def parse_outp_categories_perplexity(self, li_filledtemplate:list[str], reverse_categories=False)->  list[dict[str,float]] :
+    def parse_outp_categories_perplexity(self, li_filledtemplate:list[str], reverse_categories=False, **kwargs)->  list[dict[str,float]] :
         
         map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
@@ -418,20 +418,37 @@ class PredictionGenerator():
         answers = [ str(num) for num in range(1,1+len(map_category_answer.keys()) ) ]
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
 
-
+        
         # For each filled template set calcualte the relative probability of each answer
-        li_li_probability = []
-        for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
+        # li_li_probability = []
+        # for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
 
-            li_probability = joint_probabilities_for_category(
+        #     li_probability = joint_probabilities_for_category(
+        #         li_filledtemplates_with_answers, 
+        #         self.llm.pipeline.model, 
+        #         self.llm.pipeline.tokenizer,
+        #         batch_size=kwargs.get('gpu_batch_size', len(map_category_answer.keys())), 
+        #         category_token_len=1 ) 
+            
+        #     li_li_probability.append(li_probability)
+
+        # Flattening out the list of list of prompt templates
+        original_shape = [ len(li_filledtemplate) for li_filledtemplate in li_li_filledtemplates_with_answers]        
+        li_filledtemplates_with_answers = [ prompt for li_filledtemplate in li_li_filledtemplates_with_answers for prompt in li_filledtemplate ]
+        _ = joint_probabilities_for_category(
                 li_filledtemplates_with_answers, 
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
-                batch_size=len(map_category_answer.keys()), 
+                batch_size=kwargs.get('gpu_batch_size', len(map_category_answer.keys())), 
                 category_token_len=1 ) 
-            
-            li_li_probability.append(li_probability)
         
+        # Reshaping so each inner lists represents probabilities of different answers for a shared prompt
+        li_li_probability = []
+        start_idx = 0
+        for shape in original_shape:
+            li_li_probability.append( _[start_idx:start_idx+shape] )
+            start_idx += shape
+            
         # Convert set of perplexities into a list of list with each sublist having a probability for each category of answer
         _categorise_response_labels = copy.deepcopy(map_category_label)
         if reverse_categories:

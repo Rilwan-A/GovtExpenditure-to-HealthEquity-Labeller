@@ -24,6 +24,8 @@ import peft
 from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
 from transformers import AutoTokenizer
+from langchain.llms.huggingface_pipeline import HuggingFacePipeline
+
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -340,7 +342,7 @@ def create_negative_examples_b2i(dset:pd.DataFrame, random_state=None) -> pd.Dat
     return dset
 
 def joint_probabilities_for_category(
-    data, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
+    li_text, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
 
 
     """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
@@ -367,34 +369,30 @@ def joint_probabilities_for_category(
         ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
         tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
 
-    max_tokenized_len = max_length
-
-    tokenizer.padding_side = 'left'
-    tokenizer.truncation_side = 'left'
-
-    encodings = tokenizer(
-        data,
-        add_special_tokens=False,
-        padding=True,
-        truncation=False,
-        max_length=max_tokenized_len,
-        return_tensors="pt",
-        return_attention_mask=True,
-    ).to(model.device)
-
-    tokenizer.padding_side = 'right'
-    tokenizer.truncation_side = 'right'
-
-    encoded_texts = encodings["input_ids"]
-    attn_masks = encodings["attention_mask"]
 
     joint_probs = []
 
-    for start_index in range(0, len(encoded_texts), batch_size):
-        end_index = min(start_index + batch_size, len(encoded_texts))
-        encoded_texts_batch = encoded_texts[start_index:end_index]
-        attn_masks_batch = attn_masks[start_index:end_index]
+    for start_index in range(0, len(li_text), batch_size):
+        end_index = min(start_index + batch_size, len(li_text))
 
+        # Encode the data for this sub batch
+        tokenizer.padding_side = 'left'
+        tokenizer.truncation_side = 'left'
+        encodings = tokenizer(
+            li_text[start_index:end_index],
+            add_special_tokens=True,
+            padding=True,
+            truncation=False,
+            max_length=None,
+            return_tensors="pt",
+            return_attention_mask=True,
+        ).to(model.device)
+        tokenizer.padding_side = 'right'
+        tokenizer.truncation_side = 'right'
+
+        encoded_texts_batch = encodings["input_ids"]
+        attn_masks_batch = encodings["attention_mask"]
+        
         labels = encoded_texts_batch
 
         with torch.no_grad():
@@ -464,6 +462,7 @@ class PromptBuilder():
             assert k_shot == 0, "K-shot must be 0 for cot prompts"
 
         self.llm = llm
+
         self.llm_name = llm_name
         self.tokenizer = kwargs.get('tokenizer', None)
         self.prompt_style = prompt_style
@@ -507,11 +506,11 @@ class PromptBuilder():
     
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
         if self.prompt_style == 'yes_no':
-            li_filled_templates, li_li_discourse = self.fill_template_yesno(templates, batch)
+            li_filled_templates, li_li_discourse = self.fill_template_yesno(templates, batch, **kwargs)
         elif self.prompt_style == 'open':
             li_filled_templates, li_li_discourse = self.fill_template_open(templates, batch)
         elif self.prompt_style == 'categorise':
-            li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
+            li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order, **kwargs)
         elif self.prompt_style == 'cot_categorise':
             li_filled_templates, li_li_discourse = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'categories_scale':
@@ -570,12 +569,21 @@ class PromptBuilder():
         li_li_preds= []
         li_li_prompts_fmtd = []
 
-        if isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
+        # Shift away from HuggingFace pipeline to allow for batched processing
+        
+        if gen_kwargs.get('gpu_batch_size',1) >1 and isinstance(self.llm, HuggingFacePipeline):
+            # tokenizer = self.llm.pipeline.tokenizer
+            model = self.llm.pipeline.model
+            
+        else:
+            model = self.llm
+
+        if isinstance(model, langchain.chat_models.ChatOpenAI): #type: ignore
             
             generation_params = self.get_generation_params(self.prompt_style, **gen_kwargs)
             
             for k,v in generation_params.items():
-                setattr(self.llm, k, v)
+                setattr(model, k, v)
 
             for li_prompts in li_li_prompts:
                 sleep(20)
@@ -587,18 +595,18 @@ class PromptBuilder():
                     ]
                 
                 
-                outputs = self.llm.generate( batch_messages )
+                outputs = model.generate( batch_messages )
                 li_preds: list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
-        elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
+        elif isinstance(model, langchain.llms.base.LLM): #type: ignore
 
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
             for k,v in self.get_generation_params(self.prompt_style, **gen_kwargs).items():
                 try:
-                    self.llm.pipeline._forward_params[k] = v
+                    model.pipeline._forward_params[k] = v
                 except AttributeError:
-                    self.llm.pipeline._forward_params = {k:v}
+                    model.pipeline._forward_params = {k:v}
 
             for li_prompts in li_li_prompts:
                 
@@ -623,7 +631,7 @@ class PromptBuilder():
                             )
                     )
 
-                outputs = self.llm.generate(
+                outputs = model.generate(
                     prompts=li_prompts_fmtd)
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
@@ -631,7 +639,7 @@ class PromptBuilder():
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         
-        elif  isinstance(self.llm, PeftModel) or isinstance(self.llm, PreTrainedModel): #type: ignore
+        elif  isinstance(model, PeftModel) or isinstance(model, PreTrainedModel): #type: ignore
             
             # Setting Batch size for llm to process
             gpu_batch_size = gen_kwargs.get('gpu_batch_size', None)
@@ -648,18 +656,18 @@ class PromptBuilder():
 
             generation_params = self.get_generation_params(self.prompt_style)
 
-            if self.llm.generation_config.pad_token_id is None and self.tokenizer.pad_token_id is not None:
-                self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id
-            elif self.tokenizer.pad_token_id is None and self.llm.generation_config.pad_token_id is not None:
-                self.tokenizer.pad_token_id = self.llm.generation_config.pad_token_id
+            if model.generation_config.pad_token_id is None and self.tokenizer.pad_token_id is not None:
+                model.generation_config.pad_token_id = self.tokenizer.pad_token_id
+            elif self.tokenizer.pad_token_id is None and model.generation_config.pad_token_id is not None:
+                self.tokenizer.pad_token_id = model.generation_config.pad_token_id
             
 
-            self.llm.generation_config.bos_token_id = self.tokenizer.bos_token_id
-            self.llm.generation_config.eos_token_id = self.tokenizer.eos_token_id
-            self.llm.generation_config.max_length = None
+            model.generation_config.bos_token_id = self.tokenizer.bos_token_id
+            model.generation_config.eos_token_id = self.tokenizer.eos_token_id
+            model.generation_config.max_length = None
 
             for k,v in generation_params.items():
-                setattr(self.llm.generation_config, k, v)
+                setattr(model.generation_config, k, v)
             
 
             for li_prompts in li_li_prompts:
@@ -691,11 +699,11 @@ class PromptBuilder():
 
                 # Decide how to pad and truncate the inputs
                 self.tokenizer.padding_side = 'left'
-                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', truncation=False ).to(self.llm.device)
+                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', truncation=False ).to(model.device)
                 self.tokenizer.padding_side = 'right'
                 
                 # Ignoring any warning from the model
-                outputs = self.llm.generate(**inputs, **generation_params, generation_config=self.llm.generation_config )
+                outputs = model.generate(**inputs, **generation_params, generation_config=model.generation_config )
 
                 output_text = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
@@ -725,8 +733,9 @@ class PromptBuilder():
 
             inputs = inputs.to('cpu')    
             outputs = outputs.to('cpu')
+        
         else:
-            raise ValueError(f"llm type {type(self.llm)} not recognized")
+            raise ValueError(f"llm type {type(model)} not recognized")
             
         return li_li_prompts_fmtd, li_li_preds
 
@@ -866,7 +875,7 @@ class PromptBuilder():
             templates[ens_idx] = prompt
         return templates
 
-    def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> tuple[list[list[str]], list[list[str]]]:
+    def fill_template_yesno(self, templates:list[str], batch:list[dict], **kwargs) -> tuple[list[list[str]], list[list[str]]]:
         """Fill in the template with the target and k_shot context"""
 
         li_li_prompts = []
@@ -905,7 +914,7 @@ class PromptBuilder():
             li_li_prompts.append(li_prompts)
         
         # Adding Prediction
-        li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts)
+        li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts, **kwargs)
         li_li_discourse = [ [ prompt_fmtd+statement for prompt_fmtd, statement in zip(li_prompts, li_statement) ] for li_prompts, li_statement in zip(li_li_prompts_fmtd, li_li_statement) ]
 
         return li_li_statement, li_li_discourse
