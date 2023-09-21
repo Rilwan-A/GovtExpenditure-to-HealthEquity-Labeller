@@ -2,13 +2,10 @@ import pandas as pd
 import numpy as np
 import os
 
-home =  os.getcwd()[:-16]
-os.chdir(home)
-
 
 # We limit the sample of indicators to those with 5 or more years of data from 2013,
 # as expenditure data starts on 2013
-df = pd.read_csv(home+'data/england/deprivation/clean_data/data_indicators_raw.csv', encoding='unicode_escape')
+df = pd.read_csv('data/ppi/data_indicators_raw.csv', encoding='unicode_escape')
 df = df[[c for c in df.columns if c != 'polarity']]
 df = df.drop_duplicates()
 
@@ -57,8 +54,8 @@ df = pd.DataFrame(new_rows, columns=df.columns)
 
 
 
-# 2) subset expenditutre by categories of expenditure for which we have indicator values
-dfx = pd.read_csv(home+'data/england/deprivation/clean_data/data_expenditure_trend.csv', encoding='unicode_escape')
+# 2) subset expenditutre by finegrained budget items of expenditure for which we have indicator values
+dfx = pd.read_csv('data/ppi/data_expenditure_finegrained_trend.csv', encoding='unicode_escape')
 
 dfx.rename(columns=dict([(col, col[0:4]) for col in dfx.columns if col.isnumeric()]), inplace=True)
 dfx.drop([col for col in dfx.columns if col.isnumeric() and int(col)<2013], inplace=True, axis=1)
@@ -69,25 +66,25 @@ t = int(T/len(colYears))
 
 new_rows = []
 for index, row in dfx.iterrows():
-    new_row = [row['seriesCode'], row.category]
+    new_row = [row['seriesCode'], row['seriesName'], row.category]
     for year in colYears:
         new_row += [row[str(year)] for i in range(t)]
     new_rows.append(new_row)
     
-dfxf = pd.DataFrame(new_rows, columns=['seriesCode', 'category']+[str(i) for i in range(T)])
+dfxf = pd.DataFrame(new_rows, columns=['seriesCode', 'seriesName', 'category']+[str(i) for i in range(T)])
 dfxf.drop(['seriesCode'], axis='columns', inplace=True)
 categories = set(df[['category1', 'category2', 'category3']].values.flatten()[df[['category1', 'category2', 'category3']].values.flatten().astype(str)!='nan'])
 dfxf = dfxf[dfxf.category.isin(categories)]
 dfxf.reset_index(inplace=True)
 dfxf.loc[:, 'program'] = range(len(dfxf))
-dfxf.to_csv(home+'data/england/deprivation/clean_data/pipeline_expenditure.csv', index=False)
+dfxf.to_csv('data/ppi/pipeline_expenditure_finegrained.csv', index=False)
 
 
 
 # write file
 #df.replace(to_replace='weight_management', value=np.nan, inplace=True)               
-filter_categfories = df.category1.isin(dfxf.category.unique()).astype(int) + df.category2.isin(dfxf.category.unique()).astype(int) + df.category3.isin(dfxf.category.unique()).astype(int)
-df = df[filter_categfories>0]
+filter_categories = df.category1.isin(dfxf.category.unique()).astype(int) + df.category2.isin(dfxf.category.unique()).astype(int) + df.category3.isin(dfxf.category.unique()).astype(int)
+df = df[filter_categories>0]
 # =============================================================================
 # commenting out these lines at the moment as _01 step deduplicates categories atm
 # cat1 = []
@@ -126,7 +123,7 @@ df = df[filter_categfories>0]
 # df.loc[:, 'categorys3'] = cat3
 # =============================================================================
 df.reset_index(inplace=True, drop=True)
-df.to_csv(home+'data/england/deprivation/clean_data/pipeline_indicators_sample_raw.csv', index=False)
+df.to_csv('data/ppi/pipeline_indicators_sample_raw.csv', index=False)
 
 dict_rela = {}
 for index, row in df.iterrows():
@@ -140,4 +137,4 @@ for key, value in dict_rela.items():
     new_rows.append(new_row)
 
 dfr = pd.DataFrame(new_rows, columns=['indicator_index']+[str(i) for i in range(ncols)])
-dfr.to_csv(home + 'data/england/deprivation/clean_data/pipeline_relation_table.csv', index=False)
+dfr.to_csv('data/ppi/pipeline_relation_table_finegrained.csv', index=False)
