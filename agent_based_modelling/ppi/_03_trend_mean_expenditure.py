@@ -50,7 +50,6 @@ for seriesCode, group in df_exp.groupby('seriesCode'):
     detrended = detrend(group.value, type = 'linear')
     detrended += mean_value
     df_exp.loc[group.index, 'value']
-        
 
 # reshape wide on years
 df = pd.pivot_table(df_exp, index = ['seriesCode', 'seriesName', 'Area Code', 'category'], columns = 'spell', \
