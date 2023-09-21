@@ -2,7 +2,7 @@
 
 Authors: Omar A. Guerrero & Gonzalo Castañeda
 Edited: Rilwan Adewoyin
-Written in Pyhton 3.7
+Written in Pyhton 3.10
 
 
 Example
@@ -19,12 +19,12 @@ Rquired external libraries
 """
 
 # import necessary libraries
-from __future__ import division, print_function
 import numpy as np
 from joblib import Parallel, delayed
 import warnings
+from  pandas import  DataFrame
 warnings.simplefilter("ignore")
-
+import time
 
 def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, qm=None, rl=None,
             Imax=None, Imin=None, Bs=None, B_dict=None, G=None, T=None, frontier=None):
@@ -335,6 +335,89 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
     # turn time series into numpy matrices and return them
     return np.array(tsI).T, np.array(tsC).T, np.array(tsF).T, np.array(tsP).T, np.array(tsS).T, np.array(tsG).T
 
+def run_ppi_parallel(I0, alphas, alphas_prime, betas, A=None, R=None, bs=None, qm=None, rl=None,
+                     Imax=None, Imin=None, Bs=None, B_dict=None, G=None, T=None, frontier=None, 
+                     parallel_processes=4, sample_size=1000):
+    
+    """Function to run a sample of evaluations in parallel. As opposed to the function
+    run_ppi, which returns the output of a single realisation, this function returns
+    a set of time series (one for each realisation) of each output type.
+
+    Parameters
+    ----------
+        I0: numpy array 
+            See run_ppi function.
+        IF: numpy array 
+            See calibrate function.
+        success_rates: numpy array 
+            See calibrate function.
+        alphas: numpy array
+            See run_ppi function.
+        alphas_prime: numpy array
+            See run_ppi function.
+        betas: numpy array
+            See run_ppi function.
+        A:  2D numpy array (optional)
+            See run_ppi function.
+        R:  numpy array (optional)
+            See run_ppi function.
+        bs: numpy array (optional)
+            See run_ppi function.
+        qm: A floating point, an integer, or a numpy array (optional)
+            See run_ppi function.
+        rl: A floating point, an integer, or a numpy array (optional)
+            See run_ppi function.
+        Bs: numpy ndarray (optional)
+            See run_ppi function.
+        B_dict: dictionary (optional)
+            See run_ppi function.
+        G: numpy array (optional)
+            See run_ppi function.
+        T: int (optional)
+            See run_ppi function.
+        frontier: boolean
+            See run_ppi function.
+        parallel_processes: integer (optional)
+            See calibrate function.
+        sample_size: integer (optional)
+            Number of Monte Carlo simulations to be ran.
+        
+    Returns
+    -------
+        tsI: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsC: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsF: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsP: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsS: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsG: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+    """
+    
+    sols = Parallel(n_jobs=parallel_processes, verbose=0)(delayed(run_ppi)\
+            (I0=I0, alphas=alphas, alphas_prime=alphas_prime, betas=betas, 
+             A=A, R=R, bs=bs, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict, T=T, frontier=frontier) for itera in range(sample_size))
+    tsI_sample, tsC_sample, tsF_sample, tsP_sample, tsS_sample, tsG_sample = zip(*sols)
+    
+    return tsI_sample, tsC_sample, tsF_sample, tsP_sample, tsS_sample, tsG_sample
+
+
 ## Computes a set of Monte Carlo simulations of PPI, obtains their average statistics, 
 ## and computes the error with respect to indic_final and success_rates. Called by the calibrate function.
 def compute_error(I0, alphas, alphas_prime, betas, so_network, R, qm, rl, Bs, B_dict, T, 
@@ -357,8 +440,8 @@ def compute_error(I0, alphas, alphas_prime, betas, so_network, R, qm, rl, Bs, B_
 
 ## Calibrates PPI automatically and return a Pandas DataFrame with the parameters, errors, and goodness of fit
 def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, rl=None,  Bs=None, B_dict=None, 
-              T=None, threshold=.8, parallel_processes=None, 
-              verbose=False, low_precision_counts=101, increment=1000):
+              T=None, threshold=.8, parallel_processes=None, time_experiments=False,
+              verbose=False, low_precision_counts=101, increment=1000, logging=None):
 
     """Function to calibrate PPI.
 
@@ -529,8 +612,6 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
                     related to the rate of positive changes.
     """
     
-    
-    
     # Check data integrity
     success_rates[success_rates<=0] = 0.05
     success_rates[success_rates>=1] = .95
@@ -547,7 +628,10 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
     GoF_beta = np.zeros(N)
     
     # Main iteration of the calibration
-    # Iterates until the minimum threshold criterion has been met, and at least 100 iterations have taken place
+    # Iterates until the minimum threshold criterion has been met, and at least 'low_precision_counts' iterations have taken place
+    if time_experiments:
+        start_time = time.time()
+
     while np.sum(GoF_alpha<threshold) > 0 or np.sum(GoF_beta<threshold) > 0 :
 
         counter += 1 # Makes sure at least 100 iteartions are performed
@@ -591,23 +675,40 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
         
         # check low_precision_counts iterations have been reached
         # after low_precision_counts iterations, increase the number of Monte Carlo simulations by
-        # 1000 in every iterations in order to achieve higher precision and 
+        # increment in every iterations in order to achieve higher precision and 
         # minimize the error more effectively
         if counter >= low_precision_counts:
             sample_size += increment
             
         # prints the calibration iteration and the worst goodness-of-fit metric
-        if verbose:
-            print( 'Iteration:', counter, '.    Worst goodness of fit:', np.min(GoF_alpha.tolist()+GoF_beta.tolist()) )
+        if verbose and counter%10==0:
+            msg = 'Iteration: ' + str(counter) + '.    Worst goodness of fit: ' + str(np.min(GoF_alpha.tolist()+GoF_beta.tolist()))
+            if logging is not None:
+                logging.info(msg)
+            else:
+                print( 'Iteration:', counter, '.    Worst goodness of fit:', np.min(GoF_alpha.tolist()+GoF_beta.tolist()) )
     
+    logging.info('Calibration finished!')
+    
+    if time_experiments: time_elapsed = time.time() - start_time
     # save the last parameter vector and de associated errors and goodness-of-fit metrics
-    output = np.array([['alpha', 'alpha_prime', 'beta', 'T', 'error_alpha', 
+    parameters = np.array([['alpha', 'alpha_prime', 'beta', 'T', 'error_alpha', 
             'error_beta', 'GoF_alpha', 'GoF_beta']] + [[alphas[i], alphas_prime[i], betas[i], TF, 
             errors_alpha[i], errors_beta[i], GoF_alpha[i], GoF_beta[i]] \
             if i==0 else [alphas[i], alphas_prime[i], betas[i], 
              np.nan, errors_alpha[i], errors_beta[i], 
              GoF_alpha[i], GoF_beta[i]] \
             for i in range(N)])
+
+    
+    df_parameters = DataFrame(parameters[1::,:], columns=parameters[0])
+    
+    dict_output = {
+        'parameters': df_parameters
+        }
+    if time_experiments: 
+        dict_output['time_elapsed'] = time_elapsed
+        dict_output['iterations'] = counter
         
-    return output
+    return dict_output
     

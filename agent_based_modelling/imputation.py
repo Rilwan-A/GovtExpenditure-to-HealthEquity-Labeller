@@ -1,5 +1,5 @@
 """
-    In this script we are focused on imputing the level of the indicators over the next n-1 timesteps after learning a model on the first m timesteps.
+    In this script we are focused on imputing the level of the indicators over the next n-1 timesteps after learning (calibrating) a model on the first m timesteps.
     We use the indicator level at step m+n to define the development goal. We input resource allocation and the true rule of law over between step m and step m+n-1
     We then can impute the indicator values between step m and step m+n-1
     We can then compare the imputed indicator values to the true indicator values between step m and step m+n-1,

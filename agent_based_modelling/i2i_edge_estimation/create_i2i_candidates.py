@@ -41,50 +41,53 @@ def concatenate_name_age(name, age, group):
     return name
 
 
+def main():
+    # Reading the input file
+    with open( os.path.join('data','ppi','pipeline_indicators_sample_raw.csv'), "r") as input_file:
+        reader = csv.DictReader(input_file)
+        indicators = list(reader)
 
-# Reading the input file
-with open( os.path.join('data','ppi','pipeline_indicators_sample_raw.csv'), "r") as input_file:
-    reader = csv.DictReader(input_file)
-    indicators = list(reader)
+    candidates = []
 
-candidates = []
-
-# Comparing each indicator with every other indicator to create pairs
-for i in range(len(indicators)):
-    for j in range(len(indicators)):
-        if i == j:
-            continue
-        indicator1 = indicators[i]
-        indicator2 = indicators[j]
-        
-        candidate = {
-            "indicator1_name": indicator1["seriesName"],
-            "indicator1": concatenate_name_age(indicator1["seriesName"], indicator1["Age"], indicator1["group"]),
-            "seriesCode1": indicator1["seriesCode"],
-            "idx1": i,
-            "seriesName1": indicator1["seriesName"],
-            "Age1": indicator1["Age"],
-            "Sex1": indicator1["Sex"],
-            "group1": indicator1["group"],
+    # Comparing each indicator with every other indicator to create pairs
+    for i in range(len(indicators)):
+        for j in range(len(indicators)):
+            if i == j:
+                continue
+            indicator1 = indicators[i]
+            indicator2 = indicators[j]
             
-            "indicator2_name": indicator2["seriesName"],
-            "indicator2": concatenate_name_age(indicator2["seriesName"], indicator2["Age"], indicator2["group"]),
-            "seriesCode2": indicator2["seriesCode"],
-            "idx2": j,
-            "seriesName2": indicator2["seriesName"],
-            "Age2": indicator2["Age"],
-            "Sex2": indicator2["Sex"],
-            "group2": indicator2["group"]
-        }
-        
-        candidates.append(candidate)
+            candidate = {
+                "indicator1_name": indicator1["seriesName"],
+                "indicator1": concatenate_name_age(indicator1["seriesName"], indicator1["Age"], indicator1["group"]),
+                "seriesCode1": indicator1["seriesCode"],
+                "idx1": i,
+                "seriesName1": indicator1["seriesName"],
+                "Age1": indicator1["Age"],
+                "Sex1": indicator1["Sex"],
+                "group1": indicator1["group"],
+                
+                "indicator2_name": indicator2["seriesName"],
+                "indicator2": concatenate_name_age(indicator2["seriesName"], indicator2["Age"], indicator2["group"]),
+                "seriesCode2": indicator2["seriesCode"],
+                "idx2": j,
+                "seriesName2": indicator2["seriesName"],
+                "Age2": indicator2["Age"],
+                "Sex2": indicator2["Sex"],
+                "group2": indicator2["group"]
+            }
+            
+            candidates.append(candidate)
 
-# Writing the output to i2i_candidates.csv
-with open(os.path.join('data','ppi',"i2i_candidates.csv"), "w", newline="") as output_file:
-    fieldnames = ["indicator1_name", "indicator1", "seriesCode1", "idx1", "seriesName1", "Age1", "Sex1", "group1",
-                  "indicator2_name", "indicator2", "seriesCode2", "idx2", "seriesName2", "Age2", "Sex2", "group2"]
-    
-    writer = csv.DictWriter(output_file, fieldnames=fieldnames)
-    writer.writeheader()
-    for candidate in candidates:
-        writer.writerow(candidate)
+    # Writing the output to i2i_candidates.csv
+    with open(os.path.join('data','ppi',"i2i_candidates.csv"), "w", newline="") as output_file:
+        fieldnames = ["indicator1_name", "indicator1", "seriesCode1", "idx1", "seriesName1", "Age1", "Sex1", "group1",
+                    "indicator2_name", "indicator2", "seriesCode2", "idx2", "seriesName2", "Age2", "Sex2", "group2"]
+        
+        writer = csv.DictWriter(output_file, fieldnames=fieldnames)
+        writer.writeheader()
+        for candidate in candidates:
+            writer.writerow(candidate)
+
+if __name__ == "__main__":
+    main()
