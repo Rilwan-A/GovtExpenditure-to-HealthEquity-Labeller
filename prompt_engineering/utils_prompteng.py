@@ -362,13 +362,13 @@ def joint_probabilities_for_category(
     model = model
     tokenizer = tokenizer
 
-    if tokenizer.pad_token is None and batch_size > 1:
+    if tokenizer.pad_token is None:
         existing_special_tokens = list(tokenizer.special_tokens_map_extended.values())
         assert (
             len(existing_special_tokens) > 0
         ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
         tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
-
+        # tokenizer.pad_token = existing_special_tokens[0]
 
     joint_probs = []
 
@@ -536,7 +536,7 @@ class PromptBuilder():
         
         
         if prompt_style == 'yes_no':
-            generation_params[k] = 10
+            generation_params[k] = 5
         elif prompt_style == 'open':
             generation_params[k] = 200
         elif prompt_style == 'categorise':
@@ -658,13 +658,15 @@ class PromptBuilder():
 
             if model.generation_config.pad_token_id is None and self.tokenizer.pad_token_id is not None:
                 model.generation_config.pad_token_id = self.tokenizer.pad_token_id
+                self.tokenizer.pad_token = self.tokenizer.decode([self.tokenizer.pad_token_id])
+
             elif self.tokenizer.pad_token_id is None and model.generation_config.pad_token_id is not None:
                 self.tokenizer.pad_token_id = model.generation_config.pad_token_id
-            
-
+                self.tokenizer.pad_token = self.tokenizer.decode([self.tokenizer.pad_token_id])
+                
             model.generation_config.bos_token_id = self.tokenizer.bos_token_id
             model.generation_config.eos_token_id = self.tokenizer.eos_token_id
-            model.generation_config.max_length = None
+            # model.generation_config.max_length = None
 
             for k,v in generation_params.items():
                 setattr(model.generation_config, k, v)

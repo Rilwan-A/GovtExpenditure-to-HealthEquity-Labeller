@@ -418,20 +418,6 @@ class PredictionGenerator():
         answers = [ str(num) for num in range(1,1+len(map_category_answer.keys()) ) ]
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
 
-        
-        # For each filled template set calcualte the relative probability of each answer
-        # li_li_probability = []
-        # for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
-
-        #     li_probability = joint_probabilities_for_category(
-        #         li_filledtemplates_with_answers, 
-        #         self.llm.pipeline.model, 
-        #         self.llm.pipeline.tokenizer,
-        #         batch_size=kwargs.get('gpu_batch_size', len(map_category_answer.keys())), 
-        #         category_token_len=1 ) 
-            
-        #     li_li_probability.append(li_probability)
-
         # Flattening out the list of list of prompt templates
         original_shape = [ len(li_filledtemplate) for li_filledtemplate in li_li_filledtemplates_with_answers]        
         li_filledtemplates_with_answers = [ prompt for li_filledtemplate in li_li_filledtemplates_with_answers for prompt in li_filledtemplate ]
