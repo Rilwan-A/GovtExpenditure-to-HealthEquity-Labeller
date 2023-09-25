@@ -80,12 +80,15 @@ for i in range(len(df_finegrained_budget_items)):
 
         candidate = {
             "budget_item_code": budget_item_code,
-            "budget_item_original_name": budget_item_name,
-            "budget_item": budget_item_name_fmtd,
-
             "indicator_code": indicator_code,
-            "indicator_name": indicator_name_fmtd
             
+            "budget_item": budget_item_name_fmtd,
+            "indicator": indicator_name_fmtd,
+            
+            "budget_item_original_name": budget_item_name,
+            "indicator_original_name": indicator_name,
+            "indicator_age": indicator_age,
+            "indicator_group": indicator_group
         }
 
         candidates.append(candidate)
