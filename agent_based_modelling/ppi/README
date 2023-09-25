@@ -1,0 +1,41 @@
+These ordered files ran in order support the creation of datasets required for the ppi algorithm
+
+#### CHANGES made by Rilwan Adewoyin ####
+All changes focused on forming a training set of info from 2013 to 2017 and test set of info from 2018 to 2019
+
+- _03_trend_mean_expenditure.py 
+    - removed the code the sums/groups the finegrained budget items by their broad budget item
+    - retain the finegrained budget item 
+    - output data_expenditure_finegrained_trend
+    - we create a new file and 2013-2019 where detrending is calculated on 2013-2017 data and applied to 2018-2019 data which forms our test set
+    - fixed mistake where detrending was not acctually applied in previous iterations of script
+
+- _04_trend_mean_expenditure.py
+    - intake data_expenditure_finegrained_trend
+    - outputs pipeline_expenditure_finegrained
+    - output pipeline_relation_table_finegrained
+    - change _04_sample_data_v2 so that when interpolating it performs linear interpolation instead of making the next few periods have the exact same value
+    - change so that when 7 period refinement is calculated a linear interpolation is used instead of constant
+
+- _05_impute_data
+    - this file does imputation of missing values in the pipeline_expenditure files
+    - We perform imputation only on 2013-2017 and not to 2019 to 2019
+    - this is to avoid contamination
+
+- _06_normalize_data.py
+    - lb, ub noramlization treats 2018 2019 as a test set
+
+- _07_get_network.py
+    - creates i2i network using bdag method, but only on 2013-2017 data
+    - converted to pure python removed the R requirements
+    - We have adapted the graph learning algorithm to use the py-causal library to implement:
+        - 1) A Constraint Based causal discovery algorithm (CD-NOD) meant to be better than PC and FCI
+        - 2) A Score Based causal discovery algorithm (DirectLiNGAM algorithm and RCD)
+        - Full suite of methods here: https://causal-learn.readthedocs.io/en/latest/search_methods_index/index.html
+        -  "Score-based causal discovery methods".
+        - " Causal discovery methods based on constrained functional causal models. "
+        - " Hidden causal representation learning"
+
+
+
+# NOTE: since we do the time factor expansion to 49 time periods, essentially when evaluating prediction quality we want to focus on 2018 and 2019 which would be the 7th and 14th future prediction
