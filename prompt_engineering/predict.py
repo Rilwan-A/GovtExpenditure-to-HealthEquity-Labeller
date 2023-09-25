@@ -321,10 +321,23 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
     if debugging:
         random.seed(data_load_seed)
         # sample 5 where 'related' is Yes and 5 where 'related' is No
+    
         li_record_b2i_yes = [x for x in li_record_b2i if x['related']=='Yes']
         li_record_b2i_no = [x for x in li_record_b2i if x['related']=='No']
-        li_record_b2i = random.sample(li_record_b2i_yes, 3) + random.sample(li_record_b2i_no, 3)
-    
+        
+        li_record_b2i_ = []
+        if len(li_record_b2i_yes) > 0:
+            li_record_b2i_ += random.sample(li_record_b2i_yes, 3)
+        else:
+            li_record_b2i_ += random.sample(li_record_b2i, 3)
+
+        if len(li_record_b2i_no) > 0:
+            li_record_b2i_ += random.sample(li_record_b2i_no, 3)
+        else:
+            li_record_b2i_ += random.sample(li_record_b2i, 3)
+
+        li_record_b2i = li_record_b2i_
+
     return li_record_b2i # type: ignore
 
 def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, 
@@ -458,7 +471,6 @@ def save_experiment(
             df['related'] = [ d['related'] for d in li_record]
             df = df[['budget_item', 'indicator', 'related', 'pred_aggregated', 'prompts', 'predictions', 'discourse']]
 
-
     elif relationship == 'indicator_to_indicator':
         df = pd.DataFrame({ 'indicator1': [ d['indicator1'] for d in li_record],
                            'indicator2': [ d['indicator2'] for d in li_record],
@@ -505,7 +517,7 @@ def parse_args():
     parser.add_argument('--ensemble_size', type=int, default=1 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
-
+ 
     parser.add_argument('--input_file', type=str, default='./data/spot/spot_b2i_broad_test.csv', help='Path to the file containing the input data' )
 
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )

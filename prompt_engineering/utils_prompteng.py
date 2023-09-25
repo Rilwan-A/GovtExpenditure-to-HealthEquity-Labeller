@@ -510,7 +510,7 @@ class PromptBuilder():
         elif self.prompt_style == 'open':
             li_filled_templates, li_li_discourse = self.fill_template_open(templates, batch)
         elif self.prompt_style == 'categorise':
-            li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order, **kwargs)
+            li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'cot_categorise':
             li_filled_templates, li_li_discourse = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'categories_scale':
@@ -702,7 +702,6 @@ class PromptBuilder():
                 inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', truncation=False ).to(model.device)
                 self.tokenizer.padding_side = 'right'
                 
-                # Ignoring any warning from the model
                 outputs = model.generate(**inputs, **generation_params, generation_config=model.generation_config )
 
                 output_text = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)

@@ -80,7 +80,7 @@ def main():
             candidates.append(candidate)
 
     # Writing the output to i2i_candidates.csv
-    with open(os.path.join('data','ppi',"i2i_candidates.csv"), "w", newline="") as output_file:
+    with open(os.path.join('data','ppi',"i2i_networks","i2i_candidates.csv"), "w", newline="") as output_file:
         fieldnames = ["indicator1_name", "indicator1", "seriesCode1", "idx1", "seriesName1", "Age1", "Sex1", "group1",
                     "indicator2_name", "indicator2", "seriesCode2", "idx2", "seriesName2", "Age2", "Sex2", "group2"]
         
