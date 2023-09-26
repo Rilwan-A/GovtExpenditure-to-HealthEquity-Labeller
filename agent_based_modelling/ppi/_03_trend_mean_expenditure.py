@@ -55,9 +55,9 @@ for seriesCode, group in df_exp.groupby('seriesCode'):
 df = pd.pivot_table(df_exp, index = ['seriesCode', 'seriesName', 'Area Code', 'category'], columns = 'spell', \
                         values = 'value').reset_index(drop = False) 
 
-# df = df.groupby('category').sum()
-# df['category'] = df.index
-# df.reset_index(drop=True, inplace=True)
+df = df.groupby('category').sum()
+df['category'] = df.index
+df.reset_index(drop=True, inplace=True)
 
 # export to csv
-df.to_csv('./data/ppi/data_expenditure_finegrained_trend.csv', index=False)
+df.to_csv('./data/ppi/data_expenditure_trend.csv', index=False)

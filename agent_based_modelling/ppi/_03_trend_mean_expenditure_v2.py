@@ -48,4 +48,4 @@ df = pd.pivot_table(df_exp_melted, index=['seriesCode', 'seriesName', 'Area Code
                     columns='spell', values='value').reset_index(drop=False)
 
 # Export to csv
-df.to_csv('./data/ppi/data_expenditure_finegrained_trend_2013_2019.csv', index=False)
+df.to_csv('./data/ppi/data_expenditure_trend_finegrained_2013_2019.csv', index=False)

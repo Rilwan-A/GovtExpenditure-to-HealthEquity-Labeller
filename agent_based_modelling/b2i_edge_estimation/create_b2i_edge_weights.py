@@ -19,7 +19,7 @@ kwargs_7bn = {
 
 kwargs_13bn = {
     'exp_group':'ppi_b2i_13bn',
-    'exp_name':'sbeluga13bn',
+    'exp_name':'sbeluga13b',
 
     'finetune_version':0,
     'finetuned':True,
@@ -74,7 +74,6 @@ general_exp_kwargs  = {
     'predict_b2i': True,
     'predict_i2i': False,
 
-
     'prompt_style': prompt_style,
     'parse_style': parse_style,
     'effect_type': 'arbitrary',
@@ -83,6 +82,7 @@ general_exp_kwargs  = {
 
     'input_file':os.path.join('./data','ppi','b2i_networks','b2i_candidates.csv'),
 
+    "batch_size":parse_kwargs.batch_size,
     "ensemble_size": 1,
     "k_shot_b2i": 0,
     "k_shot_example_dset_name_b2i": None,

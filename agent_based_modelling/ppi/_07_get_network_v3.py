@@ -57,7 +57,7 @@ import os, warnings
 # os.environ['R'] = '/home/akann1w0w1ck/miniconda3/envs/r_env/lib/R/bin'
 # os.environ['R_HOME'] = '/home/akann1w0w1ck/miniconda3/envs/r_env/lib/R'
 import rpy2
-import rpy2.robjects as robjects
+# import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 import rpy2.robjects.numpy2ri
 rpy2.robjects.numpy2ri.activate()

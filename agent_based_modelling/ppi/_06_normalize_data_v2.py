@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
+from agent_based_modelling.b2i_edge_estimation.create_b2i_candidate_edges import concatenate_name_age
 
 
 df_indic_imputed = pd.read_csv('./data/ppi/pipeline_indicators_imputed_raw_2013_2019.csv', encoding='unicode_escape')
@@ -49,6 +50,8 @@ success_dict[np.nan] = np.nan
 
 # Then for each indicator we take the average of the success rates of the broad budget items it is associated with
 dff['successRates'] = [ np.nanmean([success_dict[row.category1], success_dict[row.category2], success_dict[row.category3]]) for index, row in df_indic_imputed.iterrows() ]
+
+dff['indicator_name'] = dff[['seriesName', 'Age', 'group']].apply(lambda x: concatenate_name_age(x[0], x[1], x[2]), axis=1)
 
 dff.to_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', index=False)
 
