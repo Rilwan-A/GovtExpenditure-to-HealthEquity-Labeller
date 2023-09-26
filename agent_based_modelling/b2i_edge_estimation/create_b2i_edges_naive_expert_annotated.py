@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 # Reading the file connecting broad budget items to indicators
-df_indicators = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_sample_raw.csv'), usecols=['seriesCode','seriesName', 'category1','category2','category3'])
+df_indicators = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_sample_raw.csv'), usecols=['seriesCode','seriesName', 'category1','category2','category3', 'Age', 'Sex'])
 df_indicators = df_indicators.rename({'seriesCode':'indicator_code', 'seriesName':'indicator', 'category1':'broad_budget_item1', 'category2':'broad_budget_item2', 'category3':'broad_budget_item3'}, axis=1)
 
 # Reading the file connecting broad budget items to fine grained budget items
