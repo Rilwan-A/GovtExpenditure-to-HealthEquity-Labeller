@@ -17,11 +17,10 @@ from torch.cuda import empty_cache
 from torch import no_grad
 exp_dirs = [
     os.path.join('prompt_engineering','output','spot','exp_i2i_7bn_distr', 'exp_sbeluga7b_non_uc'),
-    os.path.join('prompt_engineering','output','spot','exp_i2i_13_distr', 'exp_sbeluga13b_non_uc'),
+    os.path.join('prompt_engineering','output','spot','exp_i2i_13b_distr', 'exp_sbeluga13b_non_uc'),
     os.path.join('prompt_engineering','output','spot','exp_i2i_30b_distr','exp_upllama30b_non_uc')
 ]
 
-from peft import PeftModel
 
 def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_max=5, gpu_batch_size=None ):
     if gpu_batch_size > batch_size:
@@ -53,7 +52,6 @@ def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_
 
     # get index of positions where the binomial prediction for 'Yes' is higher than 0.5
     if debugging:
-        # idx_existing_edges = list( range( 0, len(df_preds), 2 ) )
         idx_existing_edges = list( range( 0, len(df_preds) ) )
         pass
         # llm_name = 'mlabonne/dummy-llama-2'
@@ -78,10 +76,7 @@ def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_
     # For each indicator pair we produce an ensemble of predictions
     # Retrieve a list of the prediction ensembles list[ list[ dict[str,float] ] ]
     # Retreive the mean of the sets of prediction ensembles list[ dict['mean',float] ]
-    multinomial_means, multinomial_distributions = multinomial_edge_weights(model, llm_name, li_records_filtered, config, scale_max, idx_existing_edges, logger, batch_size)
-    
-
-    
+    multinomial_means, multinomial_distributions = multinomial_edge_weights(model, llm_name, li_records_filtered, config, scale_max, logger, batch_size)
 
     # We use the entropy over the binomial distribution as a measure of relationship strength 
     entropy_preds = entropy_edge_weights( li_records_filtered )
@@ -114,10 +109,7 @@ def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_
     df_vb.to_csv(path_vb, index=False)
     df_et.to_csv(path_et, index=False)
 
-
-def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, idx_existing_edges=None, logger=None, batch_size=2):
-
-
+def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, logger=None, batch_size=2):
 
     # Get the prompt template for querying the strength of the relationship between the two indicators
     prompt_builder = PromptBuilder(
@@ -243,7 +235,6 @@ def verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale
 
     return li_pred_agg, li_pred_ensembles
 
-
 def entropy_edge_weights(li_records):
     # Calculate an edge weight based on the entropy over a bernoulli estimation of edge existence
     
@@ -254,7 +245,6 @@ def entropy_edge_weights(li_records):
 
         # if idx not in idx_existing_edges:
         #     continue
-        
         yes_pred = record['pred_aggregated']['Yes']
         no_pred = record['pred_aggregated']['No']
 
@@ -268,24 +258,17 @@ def entropy_edge_weights(li_records):
 
         entropy_val = 1 - entropy_val
 
-        li_entorpy_preds[idx]= {'mean':entropy_val}
+        li_entorpy_preds[idx]= {'mean':entropy_val }
     
     return li_entorpy_preds
 
-
 def parse_args():
-    
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--exp_idx', type=int, choices=[0,1,2] )
-    
     parser.add_argument('--batch_size', type=int, default=1 )
-
     parser.add_argument('--gpu_batch_size', type=int, default=1 )
-
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
-
     parser.add_argument('--finetune_dir', type=str, default='', help='Directory where finetuned model is stored' )
-    
     parser.add_argument('--scale_max', type=int, default=5, help='The maximum value of the scale used to generate the prompt for multinomial edge prediction method')
 
 

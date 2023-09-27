@@ -24,12 +24,15 @@ from builtins import FileNotFoundError
 
 #TODO: ensure the b2i method is handled e.g. figure out what edits to do in order to get the b2i matrix
 
-def main(start_year, end_year, parallel_processes,
+def main( parallel_processes,
             b2i_method, i2i_method, model_size,
             thresholds:list[float], low_precision_counts, increment,
             debugging, time_experiments=False,
             exp_samples=1,
             verbose=False ):
+
+    start_year = 2013
+    end_year = 2017
 
     global logging
     logging =  setup_logging_calibration(debugging=debugging)
@@ -55,7 +58,7 @@ def main(start_year, end_year, parallel_processes,
                                                 start_year, end_year, 
                                                 )
 
-    exp_dir = os.path.join('.','agent_based_modelling','output', 'ppi_calibration' )
+    exp_dir = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters' )
 
     # Create seperate experiment directory for each threshold
     for threshold in thresholds:
@@ -84,14 +87,13 @@ def main(start_year, end_year, parallel_processes,
         existing_exp_numbers = [int(exp_number) for exp_number in os.listdir(exp_dir) if os.path.isdir(os.path.join(exp_dir, exp_number))]
         existing_exp_numbers.sort()
         exp_number = next( (num for num in range(existing_exp_numbers[-1]+1) if num not in existing_exp_numbers ), existing_exp_numbers[-1]+1)
-        
-
-        os.makedirs( os.path.join(exp_dir, exp_number), exist_ok=True)
+        exp_number_str = f'exp_{str(exp_number).zfill(3)}'
+        os.makedirs( os.path.join(exp_dir, exp_number_str), exist_ok=True)
         
         # Saving parameters for each sample run
         for idx, dict_output in enumerate(li_exp_output):
             df_parameters = pd.DataFrame(dict_output['parameters'])
-            df_parameters.to_csv(os.path.join(exp_dir, exp_number, f'calibration_parameters_{ str(idx).zfill(3) }.csv'), index=False)
+            df_parameters.to_csv(os.path.join(exp_dir, exp_number_str, f'params_v{ str(idx).zfill(2) }.csv'), index=False)
         
         # Saving statistics on run times
         if time_experiments:
@@ -106,7 +108,7 @@ def main(start_year, end_year, parallel_processes,
             'start_year':start_year,
             'end_year':end_year,
             'parallel_processes':parallel_processes,
-            'threshold':thresholds,
+            'threshold': { idx:th for idx,th in zip(range(len(thresholds)), thresholds) },
             'low_precision_counts':low_precision_counts,
             'increment':increment,
             'b2i_method':b2i_method,
@@ -123,46 +125,47 @@ def main(start_year, end_year, parallel_processes,
 
 def get_calibration_kwargs(
                         b2i_method,
-                        i2i_method, model_size,
-                        start_year=None,
-                           end_year=None,
+                        i2i_method, 
+                        model_size,
                             ):
 
-    # TODO: need to recreate pipeline_indicators_normalized file (rl,R,successRates) are based on test period including 2019
+    train_start_year = 2013
+    train_end_year = 2017
+    t = refinement_factor = 7 # Each year is broken down into 7 timesteps
+    
     df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
-    colYears = [col for col in df_indic.columns if str(col).isnumeric()]
+    colYears_train = [col for col in df_indic.columns if str(col).isnumeric() if col>=train_start_year and col<=train_end_year] 
+    
 
     # TODO: need to create a pipeline_expenditure_finegrained which focuses on the fine grained budget items
-    df_exp = pd.read_csv('./agent_based_modelling/data/pipeline_expenditure_finegrained.csv')
+    df_exp = pd.read_csv('./agent_based_modelling/data/pipeline_expenditure_finegrained.csv') 
     expCols = [col for col in df_exp.columns if str(col).isnumeric()]
+    expCols_train = expCols[: (train_end_year-train_start_year+1)*t]
 
-    if start_year == None:
-        start_year = colYears[0]
-    
-    if end_year == None:
-        end_year = colYears[-1]
-
-    num_years = len(colYears)
-    T = len(expCols) #Timesteps
+    # Only Calibrate On The Periods between 2013 to 2017
+    T = len(expCols_train) #Timesteps
 
     indic_count = len(df_indic) # number of indicators
-    indic_final = []
-    series = df_indic[colYears].values
-    indic_start = series[:,0]
+    # indic_final = []
+    indic_final = df_indic[colYears_train[-1]].values
+    # series = df_indic[colYears].values
+    # indic_start = series[:,0]
+    indic_start = df_indic[colYears_train[0]].values
     
-    # TODO: Figure out why they do a linear prediction for the final value
-    x = np.array([float(year-start_year+1) for year in colYears]).reshape((-1, 1))
-    for serie in series:
-        y = serie
+    # # TODO: Figure out why they do a linear prediction for the final value
+    # x = np.array([float(year-start_year+1) for year in colYears]).reshape((-1, 1))
+    # for serie in series:
+    #     y = serie
         
-        # If no difference the indicator would not move
-        if serie[0] == serie[-1]:
-            model = LinearRegression().fit(x, y)
-            indic_final.append(model.predict([[ float(end_year-start_year+1) ]])[0])
-        else:
-            indic_final.append(serie[-1])
+    #     # If no difference the indicator would not move
+    #     if serie[0] == serie[-1]:
+    #         model = LinearRegression().fit(x, y)
+    #         indic_final.append(model.predict([[ float(end_year-start_year+1) ]])[0])
+    #     else:
+    #         indic_final.append(serie[-1])
 
-    indic_final = np.array(indic_final)
+    # indic_final = np.array(indic_final)
+    # success_rates = df_indic.successRates.values # success rates
     success_rates = df_indic.successRates.values # success rates
 
 
@@ -170,13 +173,12 @@ def get_calibration_kwargs(
     qm = df_indic.qm.values # quality of monitoring
     rl = df_indic.rl.values # quality of the rule of law
     # indis_index = dict([(code, i) for i, code in enumerate(df_indic.seriesCode)]) # used to build the network matrix
+    R = df_indic.R.values # instrumental indicators
+    qm = df_indic.qm.values # quality of monitoring
+    rl = df_indic.rl.values # quality of the rule of law
 
     Bs = df_exp[expCols].values # disbursement schedule (assumes that the expenditure programmes are properly sorted)
-
-    # TODO: need to create a pipeline_relation_table which focuses on relationships between finegrained budget items and indicators
-    # TODO: this also needs to be dependent on the b2i method being used
     
-
     b2i_network = get_b2i_network( b2i_method, model_size )
 
     # Load in the i2i relation table
@@ -247,7 +249,7 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
 def get_i2i_network(i2i_method, indic_count, model_size=None):
     # Creates an array representing indicator to indicator relationships
 
-    assert i2i_method in ['ccdr','CPUQ_multinomial','verbalize','entropy','zero'], f'Spillover Creator Model name {model_name} not recognised'
+    assert i2i_method in ['ccdr','CPUQ_multinomial','verbalize','entropy','zero'], f'Spillover Creator Model name {self.model_name} not recognised'
     
     if i2i_method == 'zero':
         i2i_network = np.zeros((indic_count, indic_count))
@@ -270,12 +272,12 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
 
         # Reading in the i2i network
         _1 = {
-            '7bn':os.path.join('exp_i2i_7bn_distr','exp_sebeluga7b_non_uc'),
-            '13bn':os.path.join('exp_i2i_13_distr','exp_sebeluga13b_non_uc'),
+            '7bn':os.path.join('exp_i2i_7bn_distr','exp_sbeluga7b_non_uc'),
+            '13bn':os.path.join('exp_i2i_13b_distr','exp_sbeluga13b_non_uc'),
             '30bn':os.path.join('exp_i2i_30b_distr','exp_upllama30b_non_uc'),
         }
 
-        _2 = {'CPUQ':'mn', 'verbalize':'verb', 'entropy':'ent'}
+        _2 = {'CPUQ_multinomial':'mn', 'verbalize':'vb', 'entropy':'et'}
         
 
         _path = os.path.join('prompt_engineering','output', 'spot', _1[model_size], 
@@ -297,12 +299,11 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
         indicator_ref = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_normalized_finegrained.csv'), usecols=['indicator_name'])
         dict_indic_idx = {v: k for k, v in indicator_ref['indicator_name'].to_dict().items()}
 
-        i2i_network = np.zeros((indic_count, indic_count)) # adjacency matrix
+        i2i_network = np.zeros((indic_count, indic_count), dtype=np.float32) # adjacency matrix
         
         for index, row in df_net.iterrows():
             
-            
-            weight = row.get('scale_mean', row.get('mean', 0.0))
+            weight = row.weight.get('scaled_mean', row.weight.get('mean', 0.0))
             
             if weight == 0.0:
                 continue
@@ -319,12 +320,14 @@ def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T,
               low_precision_counts=75,
               increment=100,
               verbose=True, 
-              time_experiments=False):
+              time_experiments=False,
+              mc_simulations=10):
 
     dict_output = ppi.calibrate(indic_start, indic_final, success_rates, so_network=i2i_network, R=R, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict,
-                T=T, threshold=threshold, parallel_processes=parallel_processes, verbose=True,
-                low_precision_counts=low_precision_counts,
-                increment=100)
+                T=T, threshold=threshold, parallel_processes=parallel_processes, verbose=verbose,
+                low_precision_counts=low_precision_counts, time_experiments=time_experiments,
+                increment=increment,
+                mc_simulations=mc_simulations)
 
     return dict_output
 
