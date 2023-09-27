@@ -51,9 +51,6 @@ df = pd.DataFrame(new_rows, columns=df.columns)
 # df = df.loc[df.IF.notnull(),]
 
 
-
-
-
 # 2) subset finegrained budget items by choosing those which share a broad budget item with an indicator 
 dfx = pd.read_csv('data/ppi/data_expenditure_trend_finegrained.csv', encoding='utf-8')
 
@@ -61,8 +58,8 @@ dfx.rename(columns=dict([(col, col[0:4]) for col in dfx.columns if col.isnumeric
 dfx.drop([col for col in dfx.columns if col.isnumeric() and int(col)<2013], inplace=True, axis=1)
 dfx = dfx[(dfx[colYears[0:-3]]<0).sum(axis=1) == 0]
 
-T = 49
-t = int(T/len(colYears))
+t = 7
+T = t * len(colYears)
 
 new_rows = []
 for index, row in dfx.iterrows():
@@ -89,6 +86,8 @@ categories = set(df[['category1', 'category2', 'category3']].values.flatten()[df
 dfxf = dfxf[dfxf.category.isin(categories)]
 dfxf.reset_index(inplace=True)
 dfxf.loc[:, 'program'] = range(len(dfxf))
+dfxf['time_refinement_factor'] = t
+dfxf['start_year'] = 2013
 dfxf.to_csv('data/ppi/pipeline_expenditure_finegrained.csv', index=False)
 
 
