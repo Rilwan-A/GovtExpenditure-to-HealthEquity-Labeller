@@ -58,26 +58,23 @@ dfx.rename(columns=dict([(col, col[0:4]) for col in dfx.columns if col.isnumeric
 dfx.drop([col for col in dfx.columns if col.isnumeric() and int(col)<2013], inplace=True, axis=1)
 dfx = dfx[(dfx[colYears[0:-3]]<0).sum(axis=1) == 0]
 
-t = 7
-T = t * len(colYears)
+# Expand the time series by interpolation
+# expand each period in range by factor t , from start_year to end_year-1. Final point is end_year
+t = time_refinement_factor = 7
+T = t * (len(colYears) - 1) + 1
 
 new_rows = []
 for index, row in dfx.iterrows():
     new_row = [row['seriesCode'], row['seriesName'], row.category]
-    prev_value = row['2013']  # Initialize with 2013 for backward interpolation
-    for year in colYears:
-        if year == '2013':
-            # Calculate the slope between 2013 and 2014
-            slope = row['2014'] - row['2013']
-            # Estimate the value in 2012 using linear extrapolation
-            estimated_2012_value = row['2013'] - slope
-            # Interpolate values from estimated 2012 value to 2013 value
-            interpolated_values = np.linspace(estimated_2012_value, row['2013'], t+1)[1:]
-        else:
-            # For other years, interpolate from previous year's end value to the current year value
-            interpolated_values = np.linspace(prev_value, row[year], t+1)[1:]
+    
+    for year in colYears[:-1]:
+
+        next_year = str(int(year)+1)        
+        interpolated_values = np.linspace(row[year], row[next_year], t+1, endpoint=True)[:-1]
         new_row.extend(interpolated_values)
-        prev_value = row[year]  # Update the previous year's value
+    
+    new_row.append(row[colYears[-1]])
+        
     new_rows.append(new_row)
 
 dfxf = pd.DataFrame(new_rows, columns=['seriesCode', 'seriesName', 'category']+[str(i) for i in range(T)])
