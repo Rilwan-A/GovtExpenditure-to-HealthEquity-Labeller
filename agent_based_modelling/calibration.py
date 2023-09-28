@@ -52,11 +52,9 @@ def main( parallel_processes,
     logging.info(f"\ttime_experiments: {time_experiments}")
 
     # Get calibration kwargs
-    calibration_kwargs = get_calibration_kwargs(
-                                                b2i_method,
-                                                i2i_method,model_size,
-                                                start_year, end_year, 
-                                                )
+    calibration_kwargs = get_calibration_kwargs(b2i_method,
+                                                i2i_method,
+                                                model_size)
 
     exp_dir = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters' )
 
@@ -105,8 +103,8 @@ def main( parallel_processes,
 
         # Save hyperparameters as yaml
         experiment_hyperparams = {
-            'start_year':start_year,
-            'end_year':end_year,
+            'calibration_start_year':start_year,
+            'calibration_end_year':end_year,
             'parallel_processes':parallel_processes,
             'threshold': { idx:th for idx,th in zip(range(len(thresholds)), thresholds) },
             'low_precision_counts':low_precision_counts,
@@ -127,20 +125,21 @@ def get_calibration_kwargs(
                         b2i_method,
                         i2i_method, 
                         model_size,
+                        calibration_start_year=2013,
+                        calibration_end_year=2017,
                             ):
 
-    train_start_year = 2013
-    train_end_year = 2017
-    t = refinement_factor = 7 # Each year is broken down into 7 timesteps
-    
-    df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
-    colYears_train = [col for col in df_indic.columns if str(col).isnumeric() if col>=train_start_year and col<=train_end_year] 
-    
+        
+    if calibration_start_year == 2013 and calibration_end_year == 2017:
+        df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
+        df_exp = pd.read_csv('./agent_based_modelling/data/pipeline_expenditure_finegrained.csv') 
+    else:
+        raise NotImplementedError('Calibration files only created for 2013-2017')
 
-    # TODO: need to create a pipeline_expenditure_finegrained which focuses on the fine grained budget items
-    df_exp = pd.read_csv('./agent_based_modelling/data/pipeline_expenditure_finegrained.csv') 
+    colYears_train = [col for col in df_indic.columns if str(col).isnumeric() if col>=calibration_start_year and col<=calibration_end_year] 
+    tft = df_exp.time_refinement_factor.values[0]
     expCols = [col for col in df_exp.columns if str(col).isnumeric()]
-    expCols_train = expCols[: (train_end_year-train_start_year+1)*t]
+    expCols_train = expCols[: (calibration_end_year-calibration_start_year+1)*tft]
 
     # Only Calibrate On The Periods between 2013 to 2017
     T = len(expCols_train) #Timesteps
@@ -152,23 +151,11 @@ def get_calibration_kwargs(
     # indic_start = series[:,0]
     indic_start = df_indic[colYears_train[0]].values
     
-    # # TODO: Figure out why they do a linear prediction for the final value
-    # x = np.array([float(year-start_year+1) for year in colYears]).reshape((-1, 1))
-    # for serie in series:
-    #     y = serie
-        
-    #     # If no difference the indicator would not move
-    #     if serie[0] == serie[-1]:
-    #         model = LinearRegression().fit(x, y)
-    #         indic_final.append(model.predict([[ float(end_year-start_year+1) ]])[0])
-    #     else:
-    #         indic_final.append(serie[-1])
+    if logging is not None:
+        logging.warn(f"Script currently assumes that 'pipeline_indicator_normalized_finegrained.csv' and 'pipeline_expenditure_finegrained.csv' \
+            have been preprocessed with the assumption that 2013 - 2017 is the train set for calibration")
 
-    # indic_final = np.array(indic_final)
-    # success_rates = df_indic.successRates.values # success rates
     success_rates = df_indic.successRates.values # success rates
-
-
     R = np.ones(indic_count) # instrumental indicators
     qm = df_indic.qm.values # quality of monitoring
     rl = df_indic.rl.values # quality of the rule of law
