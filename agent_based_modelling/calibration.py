@@ -24,11 +24,14 @@ from builtins import FileNotFoundError
 
 #TODO: ensure the b2i method is handled e.g. figure out what edits to do in order to get the b2i matrix
 
-def main( parallel_processes,
+def main(   start_year, end_year,
+            parallel_processes,
             b2i_method, i2i_method, model_size,
             thresholds:list[float], low_precision_counts, increment,
             debugging, time_experiments=False,
+            mc_simulations=3,
             exp_samples=1,
+            exp_group = None,
             verbose=False ):
 
     start_year = 2013
@@ -54,9 +57,14 @@ def main( parallel_processes,
     # Get calibration kwargs
     calibration_kwargs = get_calibration_kwargs(b2i_method,
                                                 i2i_method,
-                                                model_size)
+                                                model_size,
+                                                calibration_start_year=start_year,
+                                                calibration_end_year=end_year)
 
     exp_dir = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters' )
+    os.makedirs(exp_dir, exist_ok=True)
+    if exp_group is not None:
+        exp_dir = os.path.join(exp_dir, exp_group)
 
     # Create seperate experiment directory for each threshold
     for threshold in thresholds:
@@ -74,6 +82,7 @@ def main( parallel_processes,
                     parallel_processes=parallel_processes,
                     verbose=verbose,
                     time_experiments=time_experiments,
+                    increment=increment,
                   **calibration_kwargs )
 
             li_exp_output.append(dict_output)
@@ -84,7 +93,10 @@ def main( parallel_processes,
         # Create experiment number which accounts for any missing numbers in the sequence and selects the lowest possible number available
         existing_exp_numbers = [int(exp_number) for exp_number in os.listdir(exp_dir) if os.path.isdir(os.path.join(exp_dir, exp_number))]
         existing_exp_numbers.sort()
-        exp_number = next( (num for num in range(existing_exp_numbers[-1]+1) if num not in existing_exp_numbers ), existing_exp_numbers[-1]+1)
+        if len(existing_exp_numbers) == 0:
+            exp_number = 0
+        else:
+            exp_number = next( (num for num in range(existing_exp_numbers[-1]+1) if num not in existing_exp_numbers ), existing_exp_numbers[-1]+1)
         exp_number_str = f'exp_{str(exp_number).zfill(3)}'
         os.makedirs( os.path.join(exp_dir, exp_number_str), exist_ok=True)
         
@@ -99,7 +111,7 @@ def main( parallel_processes,
             iterations:list[int] = [dict_output['iterations'] for dict_output in li_exp_output]
             
             df_time = pd.DataFrame({'time_elapsed':time_elapsed, 'iterations':iterations, 'exp_number':list(range(exp_samples))})
-            df_time.to_csv(os.path.join(exp_dir, exp_number, f'calibration_time.csv'), index=False)
+            df_time.to_csv(os.path.join(exp_dir, exp_number_str, f'calibration_time.csv'), index=False)
 
         # Save hyperparameters as yaml
         experiment_hyperparams = {
@@ -116,7 +128,7 @@ def main( parallel_processes,
             'time_experiments':time_experiments
         }
 
-        with open(os.path.join(exp_dir, exp_number, 'hyperparams.yaml'), 'w') as f:
+        with open(os.path.join(exp_dir, exp_number_str, 'hyperparams.yaml'), 'w') as f:
             yaml.dump(experiment_hyperparams, f)
 
     return True
@@ -132,11 +144,11 @@ def get_calibration_kwargs(
         
     if calibration_start_year == 2013 and calibration_end_year == 2017:
         df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
-        df_exp = pd.read_csv('./agent_based_modelling/data/pipeline_expenditure_finegrained.csv') 
+        df_exp = pd.read_csv('./data/ppi/pipeline_expenditure_finegrained.csv') 
     else:
         raise NotImplementedError('Calibration files only created for 2013-2017')
 
-    colYears_train = [col for col in df_indic.columns if str(col).isnumeric() if col>=calibration_start_year and col<=calibration_end_year] 
+    colYears_train = [col for col in df_indic.columns if str(col).isnumeric() if int(col)>=calibration_start_year and int(col)<=calibration_end_year] 
     tft = df_exp.time_refinement_factor.values[0]
     expCols = [col for col in df_exp.columns if str(col).isnumeric()]
     expCols_train = expCols[: (calibration_end_year-calibration_start_year+1)*tft]
@@ -160,9 +172,6 @@ def get_calibration_kwargs(
     qm = df_indic.qm.values # quality of monitoring
     rl = df_indic.rl.values # quality of the rule of law
     # indis_index = dict([(code, i) for i, code in enumerate(df_indic.seriesCode)]) # used to build the network matrix
-    R = df_indic.R.values # instrumental indicators
-    qm = df_indic.qm.values # quality of monitoring
-    rl = df_indic.rl.values # quality of the rule of law
 
     Bs = df_exp[expCols].values # disbursement schedule (assumes that the expenditure programmes are properly sorted)
     
@@ -190,6 +199,8 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
     # Create a dictionary which aligns indicators with budget items
     # Both indicators and budget items are referred to by their index in data_expenditure_trend_finegrained and data_expenditure_raw respectively
     # B = { 'idic_idx0':[bi_idx0, bi_idx1, ... ] }
+    if b2i_method in ['verbalize', 'CPUQ_binomial']:
+        assert model_size is not None, 'model_size must be specified when using verbalize or CPUQ_binomial'
 
     if b2i_method == 'ea':
         # Load in the b2i relation table
@@ -236,7 +247,8 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
 def get_i2i_network(i2i_method, indic_count, model_size=None):
     # Creates an array representing indicator to indicator relationships
 
-    assert i2i_method in ['ccdr','CPUQ_multinomial','verbalize','entropy','zero'], f'Spillover Creator Model name {self.model_name} not recognised'
+    if i2i_method in ['verbalize', 'CPUQ_multinomial', 'verbalize','entropy']:
+        assert model_size is not None, 'model_size must be specified when using verbalize or CPUQ_multinomial'
     
     if i2i_method == 'zero':
         i2i_network = np.zeros((indic_count, indic_count))
@@ -314,7 +326,8 @@ def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T,
                 T=T, threshold=threshold, parallel_processes=parallel_processes, verbose=verbose,
                 low_precision_counts=low_precision_counts, time_experiments=time_experiments,
                 increment=increment,
-                mc_simulations=mc_simulations)
+                mc_simulations=mc_simulations, 
+                logging=logging)
 
     return dict_output
 
@@ -323,19 +336,23 @@ def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T,
 def get_args():
     parser = argparse.ArgumentParser(description='Run the PPI model')
     parser.add_argument('--start_year', type=int, default=2013, help='Start year')
-    parser.add_argument('--end_year', type=int, default=2018, help='End year')
+    parser.add_argument('--end_year', type=int, default=2017, help='End year')
     parser.add_argument('--parallel_processes', type=int, default=40, help='Number of parallel processes')
-    parser.add_argument('--thresholds', type=float, nargs='+', default=0.8, help='Threshold for the calibration')
+    parser.add_argument('--thresholds', type=float, nargs='+', default=[0.8], help='Threshold for the calibration')
     parser.add_argument('--low_precision_counts', type=int, default=75, help='Number of low-quality iterations to accelerate the calibration')
     parser.add_argument('--increment', type=int, default=100, help='Number of iterations between each calibration check')
 
+    parser.add_argument('--mc_simulations', type=int, default=2, help='Number of Monte Carlo simulations to run for each iteration')
+
     parser.add_argument('--b2i_method', type=str, default='ccdr', choices=[ 'ea', 'verbalize', 'CPUQ_binomial' ], help='Name of the spillover predictor model')
     parser.add_argument('--i2i_method', type=str, default='ccdr', choices=['ccdr', 'CPUQ_multinomial', 'zero', 'entropy'], help='Name of the indicator to indicator edge predictor method')
-    parser.add_argument('--model_size', type=str, default='7bn', choices=['7bn','13bn','30bn' ], help='Name of the indicator to indicator edge predictor method')
+    parser.add_argument('--model_size', type=str, default=None, choices=['7bn','13bn','30bn' ], help='Name of the indicator to indicator edge predictor method')
     
     parser.add_argument('--verbose', action='store_true', default=False, help='Print progress to console')
     parser.add_argument('--time_experiments', action='store_true', default=False, help='Record Calibration Time for Experiments')
     parser.add_argument('--exp_samples',type=int, default=1, help='Number of samples to take for time experiments')
+
+    parser.add_argument('--exp_group', type=str, default=None, help='Name of the experiment group')
     parser.add_argument('--debugging', action='store_true', default=False)
     args = parser.parse_args()
     return args
