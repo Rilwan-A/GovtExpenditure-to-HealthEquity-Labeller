@@ -47,7 +47,7 @@ class TestCalibration(unittest.TestCase):
             with self.subTest(b2i_method=b2i_method):
                 B_dict = get_b2i_network(b2i_method, self.model_size)
                 self.assertIsInstance(B_dict, dict)
-                self.assertGreater(len(B_dict), 0)
+                self.assertEqual(len(B_dict), 415)
                         
     def test_get_i2i_network(self):
         for i2i_method in [ 'CPUQ_multinomial', 'ccdr', 'zero', 'verbalize', 'entropy']:
@@ -59,9 +59,12 @@ class TestCalibration(unittest.TestCase):
                     self.assertTrue(np.any(i2i_network != 0))
                     
     def test_calibrate(self):
-        for b2i_method, i2i_method, parrallel_processes, time_experiments in [('ea', 'zero', None, False), ('ea','verbalize', 2, True),
-        #  ('ea', 'entropy', None, False), ('ea','CPUQ_multinomial', None, False),
-        #  ('verbalize','verbalize', None, False), 
+        for b2i_method, i2i_method, parrallel_processes, time_experiments in [
+            # ('ea', 'zero', None, False),
+            #  ('ea','verbalize', 2, True),
+        #  ('ea', 'entropy', None, False),
+        #   ('ea','CPUQ_multinomial', None, False),
+         ('verbalize','verbalize', 4, False), 
         #  ('CPUQ_binomial','CPUQ_multinomial', None, False),
         #  ('ea','ccdr', None, False)
          ]:
