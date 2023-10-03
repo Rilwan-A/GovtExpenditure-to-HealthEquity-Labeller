@@ -14,10 +14,10 @@ import yaml
 warnings.simplefilter("ignore")
 import time
 import glob
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from agent_based_modelling.i2i_edge_estimation.create_i2i_candidates import concatenate_name_age
-
+from copy import deepcopy
 from prompt_engineering.my_logger import setup_logging_calibration
 logging = None
 from builtins import FileNotFoundError
@@ -38,7 +38,7 @@ def main(   start_year, end_year,
     end_year = 2017
 
     global logging
-    logging =  setup_logging_calibration(debugging=debugging)
+    logging =  setup_logging_calibration(debugging=debugging, exp_group=exp_group)
     
     # Log parameters for this experiment
     logging.info("Parameters for this experiment:")
@@ -47,6 +47,7 @@ def main(   start_year, end_year,
     logging.info(f"\tparallel_processes: {parallel_processes}")
     logging.info(f"\tthresholds: {thresholds}")
     logging.info(f"\tlow_precision_counts: {low_precision_counts}")
+    logging.info(f"\tmc_simulations: {mc_simulations}")
     logging.info(f"\tincrement: {increment}")
     logging.info(f"\tb2i_method: {b2i_method}")
     logging.info(f"\ti2i_method: {i2i_method}")
@@ -62,9 +63,9 @@ def main(   start_year, end_year,
                                                 calibration_end_year=end_year)
 
     exp_dir = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters' )
-    os.makedirs(exp_dir, exist_ok=True)
     if exp_group is not None:
         exp_dir = os.path.join(exp_dir, exp_group)
+    os.makedirs(exp_dir, exist_ok=True)
 
     # Create seperate experiment directory for each threshold
     for threshold in thresholds:
@@ -83,6 +84,7 @@ def main(   start_year, end_year,
                     verbose=verbose,
                     time_experiments=time_experiments,
                     increment=increment,
+                    mc_simulations=mc_simulations,
                   **calibration_kwargs )
 
             li_exp_output.append(dict_output)
@@ -91,7 +93,7 @@ def main(   start_year, end_year,
         logging.info(f'Calibration with threshold {threshold} complete')
 
         # Create experiment number which accounts for any missing numbers in the sequence and selects the lowest possible number available
-        existing_exp_numbers = [int(exp_number) for exp_number in os.listdir(exp_dir) if os.path.isdir(os.path.join(exp_dir, exp_number))]
+        existing_exp_numbers = [int(exp_number[4:]) for exp_number in os.listdir(exp_dir) if os.path.isdir(os.path.join(exp_dir, exp_number))]
         existing_exp_numbers.sort()
         if len(existing_exp_numbers) == 0:
             exp_number = 0
@@ -102,7 +104,10 @@ def main(   start_year, end_year,
         
         # Saving parameters for each sample run
         for idx, dict_output in enumerate(li_exp_output):
-            df_parameters = pd.DataFrame(dict_output['parameters'])
+            
+            _ = deepcopy(dict_output['parameters'])
+            _['threshold'] = threshold
+            df_parameters = pd.DataFrame(_)
             df_parameters.to_csv(os.path.join(exp_dir, exp_number_str, f'params_v{ str(idx).zfill(2) }.csv'), index=False)
         
         # Saving statistics on run times
@@ -120,6 +125,7 @@ def main(   start_year, end_year,
             'parallel_processes':parallel_processes,
             'threshold': { idx:th for idx,th in zip(range(len(thresholds)), thresholds) },
             'low_precision_counts':low_precision_counts,
+            'mc_simulations':mc_simulations,
             'increment':increment,
             'b2i_method':b2i_method,
             'i2i_method':i2i_method,
@@ -227,20 +233,37 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
 
         # convert to a dictionary where the key is the indicator_name and the value is the indicator's index
         indicator_ref = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_normalized_finegrained.csv'), usecols=['indicator_name'])
-        dict_indic_idx = {v: k for k, v in indicator_ref['indicator_name'].to_dict().items()}
+        dict_idx_indic = indicator_ref['indicator_name'].to_dict()
+        indicator_list = list(dict_idx_indic.values())
+        dict_indic_idx = {v: k for k, v in dict_idx_indic.items()}
+        
+        # get a list of repeated indicators
+        non_unique_indicators = [item for item, count in Counter(indicator_list).items() if count > 1]
+        dict_nuindic_idxs = {k:[ i for i,indic in dict_idx_indic.items() if k==indic] for k in non_unique_indicators}
 
         # contains info on the index ordering of budget items 
         budget_item_ref = pd.read_csv(os.path.join('data','ppi','data_expenditure_trend_finegrained.csv'), usecols=['seriesName'])
+        dict_idx_bi  = budget_item_ref['seriesName'].to_dict() 
         dict_bi_idx = {v: k for k, v in budget_item_ref['seriesName'].to_dict().items()}
 
         B_dict = defaultdict(list) # PPI needs the relational table in the form of a Python dictionary
+        B_dict = {idx:[] for idx in range(len(indicator_list))}
         for _, row in b2i_preds.iterrows():
-            
+            budget_item = row.budget_item
+            indicator = row.indicator
+
             bi_idx = dict_bi_idx[ row.budget_item ] # get the index of the indicator
-            indic_idx = dict_indic_idx[ row.indicator]
-            # value in dict @idx 249 'Proportion of children aged 2-2Ã\x83Â\x82Ã\x82Â½yrs receiving ASQ-3 as part of the Healthy Child Programme or integrated review'
-            # value in dict_indic_idx
-            B_dict[indic_idx].append(bi_idx)
+
+            if indicator in non_unique_indicators:
+                # If a formatted indicator name is shared by multiple different indicators then we need to find the correct index
+                # We ensure both indicator indexes get assigned the budget item index
+                indic_idxs = dict_nuindic_idxs[indicator]
+                for indic_idx in indic_idxs:
+                    B_dict[indic_idx].append(bi_idx)
+
+            else:
+                indic_idx = dict_indic_idx[ row.indicator]
+                B_dict[indic_idx].append(bi_idx)
 
     return B_dict
 
@@ -342,16 +365,15 @@ def get_args():
     parser.add_argument('--low_precision_counts', type=int, default=75, help='Number of low-quality iterations to accelerate the calibration')
     parser.add_argument('--increment', type=int, default=100, help='Number of iterations between each calibration check')
 
-    parser.add_argument('--mc_simulations', type=int, default=2, help='Number of Monte Carlo simulations to run for each iteration')
+    parser.add_argument('--mc_simulations', type=int, default=5, help='Number of Monte Carlo simulations to run for each iteration')
 
     parser.add_argument('--b2i_method', type=str, default='ccdr', choices=[ 'ea', 'verbalize', 'CPUQ_binomial' ], help='Name of the spillover predictor model')
-    parser.add_argument('--i2i_method', type=str, default='ccdr', choices=['ccdr', 'CPUQ_multinomial', 'zero', 'entropy'], help='Name of the indicator to indicator edge predictor method')
+    parser.add_argument('--i2i_method', type=str, default='ccdr', choices=['ccdr', 'verbalize' ,'CPUQ_multinomial', 'zero', 'entropy'], help='Name of the indicator to indicator edge predictor method')
     parser.add_argument('--model_size', type=str, default=None, choices=['7bn','13bn','30bn' ], help='Name of the indicator to indicator edge predictor method')
     
     parser.add_argument('--verbose', action='store_true', default=False, help='Print progress to console')
     parser.add_argument('--time_experiments', action='store_true', default=False, help='Record Calibration Time for Experiments')
     parser.add_argument('--exp_samples',type=int, default=1, help='Number of samples to take for time experiments')
-
     parser.add_argument('--exp_group', type=str, default=None, help='Name of the experiment group')
     parser.add_argument('--debugging', action='store_true', default=False)
     args = parser.parse_args()
