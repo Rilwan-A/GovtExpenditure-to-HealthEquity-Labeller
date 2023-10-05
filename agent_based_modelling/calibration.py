@@ -33,9 +33,6 @@ def main(   start_year, end_year,
             exp_group = None,
             verbose=False ):
 
-    start_year = 2013
-    end_year = 2017
-
     global logging
     logging =  setup_logging_calibration(debugging=debugging, exp_group=exp_group)
     
@@ -142,34 +139,38 @@ def get_calibration_kwargs(
                         b2i_method,
                         i2i_method, 
                         model_size,
-                        calibration_start_year=2013,
+                        calibration_start_year=2014,
                         calibration_end_year=2017,
                             ):
 
         
-    if calibration_start_year == 2013 and calibration_end_year == 2017:
+    if calibration_start_year == 2014 and calibration_end_year == 2017:
         df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
         df_exp = pd.read_csv('./data/ppi/pipeline_expenditure_finegrained.csv') 
     else:
-        raise NotImplementedError('Calibration files only created for 2013-2017')
+        raise NotImplementedError('Calibration files only created for 2014-2017')
 
     colYears_train = [col for col in df_indic.columns if str(col).isnumeric() if int(col)>=calibration_start_year and int(col)<=calibration_end_year] 
     tft = df_exp.time_refinement_factor.values[0]
-    expCols = [col for col in df_exp.columns if str(col).isnumeric()]
-    expCols_train = expCols[: (calibration_end_year-calibration_start_year+1)*tft]
+    
 
-    # Only Calibrate On The Periods between 2013 to 2017
+    # Only Calibrate On The Interpolated Periods between 2014 to 2017
+    # This is from 2014 Interpolation period 0 to 2017 Interpolation period 4,
+    # Where each year includes N interpolation periods
+    # We don't start from 2014 Interpolation period 0, since our indicator_start is the value for 2013 
+    expCols = [col for col in df_exp.columns if str(col).isnumeric()]
+    s_idx = colYears_train.index(str(calibration_start_year))*tft
+    e_idx = (colYears_train.index(str(calibration_end_year))+1)*tft
+    assert e_idx <= int(expCols[-1]) +1 , f'End period index {e_idx} is greater than the number of periods {len(expCols)}'
+    expCols_train = expCols[ s_idx : e_idx ]
+
     T = len(expCols_train) #Timesteps
 
     indic_count = len(df_indic) # number of indicators
-    # indic_final = []
+    indic_start = df_indic[ str(int(colYears_train[0])-1)].values
     indic_final = df_indic[colYears_train[-1]].values
-    # series = df_indic[colYears].values
-    # indic_start = series[:,0]
-    indic_start = df_indic[colYears_train[0]].values
     
-
-
+    
     success_rates = df_indic.successRates.values # success rates
     R = np.ones(indic_count) # instrumental indicators
     qm = df_indic.qm.values # quality of monitoring
@@ -187,15 +188,6 @@ def get_calibration_kwargs(
     # Load in the i2i relation table
     i2i_network = get_i2i_network( i2i_method=i2i_method, model_size=model_size, indic_count=indic_count )
 
-    # Check that the number of budget item expenditures in Bs matches the number of budget item expenditures in B_dict
-    # Zero out any expenditure programs from Bs that are not in B_dict : B_dict shows which indicators are affected by a list of expenditure programs
-    # Bs shows the amount spent on each expenditure program
-    
-    # if Bs.shape[0] != len(programs):
-        # zero out the rows of Bs that do not have an index in programs
-        # Bs[[i for i in range(Bs.shape[0]) if i not in programs]] = 0.0
-    # elif Bs.shape[0] > len(programs):
-        # Bs[[i for i in range(Bs.shape[0]) if i not in programs]] = 0.0
 
     return {
         'indic_start': indic_start,
@@ -347,8 +339,6 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
         else:
             raise FileNotFoundError(f'i2i Network not created - no file at {_path}')
         
-        # Establishing the indices for the indicators
-        # The order can be found from the pipeline_indicators_normalized_2013_2016.csv file
 
         # convert to a dictionary where the key is the indicator_name and the value is the indicator's index
         indicator_ref = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_normalized_finegrained.csv'), usecols=['indicator_name'])
@@ -390,7 +380,7 @@ def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T,
 # Create an argparse function to parse args
 def get_args():
     parser = argparse.ArgumentParser(description='Run the PPI model')
-    parser.add_argument('--start_year', type=int, default=2013, help='Start year')
+    parser.add_argument('--start_year', type=int, default=2014, help='Start year')
     parser.add_argument('--end_year', type=int, default=2017, help='End year')
     parser.add_argument('--parallel_processes', type=int, default=40, help='Number of parallel processes')
     parser.add_argument('--thresholds', type=float, nargs='+', default=[0.8], help='Threshold for the calibration')

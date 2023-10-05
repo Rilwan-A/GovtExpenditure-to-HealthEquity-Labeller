@@ -59,7 +59,10 @@ dfx.drop([col for col in dfx.columns if col.isnumeric() and int(col)<2013], inpl
 dfx = dfx[(dfx[colYears[0:-3]]<0).sum(axis=1) == 0]
 
 # Expand the time series by interpolation
-# expand each period in range by factor t , from start_year to end_year-1. Final point is end_year
+# expand each period in range by factor t ,
+# - in the year y's factor t expansion, the first value is the original y value 
+# - and the last value is the (t-1)^th interpolated value in the range between y and y+1
+# - the first value 
 t = time_refinement_factor = 7
 T = t * (len(colYears) - 1) + 1
 
@@ -70,8 +73,14 @@ for index, row in dfx.iterrows():
     for year in colYears[:-1]:
 
         next_year = str(int(year)+1)        
-        interpolated_values = np.linspace(row[year], row[next_year], t+1, endpoint=True)[:-1]
-        new_row.extend(interpolated_values)
+        
+        # interpolated_values = np.linspace(row[year], row[next_year], t+1, endpoint=True)[:-1] / t
+        
+        # Divide the year value by the time refinement factor and then repeat it t times
+        averaged_values = np.array( row[year] / t )
+        averaged_values = np.repeat(averaged_values, t)
+
+        new_row.extend(averaged_values)
     
     new_row.append(row[colYears[-1]])
         
@@ -81,7 +90,7 @@ dfxf = pd.DataFrame(new_rows, columns=['seriesCode', 'seriesName', 'category']+[
 dfxf.drop(['seriesCode'], axis='columns', inplace=True)
 categories = set(df[['category1', 'category2', 'category3']].values.flatten()[df[['category1', 'category2', 'category3']].values.flatten().astype(str)!='nan'])
 dfxf = dfxf[dfxf.category.isin(categories)]
-dfxf.reset_index(inplace=True)
+# dfxf.reset_index(inplace=True)
 dfxf.loc[:, 'program'] = range(len(dfxf))
 dfxf['time_refinement_factor'] = t
 dfxf['start_year'] = 2013
