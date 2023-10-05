@@ -12,7 +12,6 @@ from agent_based_modelling import ppi
 from prompt_engineering.utils import ALL_MODELS
 import yaml
 warnings.simplefilter("ignore")
-import time
 import glob
 from collections import defaultdict, Counter
 
@@ -85,7 +84,7 @@ def main(   start_year, end_year,
                     time_experiments=time_experiments,
                     increment=increment,
                     mc_simulations=mc_simulations,
-                  **calibration_kwargs )
+                    **calibration_kwargs )
 
             li_exp_output.append(dict_output)
             logging.info(f'Calibration run {run+1} of {exp_samples} complete')
@@ -169,22 +168,34 @@ def get_calibration_kwargs(
     # indic_start = series[:,0]
     indic_start = df_indic[colYears_train[0]].values
     
-    if logging is not None:
-        logging.warn(f"Script currently assumes that 'pipeline_indicator_normalized_finegrained.csv' and 'pipeline_expenditure_finegrained.csv' \
-            have been preprocessed with the assumption that 2013 - 2017 is the train set for calibration")
+
 
     success_rates = df_indic.successRates.values # success rates
     R = np.ones(indic_count) # instrumental indicators
     qm = df_indic.qm.values # quality of monitoring
     rl = df_indic.rl.values # quality of the rule of law
-    # indis_index = dict([(code, i) for i, code in enumerate(df_indic.seriesCode)]) # used to build the network matrix
 
     Bs = df_exp[expCols].values # disbursement schedule (assumes that the expenditure programmes are properly sorted)
     
     b2i_network = get_b2i_network( b2i_method, model_size )
 
+    Bs, b2i_network = ppi.align_Bs_with_B_dict(Bs, b2i_network)
+
+    # TODO: Handling cases where some budget items have not been linked to any indicators
+
+
     # Load in the i2i relation table
     i2i_network = get_i2i_network( i2i_method=i2i_method, model_size=model_size, indic_count=indic_count )
+
+    # Check that the number of budget item expenditures in Bs matches the number of budget item expenditures in B_dict
+    # Zero out any expenditure programs from Bs that are not in B_dict : B_dict shows which indicators are affected by a list of expenditure programs
+    # Bs shows the amount spent on each expenditure program
+    
+    # if Bs.shape[0] != len(programs):
+        # zero out the rows of Bs that do not have an index in programs
+        # Bs[[i for i in range(Bs.shape[0]) if i not in programs]] = 0.0
+    # elif Bs.shape[0] > len(programs):
+        # Bs[[i for i in range(Bs.shape[0]) if i not in programs]] = 0.0
 
     return {
         'indic_start': indic_start,
@@ -228,43 +239,65 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
         if len(_) == 0:
             raise FileNotFoundError(f'No b2i predictions found at {dir_}')
         b2i_preds = pd.read_csv(_[0])
-        
+        b2i_preds['pred_aggregated'] = b2i_preds['pred_aggregated'].apply(lambda x: eval(x))
+        # filter b2i_preds on rows where pred_aggregated dict has key 'Yes' with value more than 0.5
+        b2i_preds = b2i_preds[ b2i_preds.pred_aggregated.apply(lambda x: x.get('Yes', 0.0) >= 0.5) ]
+
         # load info on the index ordering of indicators
 
-        # convert to a dictionary where the key is the indicator_name and the value is the indicator's index
-        indicator_ref = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_normalized_finegrained.csv'), usecols=['indicator_name'])
-        dict_idx_indic = indicator_ref['indicator_name'].to_dict()
-        indicator_list = list(dict_idx_indic.values())
-        dict_indic_idx = {v: k for k, v in dict_idx_indic.items()}
+        # Create Map of indicator index to indicator name
+        pipeline_indicators = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_normalized_finegrained.csv'), usecols=['indicator_name'])
+        dict_indic_idx = {v: k for k, v in pipeline_indicators['indicator_name'].to_dict().items()}
         
-        # get a list of repeated indicators
+        # Info on non unique indicators (by name)
+        dict_idx_indic = pipeline_indicators['indicator_name'].to_dict()
+        indicator_list = list(dict_idx_indic.values())
         non_unique_indicators = [item for item, count in Counter(indicator_list).items() if count > 1]
-        dict_nuindic_idxs = {k:[ i for i,indic in dict_idx_indic.items() if k==indic] for k in non_unique_indicators}
 
-        # contains info on the index ordering of budget items 
-        budget_item_ref = pd.read_csv(os.path.join('data','ppi','data_expenditure_trend_finegrained.csv'), usecols=['seriesName'])
-        dict_idx_bi  = budget_item_ref['seriesName'].to_dict() 
-        dict_bi_idx = {v: k for k, v in budget_item_ref['seriesName'].to_dict().items()}
+        # Create Map of budget item index to budget item name
+        pipeline_budget_items = pd.read_csv(os.path.join('data','ppi','pipeline_expenditure_finegrained.csv'), usecols=['seriesName'])
+        dict_bi_idx = {v: k for k, v in pipeline_budget_items['seriesName'].to_dict().items()}
 
-        B_dict = defaultdict(list) # PPI needs the relational table in the form of a Python dictionary
-        B_dict = {idx:[] for idx in range(len(indicator_list))}
+        # Info on non unique budget items (by name)
+        dict_idx_bi  = pipeline_budget_items['seriesName'].to_dict() 
+        non_unique_bi = [item for item, count in Counter(dict_idx_bi.values()).items() if count > 1]
+        
+
+        B_dict = {idx:[] for idx in range(len(indicator_list))} # PPI needs the relational table in the form of a Python dictionary
+
         for _, row in b2i_preds.iterrows():
             budget_item = row.budget_item
             indicator = row.indicator
-
-            bi_idx = dict_bi_idx[ row.budget_item ] # get the index of the indicator
-
-            if indicator in non_unique_indicators:
-                # If a formatted indicator name is shared by multiple different indicators then we need to find the correct index
-                # We ensure both indicator indexes get assigned the budget item index
-                indic_idxs = dict_nuindic_idxs[indicator]
-                for indic_idx in indic_idxs:
-                    B_dict[indic_idx].append(bi_idx)
-
+            
+            # Removing predictions which are not needed in the pipeline
+            if budget_item not in dict_bi_idx or indicator not in indicator_list:
+                continue
+            
+            # Handling cases where budget items have the same name
+                # If a formatted budget item name is shared by two different budget items then
+                # We ensure both budget item indexes get assigned the indicator index   
+            if budget_item in non_unique_bi:
+                li_bi_idx = [idx for idx, bi in dict_idx_bi.items() if bi==budget_item]
             else:
-                indic_idx = dict_indic_idx[ row.indicator]
-                B_dict[indic_idx].append(bi_idx)
+                li_bi_idx = [ dict_bi_idx[ budget_item ] ] # get the index of the indicator
 
+            # Handling cases where indicators have the same name
+                # If a formatted indicator name is shared by multiple different indicators then 
+                # We ensure both indicator indexes get assigned the budget item index            
+            if indicator in non_unique_indicators:
+                li_ind_idx = [ i for i,indic in dict_idx_indic.items() if indic==indicator]
+            else:
+                li_ind_idx = [ dict_indic_idx[ indicator ] ] # get the index of the indicator
+                
+            for ind_idx in li_ind_idx:
+                for bi_idx in li_bi_idx:
+                    B_dict[ind_idx].append(bi_idx)
+
+        # For any indicators that have not been assigned an associated expenditure programme, use the default value from 'ea' method
+        df_rela = pd.read_csv(os.path.join('data','ppi','pipeline_relation_table_finegrained.csv'))
+        for index, row in df_rela.iterrows():
+            if len(B_dict[int(row.indicator_index)]) == 0:
+                B_dict[int(row.indicator_index)] = [int(programme) for programme in row.values[1::][row.values[1::].astype(str)!='nan']]
     return B_dict
 
 def get_i2i_network(i2i_method, indic_count, model_size=None):
@@ -353,7 +386,6 @@ def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T,
                 logging=logging)
 
     return dict_output
-
 
 # Create an argparse function to parse args
 def get_args():

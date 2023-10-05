@@ -167,7 +167,10 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
     
     # Create reverse disctionary linking expenditure programs to indicators
     programs = sorted(np.unique([item for sublist in B_dict.values() for item in sublist]).tolist())
-    assert Bs.shape[0] == len(programs), 'The number of unique expenditure programs in B_dict do not match the number of rows in Bs'
+    if Bs.shape[0] == len(programs):
+        assert Bs[[i for i in range(Bs.shape[0]) if i not in programs]].sum() == 0, 'The number of unique expenditure programs in B_dict do not match the number of rows in Bs.\
+            All expenditure programs that are not in B_dict should be mapped to zero rows in Bs'
+    
     map_exp_indicators = dict([(program, []) for program in programs])
     sorted_programs = sorted(map_exp_indicators.keys())
     for indi, programs in B_dict.items():
@@ -216,7 +219,7 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
     tsI = [] # stores time series of indicators
     tsC = [] # stores time series of contributions
     tsF = [] # stores time series of benefits
-    tsP = [] # stores time series of allocations5
+    tsP = [] # stores time series of allocations
     tsS = [] # stores time series of spillovers
     tsG = [] # stores time series of gammas
     
@@ -337,11 +340,11 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
         assert np.sum(P==0) == 0, 'P has zero values!'
 
     # turn time series into numpy matrices and return them
-    return np.array(tsI).T, np.array(tsC).T, np.array(tsF).T, np.array(tsP).T, np.array(tsS).T, np.array(tsG).T
+    return np.array(tsI).T, np.array(tsC).T, np.array(tsF).T, np.array(tsP).T, np.array(tsS).T, np.array(tsG).T # shape (N, T)
 
-def run_ppi_parallel(I0, alphas, alphas_prime, betas, A=None, R=None, bs=None, qm=None, rl=None,
+def run_ppi_parallel(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, qm=None, rl=None,
                      Imax=None, Imin=None, Bs=None, B_dict=None, G=None, T=None, frontier=None, 
-                     parallel_processes=4):
+                     parallel_processes=4, sample_size=1):
     
     """Function to run a sample of evaluations in parallel. As opposed to the function
         run_ppi, which returns the output of a single realisation, this function returns
@@ -361,7 +364,7 @@ def run_ppi_parallel(I0, alphas, alphas_prime, betas, A=None, R=None, bs=None, q
                 See run_ppi function.
             betas: numpy array
                 See run_ppi function.
-            A:  2D numpy array (optional)
+            so_network:  2D numpy array (optional)
                 See run_ppi function.
             R:  numpy array (optional)
                 See run_ppi function.
@@ -416,7 +419,7 @@ def run_ppi_parallel(I0, alphas, alphas_prime, betas, A=None, R=None, bs=None, q
     
     sols = Parallel(n_jobs=parallel_processes, verbose=0)(delayed(run_ppi)\
             (I0=I0, alphas=alphas, alphas_prime=alphas_prime, betas=betas, 
-             A=A, R=R, bs=bs, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict, T=T, frontier=frontier) for itera in range(sample_size))
+             so_network=so_network, R=R, bs=bs, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict, T=T, frontier=frontier) for itera in range(sample_size))
     tsI_sample, tsC_sample, tsF_sample, tsP_sample, tsS_sample, tsG_sample = zip(*sols)
     
     return tsI_sample, tsC_sample, tsF_sample, tsP_sample, tsS_sample, tsG_sample
@@ -430,14 +433,19 @@ def compute_error(I0, alphas, alphas_prime, betas, so_network, R, qm, rl, Bs, B_
         sols = np.array([run_ppi(I0=I0, alphas=alphas, alphas_prime=alphas_prime, 
                           betas=betas, so_network=so_network, R=R, qm=qm, rl=rl,
                           Bs=Bs, B_dict=B_dict, T=T) for itera in range(sample_size)])
+
+
     else:
-        sols = np.array(Parallel(n_jobs=parallel_processes, verbose=0, prefer="threads")(delayed(run_ppi)\
+        # sols = np.array(Parallel(n_jobs=parallel_processes, verbose=0, prefer="threads")(delayed(run_ppi)\
+        sols = np.array(Parallel(n_jobs=parallel_processes, verbose=0, prefer="processes")(delayed(run_ppi)\
                 (I0=I0, alphas=alphas, alphas_prime=alphas_prime, betas=betas, 
                  so_network=so_network, R=R, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict, T=T) for itera in range(sample_size)))
         
     tsI, tsC, tsF, tsP, tsS, tsG = zip(*sols)
+        
     I_hat = np.mean(tsI, axis=0)[:,-1]
     gamma_hat = np.mean(tsG, axis=0).mean(axis=1)
+    
     error_alpha = indic_final - I_hat
     error_beta = success_rates - gamma_hat
     return np.array(error_alpha.tolist() + error_beta.tolist()), tsI[0].shape[1]
@@ -628,7 +636,7 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
     # Initialize hyperparameters and containers
     N = len(I0)
     params = np.ones(3*N)*.5 # vector containing all the parameters that need calibration
-    sample_size = mc_simulations # number of Monte Carlo simulations to be run 
+    sample_size = mc_simulations # starting number of Monte Carlo simulations to be run 
     counter = 0
     GoF_alpha = np.zeros(N)
     GoF_beta = np.zeros(N)
@@ -687,16 +695,18 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
             sample_size += increment
             
         # prints the calibration iteration and the worst goodness-of-fit metric
-        if verbose and counter%10==0:
+        if verbose and ( ( counter<=low_precision_counts and counter%10==0 ) or (counter>low_precision_counts and counter%1==0) ):
             msg = 'Iteration: ' + str(counter) + '.    Worst goodness of fit: ' + str(np.min(GoF_alpha.tolist()+GoF_beta.tolist()))
             if logging is not None:
                 logging.info(msg)
             else:
-                print( 'Iteration:', counter, '.    Worst goodness of fit:', np.min(GoF_alpha.tolist()+GoF_beta.tolist()) )
+                print( msg  )
+    
     
     if logging is not None:
         logging.info('Calibration finished!')
-    
+        logging.info('Iterations: ' + str(counter))
+
     if time_experiments: time_elapsed = time.time() - start_time
     # save the last parameter vector and de associated errors and goodness-of-fit metrics
     parameters = np.array([['alpha', 'alpha_prime', 'beta', 'T', 'error_alpha', 
@@ -706,7 +716,7 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
              np.nan, errors_alpha[i], errors_beta[i], 
              GoF_alpha[i], GoF_beta[i]] \
             for i in range(N)])
-
+ 
     
     df_parameters = DataFrame(parameters[1::,:], columns=parameters[0])
     
@@ -719,3 +729,19 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
         
     return dict_output
     
+
+def align_Bs_with_B_dict(Bs:np.array, b2i_network:dict[int,list]):
+    
+    relevant_bi_idxs = sorted(np.unique([item for sublist in b2i_network.values() for item in sublist]).tolist())
+    relevant_bi_idxs = [idx for idx in relevant_bi_idxs if idx < Bs.shape[0]]
+    
+    # re-index the bi_idxs to new idxs
+    dict_biidx_reindx = { old_idx:new_idx for new_idx, old_idx in enumerate(relevant_bi_idxs) }
+
+    # filter Bs
+    Bs = Bs[relevant_bi_idxs, :]
+
+    # re-index the b2i_network
+    b2i_network = { key:[dict_biidx_reindx[old_idx] for old_idx in value] for key, value in b2i_network.items() }
+
+    return Bs, b2i_network
