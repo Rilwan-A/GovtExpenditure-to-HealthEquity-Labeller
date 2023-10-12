@@ -29,8 +29,8 @@ def main( impute_start_year:int=2018, impute_years:int=1,
     Bs, b2i_network = align_Bs_with_B_dict(fBs, b2i_network)
 
     impute_output = impute_indicators( impute_years, time_refinement_factor,
-                                                current_I, fBs, frl, fG, i2i_network, b2i_network,
-                                                model_params = model_params,
+                                                current_I, fBs, frl, fG, i2i_network, 
+                                                b2i_network, model_params = model_params,
                                                 parallel_processes=parallel_processes,
                                                 mc_simulations=mc_simulations,
                                                 adjusted_impute_periods=impute_periods )
@@ -46,6 +46,10 @@ def main( impute_start_year:int=2018, impute_years:int=1,
         'impute_start_year': impute_start_year,
         'impute_years': impute_years,
         'indicator_names': indicator_names,
+        'exp_num': exp_num,
+        'exp_group': exp_group,
+
+        'model_hparams': model_hparams,
     }
 
     save_dir = os.path.join('.','agent_based_modelling','output', 'imputations', f'{exp_group}' )
@@ -214,7 +218,7 @@ def impute_indicators(impute_years, time_refinement_factor, current_I, fBs, frl,
                                  Imax=Imax, Imin=Imin, 
                                  Bs=Bs, B_dict=B_dict, G=G,
                                  T=impute_periods,
-                                 parallel_processes=parallel_processes,
+                                 parallel_processes=max(parallel_processes,1),
                                  sample_size=mc_simulations)
         
         imputed_indicators = np.stack(li_imputed_indicators, axis=0).swapaxes(1,2) # (mc_simulations, impute_periods, indicator_count)
@@ -240,7 +244,7 @@ def load_true_indicators( impute_start_year, impute_years):
 
     df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
     indicator_names = df_indic.indicator_name.values
-    indicator_values = df_indic[ [str(year) for year in range(impute_start_year, impute_start_year+impute_years) ] ].values
+    indicator_values = df_indic[ [str(year) for year in range(impute_start_year, impute_start_year+impute_years) ] ].values.T
     # hyper_params = yaml.safe_load( open( os.path.join(save_dir, 'hyperparams.yaml'), 'r' ) )
     
     return indicator_values, indicator_names
