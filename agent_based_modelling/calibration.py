@@ -111,7 +111,7 @@ def main(   start_year, end_year,
             time_elapsed:list[int] = [dict_output['time_elapsed'] for dict_output in li_exp_output]
             iterations:list[int] = [dict_output['iterations'] for dict_output in li_exp_output]
             
-            df_time = pd.DataFrame({'time_elapsed':time_elapsed, 'iterations':iterations, 'exp_number':list(range(exp_samples))})
+            df_time = pd.DataFrame({'time_elapsed':time_elapsed, 'train_iters':iterations, 'sample_number':list(range(exp_samples) ) })
             df_time.to_csv(os.path.join(exp_dir, exp_number_str, f'calibration_time.csv'), index=False)
 
         # Save hyperparameters as yaml
@@ -119,7 +119,7 @@ def main(   start_year, end_year,
             'calibration_start_year':start_year,
             'calibration_end_year':end_year,
             'parallel_processes':parallel_processes,
-            'threshold': { idx:th for idx,th in zip(range(len(thresholds)), thresholds) },
+            'threshold': threshold,
             'low_precision_counts':low_precision_counts,
             'mc_simulations':mc_simulations,
             'increment':increment,
