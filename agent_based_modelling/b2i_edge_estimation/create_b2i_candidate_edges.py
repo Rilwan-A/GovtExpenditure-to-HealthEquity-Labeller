@@ -42,6 +42,7 @@ df_indicators = pd.read_csv(os.path.join('data','ppi','pipeline_indicators_sampl
 # Reading in fine grained budget item data
 df_finegrained_budget_items = pd.read_csv(os.path.join('data','ppi','data_expenditure_raw.csv'), usecols=['seriesCode','seriesName', 'category']).rename({'seriesName':'budget_item_finegrained', 'seriesCode':'bi_fg_code'}, axis=1)
 
+
 # In category column replace all instances of 'Env & Reg' with 'Environmental Policy and Regulation
 # In category column replace all instance sof 'Central' with 'Central Services'
 df_finegrained_budget_items['category'] = df_finegrained_budget_items['category'].replace('Env & Reg', 'Environmental Policy and Regulation')
@@ -96,6 +97,10 @@ for i in range(len(df_finegrained_budget_items)):
 
 # Make dataframe from list of dictionaries
 df_candidates = pd.DataFrame(candidates)
+
+# filter b2i_df_candidates for budget items that are in the pipeline
+df_pipeline_finegrained_budget_items = pd.read_csv(os.path.join('data','ppi','pipeline_expenditure_finegrained.csv', usecols=['seriesName', 'category'])).rename({'seriesName':'budget_item_finegrained'}, axis=1)
+df_candidates = df_candidates[df_candidates['budget_item'].isin(df_pipeline_finegrained_budget_items['budget_item_finegrained'])]
 
 # Save to csv
 df_candidates.to_csv(os.path.join('data','ppi','b2i_networks',"b2i_candidates.csv"), index=False)
