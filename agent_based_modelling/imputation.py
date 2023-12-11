@@ -1,110 +1,162 @@
-"""
-    In this script we are focused on imputing the level of the indicators over the next n-1 timesteps after learning a model on the first m timesteps.
-    We use the indicator level at step m+n to define the development goal. We input resource allocation and the true rule of law over between step m and step m+n-1
-    We then can impute the indicator values between step m and step m+n-1
-    We can then compare the imputed indicator values to the true indicator values between step m and step m+n-1,
-    We can then evaluate how well our model has learnt the dynamics between budget items, indicators and agents.
-    
-
-    The key steps would be:
-    0) Load in the parameters saved from the previous run
-    1) Initialize the model with the current indicator levels.
-    2) Specify the resource allocation (P) for each indicator that you expect in the next n time steps. 
-    3) Specify the projected rule of law (fR) for the next n time steps.
-    4) Run the model for n time steps, using the specified P and fR as inputs. 
-    5) The model will then forecast the indicator levels (I) for the next n time steps, based on:
-
-"""
 import argparse
 import pandas as pd
 import os
 import numpy as np
 import yaml
-from ppi import run_ppi
+from agent_based_modelling.ppi import run_ppi, run_ppi_parallel, align_Bs_with_B_dict
+import glob
 import pickle
-from prompt_engineering.langchain.utils import ALL_MODELS
 
-def main( impute_periods:int, spillover_predictor_model_name, exp_num:int=0):
+from agent_based_modelling.calibration import get_b2i_network, get_i2i_network
+
+
+def main( impute_start_year:int=2018, impute_years:int=1,
+            exp_group:str=None, mc_simulations:int=1, parallel_processes:int=None,
+            exp_num:int=0):
 
     # Load parameters from trained ppi model
     # Load calibration_kwargs e.g. the params for the PPI model
-    model_params = load_model_kwargs( spillover_predictor_model_name, exp_num)
+    model_params = load_model_kwargs( exp_num, exp_group )
+    model_hparams = load_model_hparams( exp_num, exp_group )
 
-    current_I, fBs, frl, fG = load_currI_fBs_frl_fG( spillover_predictor_model_name , impute_periods=impute_periods )
+    current_I, fBs, frl, fG, time_refinement_factor, impute_periods = load_currI_fBs_frl_fG( impute_start_year=impute_start_year, impute_years=impute_years,
+                                                                                exp_group=exp_group, exp_num=exp_num  )
 
-    imputed_indicators = impute_indicators( impute_periods,
-                                                current_I, fBs, frl, fG,
-                                                model_params = model_params )
+    i2i_network = get_i2i_network( model_hparams['i2i_method'], current_I.shape[0], model_hparams['model_size'] )
     
-    true_indicators, years, indicator_names = load_true_indicators( spillover_predictor_model_name, impute_periods=impute_periods )
+    b2i_network = get_b2i_network( model_hparams['b2i_method'], model_hparams['model_size'] )
+
+    Bs, b2i_network = align_Bs_with_B_dict(fBs, b2i_network)
+
+    impute_output = impute_indicators( impute_years, time_refinement_factor,
+                                                current_I, fBs, frl, fG, i2i_network, 
+                                                b2i_network, model_params = model_params,
+                                                parallel_processes=parallel_processes,
+                                                mc_simulations=mc_simulations,
+                                                adjusted_impute_periods=impute_periods )
+    
+    indicator_values, indicator_names = load_true_indicators( impute_years=impute_years, impute_start_year=impute_start_year )
 
     #  Save the imputed and true indicators to file
     outp = {
-        'imputed_indicators': imputed_indicators,
-        'true_indicators': true_indicators,
-        'years': years,
+        'imputed_indicators': impute_output['imputed_indicators'],
+        'imputed_allocations': impute_output['imputed_allocations'],
+        'imputed_spillovers': impute_output['imputed_spillovers'],
+        'target_indicators': indicator_values,
+        'impute_start_year': impute_start_year,
+        'impute_years': impute_years,
         'indicator_names': indicator_names,
+        'exp_num': exp_num,
+        'exp_group': exp_group,
 
+        'model_hparams': model_hparams,
     }
 
-    save_dir = os.path.join('.','agent_based_modelling','outputs', 'calibrate', spillover_predictor_model_name.replace('/','_') )
-    exp_num = str(exp_num).zfill(3)
-    fn = f'imputed_indicators_{exp_num}.pkl'
+    save_dir = os.path.join('.','agent_based_modelling','output', 'imputations', f'{exp_group}' )
+    os.makedirs(save_dir, exist_ok=True)
+        
+    fn = f'exp_{str(exp_num).zfill(3)}.pkl'
     with open(os.path.join(save_dir, fn), 'wb') as f:
         pickle.dump(outp, f)
 
-
-    # Save the imputed and true indicators to file
-
-def load_model_kwargs( spillover_predictor_model_name, exp_num:int|None=None ) -> dict:
+def load_model_kwargs( exp_num:int, exp_group=None ) -> pd.DataFrame:
     
-    save_fn = f'calibration_kwargs.yaml'        
-    save_dir = os.path.join('.','agent_based_modelling','outputs', 'calibrate', spillover_predictor_model_name.replace('/','_') )
+    if exp_group is None:
+        f_pattern = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters', f'exp_{str(exp_num).zfill(3)}','params_v**.csv') 
+    else:
+        f_pattern = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters', exp_group, f'exp_{str(exp_num).zfill(3)}','params_v**.csv')
 
-    # Convert
-    import pickle
-    with open(os.path.join(save_dir, str(exp_num).zfill(3), save_fn), 'rb') as f:
-        model_params = pickle.load(f)
+    # get list of versions of parameters associated with the experiment number
+    param_files = glob.glob( f_pattern )
 
-    return model_params
+    # get the latest version - this should the file with the highest goodness of fit
+    fp = sorted(param_files)[-1]
 
-def load_currI_fBs_frl_fG(spillover_predictor_model_name, impute_periods):
+    df_parameters = pd.read_csv(fp)
+
+    return df_parameters
+
+def load_model_hparams( exp_num, exp_group=None ) -> pd.DataFrame:
+    
+    if exp_group is None:
+        f_pattern = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters', f'exp_{str(exp_num).zfill(3)}','hyperparams.yaml')
+    else:
+        f_pattern = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters', exp_group, f'exp_{str(exp_num).zfill(3)}','hyperparams.yaml')
+
+    # get list of versions of parameters associated with the experiment number
+    param_files = glob.glob( f_pattern )
+
+    # get the latest version - this should the file with the highest goodness of fit
+    fp = sorted(param_files)[-1]
+
+    df_parameters = yaml.safe_load( open(fp ,"r") )
+
+    return df_parameters
+
+def load_currI_fBs_frl_fG(impute_start_year=2018, impute_years=1, exp_group=None, exp_num=0):
     """
     Load the current indicator levels, forecasted resource allocation, and forecasted rule of law for the next n time steps.
     """
 
-    save_dir = os.path.join('.','agent_based_modelling','outputs', 'calibrate', spillover_predictor_model_name.replace('/','_') )
+    # exp_dir = os.path.join('.','agent_based_modelling','output', 'calibrated_parameters', f'exp_{str(exp_num).zfill(3)}' )
+    # # get list of versions of parameters associated with the experiment number
+    # # get the latest version - this should the file with the highest goodness of fit
+    # f_pattern_params = os.path.join(exp_dir, 'params_v**.csv')
+    # param_files = glob.glob( f_pattern_params )
+    # fp = sorted(param_files)[-1]
+    # calibration_params = pd.read_csv(fp)
 
-    hyper_params = yaml.safe_load( open( os.path.join(save_dir, 'hyperparams.yaml'), 'r' ) )
+    if exp_group is None:
+        calibration_hparams = os.path.join( '.', 'agent_based_modelling', 'output', 'calibrated_parameters', f'exp_{str(exp_num).zfill(3)}', 'hyperparams.yaml')
+    else:
+        calibration_hparams = os.path.join( '.', 'agent_based_modelling', 'output', 'calibrated_parameters', exp_group, f'exp_{str(exp_num).zfill(3)}', 'hyperparams.yaml')
 
-    calibration_start_year = hyper_params['start_year']
-    calibration_end_year = hyper_params['end_year']
+    calibration_hparams = yaml.safe_load( open( calibration_hparams, 'r' ) )
+
+    calibration_start_year = calibration_hparams['calibration_start_year']
+    calibration_end_year = calibration_hparams['calibration_end_year']
+    
+    # The start and final year are used as inputs to the PPI model
+    impute_final_year = impute_start_year + impute_years -1
 
     # Load the data
-    df_indic = pd.read_csv('./agent_based_modelling/data/pipeline_indicators_normalized.csv', encoding='unicode_escape') 
-    df_exp = pd.read_csv('./agent_based_modelling/data/pipeline_expenditure.csv')
-    colYears = [col for col in df_indic.columns if str(col).isnumeric()]
+    df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
+    df_exp = pd.read_csv('./data/ppi/pipeline_expenditure_finegrained.csv')
+    
+    years = [col for col in df_indic.columns if str(col).isnumeric() ] #if col>=calibration_start_year and col<=impute_final_year ]
+    years_int = [int(col) for col in years]
+    tft = time_refinement_factor = df_exp['time_refinement_factor'].values[0]
 
     # Checking that the forecast period is within the bounds of the training data
-    final_period = impute_periods + 1
-    assert final_period <= len(colYears) - colYears.index(calibration_end_year) - 1, \
-        f'Forecast period is too long. Max forecast period is {len(colYears) - colYears.index(calibration_end_year) - 1}'
+    
+    assert ( str(int(impute_start_year-1)) in years) and (str(impute_final_year) in years), \
+        f'Impute period is not within the bounds of the available data'
 
     # current_I
-    current_I = df_indic[colYears.index(calibration_end_year) ].iloc[-1].values
+    # we take imputation levels from the end of previous year
+    current_I = df_indic[ str(impute_start_year-1) ].values
 
     # fBs - control budget allocation
-    fBs = df_exp[colYears[colYears.index(calibration_end_year) + 1:colYears.index(calibration_end_year) + 1 + final_period]].iloc[-1].values #(assumes that the expenditure programmes are properly sorted)
-        
+    # Our imputation periods starts from one interpolation into the imputation start year
+    impute_start_period_idx = ( years_int.index(impute_start_year)-years_int.index(calibration_start_year) )*tft
+    impute_final_period_idx = ( years_int.index(impute_final_year)-years_int.index(calibration_start_year) )*tft + (tft-1)
+    fBs_cols = [ str(idx) for idx in  range(impute_start_period_idx, impute_final_period_idx+1) ]
+    fBs = df_exp[ fBs_cols ].values
+
     # fR
     frl = df_indic.rl.values # quality of the rule of law
 
     # fG
-    fG = df_indic[colYears.index(calibration_end_year+final_period) ].iloc[-1].values
+    fG = df_indic[str(impute_final_year)].values
 
-    return current_I, fBs, frl, fG
+    # 
+    impute_periods = len(fBs_cols)
+
+    return current_I, fBs, frl, fG, time_refinement_factor, impute_periods
     
-def impute_indicators(impute_periods, current_I, fBs, frl, fG , model_params ):
+def impute_indicators(impute_years, time_refinement_factor, current_I, fBs, frl, fG, 
+    i2i_network, b2i_network, model_params, parallel_processes=None, mc_simulations=1,
+    adjusted_impute_periods=None ):
     """
     Forecast the indicator levels for the next n time steps using the PPI model.
     
@@ -112,82 +164,101 @@ def impute_indicators(impute_periods, current_I, fBs, frl, fG , model_params ):
     - filepath: The path to the saved parameter file
     - current_I: The current indicator levels
     - P: Resource allocation for each indicator for the next n time steps
+    - fBs: Forecasted Budget Allocation for the next n time steps
     - fR: Projected rule of law for the next n time steps
     
     Returns:
     - Forecasted indicator levels for the next n time steps
     """
-    forecast_periods = impute_periods + 1
-    assert len(fBs) == forecast_periods, f'P must be a list of length {forecast_periods}'
-    assert len(frl) == forecast_periods, f'fR must be a list of length {forecast_periods}'
+    if adjusted_impute_periods is not None:
+        impute_periods = adjusted_impute_periods
+    else:
+        impute_periods = impute_years*time_refinement_factor
+
+    assert fBs.shape[1] == impute_periods, f'fBs must be an array of shape (budget_item_count, {impute_periods} )'
+    assert len(frl) == len(current_I) , f'fR must have an element for each indicator. fR has {len(frl)} elements, while current_I has {len(current_I)} elements'
     
     # Extract the controlled parameters
     I0 = current_I # Initial indicator levels
-    T = forecast_periods # Forecast period
+    T = impute_periods # Forecast period
     G = fG # Target indicator level
-    rl = np.array([frl]*T) # Assuming constant Projected rule of law over imputation period
+    rl = frl 
     Bs = fBs # Forecasted Budget Allocation
 
+    so_network = i2i_network
+    B_dict = b2i_network
+
     # Extract the necessary parameters
-    alphas = model_params['alphas']
-    alphas_prime = model_params['alphas_prime']
-    betas = model_params['betas']
-    so_network = model_params['so_network']
-    Imax = model_params['Imax']
-    Imin = model_params['Imin']
-    R = model_params['R']
-    qm = model_params['qm']
-    B_dict = model_params['B_dict']
-    bs = model_params['bs'] 
-           
+    alphas = model_params['alpha'].values
+    alphas_prime = model_params['alpha_prime'].values
+    betas = model_params['beta'].values
+    
+    Imax = model_params.get('Imax', None)
+    Imin = model_params.get('Imin', None)
+
+    df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
+
+    R = df_indic.R.values
+    qm = df_indic.qm.values
+    bs = df_indic.bs.values if 'bs' in df_indic.columns else None
     
     # Step 2 and 4 are combined: Run the model for frl steps, 
     # using the specified P and fR as inputs
-    tsI, _, _, _, _, _ = run_ppi(I0, alphas, alphas_prime, betas, so_network, 
-                                 R, bs, qm, rl, Imax, Imin, Bs, B_dict, G, T)
+    if mc_simulations==1 and (parallel_processes is None or parallel_processes == 1):
+        imputed_indicators, _, _, imputed_allocations, imputed_spillovers, _ = run_ppi(I0=I0, alphas=alphas, alphas_prime=alphas_prime,
+                                 betas=betas, so_network=so_network, R=R, 
+                                 bs=bs, qm=qm, rl=rl,
+                                 Imax=Imax, Imin=Imin, 
+                                 Bs=Bs, B_dict=B_dict, G=G,
+                                 T=impute_periods)
+    else:
+        li_imputed_indicators, _, _, li_imputed_allocations, li_imputed_spillovers, _ = run_ppi_parallel(I0=I0, alphas=alphas, alphas_prime=alphas_prime,
+                                 betas=betas, so_network=so_network, R=R, 
+                                 bs=bs, qm=qm, rl=rl,
+                                 Imax=Imax, Imin=Imin, 
+                                 Bs=Bs, B_dict=B_dict, G=G,
+                                 T=impute_periods,
+                                 parallel_processes=max(parallel_processes,1),
+                                 sample_size=mc_simulations)
+        
+        imputed_indicators = np.stack(li_imputed_indicators, axis=0).swapaxes(1,2) # (mc_simulations, impute_periods, indicator_count)
+        imputed_allocations = np.stack(li_imputed_allocations, axis=0).swapaxes(1,2) # (mc_simulations, impute_periods, indicator_count)
+        imputed_spillovers = np.stack(li_imputed_spillovers, axis=0).swapaxes(1,2) # (mc_simulations, impute_periods, indicator_count, indicator_count)
+
     
 
-    forecasted_I = tsI
-    
-    return forecasted_I
+    # Handling the time_refinement_factor
+    # The indicator time series is interpolated to a finer time scale of factor time_refinement_factor
+    if time_refinement_factor > 1:
 
-def load_true_indicators(spillover_predictor_model_name, impute_periods):
+        imputed_indicators = imputed_indicators[:, ::-time_refinement_factor ][:, ::-1] 
+        imputed_allocations = imputed_allocations[:, ::-time_refinement_factor ][:, ::-1] 
+        imputed_spillovers = imputed_spillovers[:, ::-time_refinement_factor ][:, ::-1] 
+    
+    return {'imputed_indicators': imputed_indicators, 'imputed_allocations': imputed_allocations, 'imputed_spillovers': imputed_spillovers}
+
+def load_true_indicators( impute_start_year, impute_years):
     """
     Load the true indicator levels for the next forecast_periods time steps.
     """
-    forecast_periods = impute_periods + 1
 
-    save_dir = os.path.join('.','agent_based_modelling','outputs', 'calibrate', spillover_predictor_model_name.replace('/','_') )
-
-    hyper_params = yaml.safe_load( open( os.path.join(save_dir, 'hyperparams.yaml'), 'r' ) )
-
-    # calibration_start_year = hyper_params['start_year']
-    calibration_end_year = hyper_params['end_year']
-
-    # Load the data
-    df_indic = pd.read_csv('./agent_based_modelling/data/pipeline_indicators_normalized.csv', encoding='unicode_escape') 
-    colYears = [col for col in df_indic.columns if str(col).isnumeric()]
-
-    # Checking that the forecast period is within the bounds of the training data
-    assert forecast_periods <= len(colYears) - colYears.index(calibration_end_year) - 1, \
-        f'Forecast period is too long. Max forecast period is {len(colYears) - colYears.index(calibration_end_year) - 1}'
+    df_indic = pd.read_csv('./data/ppi/pipeline_indicators_normalized_finegrained.csv', encoding='utf-8') 
+    indicator_names = df_indic.indicator_name.values
+    indicator_values = df_indic[ [str(year) for year in range(impute_start_year, impute_start_year+impute_years) ] ].values.T
+    # hyper_params = yaml.safe_load( open( os.path.join(save_dir, 'hyperparams.yaml'), 'r' ) )
     
-    # True indicator levels
-    true_indicators = df_indic[colYears.index(calibration_end_year) + 1:colYears.index(calibration_end_year) + 1 + forecast_periods].values
-
-    years = np.arange(calibration_end_year, calibration_end_year + forecast_periods+1, 1.0)
-
-    indicator_names = df_indic.seriesName.values
-
-    return true_indicators, years, indicator_names
+    return indicator_values, indicator_names
 
 def get_args():
     """
     Parse command line arguments.
     """
     parser = argparse.ArgumentParser(description='Impute missing values in a time series.')
-    parser.add_argument('--spillover_predictor_model_name', type=str, default='bdag', choices=['bdag']+ALL_MODELS , help='Name of the spillover predictor model')
-    parser.add_argument('--impute_periods', type=int, default=1, help='Number of periods to impute. This assumes you have the final indicator level after the periods to be imputed')
+    parser.add_argument('--impute_start_year', type=int, default=2018, help='The year to start imputing from')
+    parser.add_argument('--impute_years', type=int, default=1, help='Number of years to impute. This assumes you have the final indicator level after the periods to be imputed')
+    parser.add_argument('--exp_group', type=str, default=None, help='The name of the experiment group')
+    parser.add_argument('--mc_simulations', type=int, default=1, help='Number of Monte Carlo simulations to run')
+    parser.add_argument('--parallel_processes', type=int, default=None, help='Number of parallel processes to run')
     parser.add_argument('--exp_num', type=int, default=0)
     args = parser.parse_args()
     return args

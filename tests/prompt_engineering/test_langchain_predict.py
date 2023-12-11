@@ -5,8 +5,8 @@ from langchain import HuggingFacePipeline
 from  langchain.chat_models import ChatOpenAI
 from  langchain.llms import HuggingFaceHub
 
-from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
-from prompt_engineering.langchain.predict import load_llm
+from prompt_engineering.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
+from prompt_engineering.predict import load_llm
 import yaml
 
 # Set environment variables
@@ -38,7 +38,7 @@ def test_load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style):
     assert llm_name in ALL_MODELS, f"llm_name must be a valid model name, not {llm_name}"
 
     # Call the load_llm() function.
-    llm = load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
+    llm, tokenizer = load_llm(llm_name, finetuned, local_or_remote, api_key, prompt_style)
 
     # Assert that the llm object is not None.
     assert llm is not None

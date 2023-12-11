@@ -2,7 +2,7 @@
 
 Authors: Omar A. Guerrero & Gonzalo Castañeda
 Edited: Rilwan Adewoyin
-Written in Pyhton 3.7
+Written in Pyhton 3.10
 
 
 Example
@@ -19,12 +19,12 @@ Rquired external libraries
 """
 
 # import necessary libraries
-from __future__ import division, print_function
 import numpy as np
 from joblib import Parallel, delayed
 import warnings
+from  pandas import  DataFrame
 warnings.simplefilter("ignore")
-
+import time
 
 def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, qm=None, rl=None,
             Imax=None, Imin=None, Bs=None, B_dict=None, G=None, T=None, frontier=None):
@@ -91,9 +91,12 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
     
     # Instrumental indicators
     if R is None:
-        R = np.ones(N).astype(bool)
+        R = np.ones(N)
+        # R = R.astype(int)
+        R = R.astype(bool)
     else:
         R[R!=1] = 0
+        # R = R.astype(int)
         R = R.astype(bool)
         assert np.sum(R) > 0, 'R needs at least one entry with value 1'
         assert len(R) == N, 'R should have the same size as I0'
@@ -164,13 +167,16 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
     
     # Create reverse disctionary linking expenditure programs to indicators
     programs = sorted(np.unique([item for sublist in B_dict.values() for item in sublist]).tolist())
-    assert Bs.shape[0] == len(programs), 'The number of unique expenditure programs in B_dict do not match the number of rows in Bs'
-    program2indis = dict([(program, []) for program in programs])
-    sorted_programs = sorted(program2indis.keys())
+    if Bs.shape[0] == len(programs):
+        assert Bs[[i for i in range(Bs.shape[0]) if i not in programs]].sum() == 0, 'The number of unique expenditure programs in B_dict do not match the number of rows in Bs.\
+            All expenditure programs that are not in B_dict should be mapped to zero rows in Bs'
+    
+    map_exp_indicators = dict([(program, []) for program in programs])
+    sorted_programs = sorted(map_exp_indicators.keys())
     for indi, programs in B_dict.items():
         for program in programs:
-            if R[indi]:
-                program2indis[program].append( indi )
+            if R[indi] is True or R[indi] == 1:
+                map_exp_indicators[program].append( indi )
     inst2idx = np.ones(N)*np.nan
     inst2idx[R] = np.arange(n)
     
@@ -185,8 +191,9 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
         p0 = np.random.rand(n)
     i=0
     for program in sorted_programs:
-        indis = program2indis[program]
+        indis = map_exp_indicators[program]
         relevant_indis = inst2idx[indis].astype(int)
+        # Adding contribution from Expenditure programs (Bs) to the initial allocation profile (P0)
         P0[relevant_indis] += Bs[i,0]*p0[relevant_indis]/p0[relevant_indis].sum()
         i+=1
     
@@ -264,7 +271,7 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
         
         ### DETERMINE INDICATORS ###
         deltaM = np.array([deltaBin,]*len(deltaBin)).T # reshape deltaIAbs into a matrix
-        S = np.sum(deltaM*so_network, axis=0) # compute spillovers
+        S = np.sum(deltaM*so_network, axis=1) # compute spillovers
         assert np.sum(np.isnan(S)) == 0, 'S has invalid values!'
         tsS.append(S) # store spillovers
         cnorm = np.zeros(N) # initialize a zero-vector to store the normalized contributions
@@ -319,7 +326,7 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
         P = np.zeros(n)
         # iterate over the expenditure programs
         for i, program in enumerate(sorted_programs):
-            indis = program2indis[program]
+            indis = map_exp_indicators[program]
             relevant_indis = inst2idx[indis].astype(int)
             q = P0[relevant_indis]/P0[relevant_indis].sum() # compute expenditure propensities
             assert np.sum(np.isnan(q)) == 0, 'q has invalid values!'
@@ -333,203 +340,291 @@ def run_ppi(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, q
         assert np.sum(P==0) == 0, 'P has zero values!'
 
     # turn time series into numpy matrices and return them
-    return np.array(tsI).T, np.array(tsC).T, np.array(tsF).T, np.array(tsP).T, np.array(tsS).T, np.array(tsG).T
+    return np.array(tsI).T, np.array(tsC).T, np.array(tsF).T, np.array(tsP).T, np.array(tsS).T, np.array(tsG).T # shape (N, T)
+
+def run_ppi_parallel(I0, alphas, alphas_prime, betas, so_network=None, R=None, bs=None, qm=None, rl=None,
+                     Imax=None, Imin=None, Bs=None, B_dict=None, G=None, T=None, frontier=None, 
+                     parallel_processes=4, sample_size=1):
+    
+    """Function to run a sample of evaluations in parallel. As opposed to the function
+        run_ppi, which returns the output of a single realisation, this function returns
+        a set of time series (one for each realisation) of each output type.
+
+        Parameters
+        ----------
+            I0: numpy array 
+                See run_ppi function.
+            IF: numpy array 
+                See calibrate function.
+            success_rates: numpy array 
+                See calibrate function.
+            alphas: numpy array
+                See run_ppi function.
+            alphas_prime: numpy array
+                See run_ppi function.
+            betas: numpy array
+                See run_ppi function.
+            so_network:  2D numpy array (optional)
+                See run_ppi function.
+            R:  numpy array (optional)
+                See run_ppi function.
+            bs: numpy array (optional)
+                See run_ppi function.
+            qm: A floating point, an integer, or a numpy array (optional)
+                See run_ppi function.
+            rl: A floating point, an integer, or a numpy array (optional)
+                See run_ppi function.
+            Bs: numpy ndarray (optional)
+                See run_ppi function.
+            B_dict: dictionary (optional)
+                See run_ppi function.
+            G: numpy array (optional)
+                See run_ppi function.
+            T: int (optional)
+                See run_ppi function.
+            frontier: boolean
+                See run_ppi function.
+            parallel_processes: integer (optional)
+                See calibrate function.
+            sample_size: integer (optional)
+                Number of Monte Carlo simulations to be ran.
+            
+        Returns
+        -------
+        tsI: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsC: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsF: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsP: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsS: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+        tsG: list
+            A list with multiple matrices, each one containing the time series 
+            of multiple realisations of the simulated indicators. In each matrix, 
+            each row corresponds to an indicator and each column to a simulation step.
+    """
+    
+    sols = Parallel(n_jobs=parallel_processes, verbose=0)(delayed(run_ppi)\
+            (I0=I0, alphas=alphas, alphas_prime=alphas_prime, betas=betas, 
+             so_network=so_network, R=R, bs=bs, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict, T=T, frontier=frontier) for itera in range(sample_size))
+    tsI_sample, tsC_sample, tsF_sample, tsP_sample, tsS_sample, tsG_sample = zip(*sols)
+    
+    return tsI_sample, tsC_sample, tsF_sample, tsP_sample, tsS_sample, tsG_sample
+
 
 ## Computes a set of Monte Carlo simulations of PPI, obtains their average statistics, 
 ## and computes the error with respect to indic_final and success_rates. Called by the calibrate function.
 def compute_error(I0, alphas, alphas_prime, betas, so_network, R, qm, rl, Bs, B_dict, T, 
                   indic_final, success_rates, parallel_processes, sample_size):
-    if parallel_processes is None:
+    if parallel_processes is None or parallel_processes == 1:
         sols = np.array([run_ppi(I0=I0, alphas=alphas, alphas_prime=alphas_prime, 
                           betas=betas, so_network=so_network, R=R, qm=qm, rl=rl,
                           Bs=Bs, B_dict=B_dict, T=T) for itera in range(sample_size)])
+
+
     else:
-        sols = np.array(Parallel(n_jobs=parallel_processes, verbose=0, prefer="threads")(delayed(run_ppi)\
+        # sols = np.array(Parallel(n_jobs=parallel_processes, verbose=0, prefer="threads")(delayed(run_ppi)\
+        sols = np.array(Parallel(n_jobs=parallel_processes, verbose=0, prefer="processes")(delayed(run_ppi)\
                 (I0=I0, alphas=alphas, alphas_prime=alphas_prime, betas=betas, 
                  so_network=so_network, R=R, qm=qm, rl=rl, Bs=Bs, B_dict=B_dict, T=T) for itera in range(sample_size)))
         
     tsI, tsC, tsF, tsP, tsS, tsG = zip(*sols)
+        
     I_hat = np.mean(tsI, axis=0)[:,-1]
     gamma_hat = np.mean(tsG, axis=0).mean(axis=1)
+    
     error_alpha = indic_final - I_hat
     error_beta = success_rates - gamma_hat
     return np.array(error_alpha.tolist() + error_beta.tolist()), tsI[0].shape[1]
 
 ## Calibrates PPI automatically and return a Pandas DataFrame with the parameters, errors, and goodness of fit
 def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, rl=None,  Bs=None, B_dict=None, 
-              T=None, threshold=.8, parallel_processes=None, 
-              verbose=False, low_precision_counts=101, increment=1000):
+              T=None, threshold=.8, parallel_processes=None, time_experiments=False,
+              verbose=False, low_precision_counts=101, increment=1000, mc_simulations=10, logging=None):
 
     """Function to calibrate PPI.
 
-    Parameters
-    ----------
-        I0: numpy array 
-            Vector with initial values of the development indicators. These are
-            the initial conditions for the indicators in the simulations.
-        indic_final: numpy array 
-            Vector with final values of the development indicators. These are
-            used to compute one type of error: whether the simulated values
-            end at the same levels as the empirical ones.
-        success_rates: numpy array 
-            Vector with the rate of growth of the development indicators.
-            so_network growth rate, for an indicator, is the number of times a posivite 
-            change was observed, divided by the the total number of changes 
-            (which should be the number of periods in the time series minus one).
-            These rates must be greater than zero and less or equal to 1.
-            If an indicator does not show positive changes, it is suggested
-            to assign a rate close to zero. If success_rates contains values 
-            that are zero (or less) or ones, they will be automatically replaced
-            by 0.01 and 1.0 respectively.
-            This input is used to compute another type of error: whether the 
-            endogenous probability of success of each indicator matches the 
-            empirical rate of positive changes.
-        so_network:  2D numpy array (optional)
-            The adjacency matrix of the spillover network of development 
-            indicators. The rows denote the origins of spillovers and the columns
-            their destinations. Self-loops are not allowed, so PPI turns so_network's
-            diagonal into zeros. If not provided, the default value is a matrix 
-            full of zeros.
-        R:  numpy array (optional)
-            Vector that specifies whether an indicator is instrumental
-            or collateral. Instrumental indicators have value 1 and collateral
-            ones have zero. If not provided, the default value is
-            a vector of ones.
-        bs: numpy array (optional)
-            Vector with modulating factors for the budgetary allocation of
-            each instrumental indicator. Its size should be equal to the number
-            of instrumental indicators. If not provided, the default value is
-            a vector of ones.
-        qm: A floating point, an integer, or a numpy array (optional)
-            Vector with parametrs capturing the quality of the monitoring 
-            mechanisms that procure public governance. There are three options
-            to specify qm:
-                - A floating: it assumes that the quality of monitoring is qm,
-                that it is the same for every indicator, that it is exogenous, 
-                and that it remains constant through time. In this case, qm 
-                should have a value between 0 and 1.
-                - An integer: it assumes that the quality of monitoring is one 
-                of the indicators, so qm gives the index in I0 where this indicator
-                is located. Here, the quality of monitoring is endogenous, 
-                dynamic, and homogenous across the indicators.
-                - A vector: it assumes that the quality of monitoring is
-                heterogeneous across indicators, exogenous, and constant. Thus,
-                qm has to have a size equal to the number of instrumental
-                indicators. Each entry in qm denotes the quality of monitoring
-                in a particular policy issue (indicator).
-            If not provided, the default values is qm=0.5.
-        rl: A floating point, an integer, or a numpy array (optional)
-            Vector with parametrs capturing the quality of the rule of law. 
-            There are three options to specify rl:
-                - A floating: it assumes that the quality of the rule of law  is rl,
-                that it is the same for every indicator, that it is exogenous, 
-                and that it remains constant through time. In this case, rl 
-                should have a value between 0 and 1.
-                - An integer: it assumes that the quality of the rule of law is one 
-                of the indicators, so rl gives the index in I0 where this indicator
-                is located. Here, the quality of the rule of law is endogenous, 
-                dynamic, and homogenous across the indicators.
-                - A vector: it assumes that the quality of the rule of law is
-                heterogeneous across indicators, exogenous, and constant. Thus,
-                rl has to have a size equal to the number of instrumental
-                indicators. Each entry in rl denotes the quality of monitoring
-                in a particular policy issue (indicator).
-            If not provided, the default values is rl=0.5.
-        Bs: numpy ndarray or floating point (optional)
-            Disbursement schedule across expenditure programs. There are three 
-            options to specify Bs:
-                - A matrix: this is a disaggregated specification of the 
-                disbursement schedule across expenditure programs and time. 
-                The rows correspond to expenditure programs and the columns
-                to simulation periods. Since there may be more or less expenditure 
-                programs than indicators, the number of rows in Bs should be
-                consistent with the information contained in parameter B_dict,
-                otherwise PPI will throw and exception. Since the number of 
-                columns denotes the number of simulation periods, parameter T
-                will be overriden.
-                - A vector: this would be equivalent to a matrix with a single
-                row, i.e. to having a single expenditure program. This representation
-                is useful when there is no information available across programs,
-                but there is across time. Like in the matrix representation, 
-                this input should be consistent with B_dict.
-                - A floating point: this assumes there is no information about
-                expenditure across programs nor time. In this case, PPI uses
-                the amount provided for every simulated period, as in the case
-                of the vector specification. Since here, there is no temporal 
-                information about the disbursement schedule, the number of 
-                simulated periods is given by parameter T.
-            If not provided, the default value is Bs=100.
-        B_dict: dictionary (optional)
-            A dictionary that maps the indices of every indicator into the 
-            expenditure program(s) designed to impact them. Since there may be
-            multiple programs designed to impact and indicator, or multiple
-            indicators impacted by the same program, this mapping is not 
-            one to one. To account for this, B_dict has, as keys, the indices 
-            of the instrumental indicators and, as values, lists containing
-            the indices of the expenditure programs designed to impact them.
-            The user should make sure that the keys are consistent with the 
-            indices of those indicators that are instrumental. Likewise, the
-            indices of the expenditure programs should be consistent with the
-            number of rows in Bs, otherwise PPI will throw an exception.
-            Providing B_dict is necessary if Bs is a matrix with more than one 
-            row.
-        T: int (optional)
-            The maximum number of simulation periods. If Bs is provided, then T
-            is overwritten by the number of columns in Bs. If not provided, the
-            default value in T=50.
-        threshold: float (optional)
-            The goodness-of-fit threshold to stop the calibration routine. This
-            consists of the worst goodness-of-fit metric (across indicators) that
-            the user would like to obtain. The best possible metric is 1, but it
-            is impossible to achieve due to the model's stochasticity. Higher
-            thresholds demand more computing because more simulations are 
-            necessary in order to achieve high precision. If not provided,
-            the default value is 0.8.
-        parallel_processes: integer (optional)
-            The number of processes to be run in parallel. Each process carries
-            a work load of multiple Monte Carlo simulations of PPI. Parallel
-            processing is optional. If not provided, the Monte Carlo simulations
-            are run in a serial fashion.
-        verbose: boolean (optional)
-            Whether to print the calibration progress. If not provided, the
-            default value is False.
-        low_precision_counts: integer (optional)
-            Hyperparameter of how many low-precision iterations will be run.
-            Low precision means that only 10 Monte Carlo simulations are performed
-            in each iteration/evaluation. Once low_precision_counts has been met,
-            the number of Monte Carlo simulations increases in each iteration
-            by the amount specified in the hyperparameter: increment. If not
-            provided, the default value is 100.
-        increment: integer (optional)
-            Hyperparameter that sets the number of Montecarlo Simulations to
-            increase with each iteration, once low_precision_counts has been
-            reached. If not provided, the default value is 1000.
-        
-    Returns
-    -------
-        output: 2D numpy array
-            A matrix with the calibration results, organized in the following 
-            columns (the matrix includes the column titles):
-                - alpha: The structural parameter of each indicator associated
-                    with positive changes.
-                - alpha_prime: The structural parameter of each indicator associated
-                    with negative changes.
-                - beta: The normalizing constant of each parameter that helps 
-                    mapping the expenditure and spillovers into a probability.
-                - T: The number of simulation periods to be run in each simulation.
-                    It only appears in the first row of the column, while the 
-                    rest remain empty.
-                - error_alpha: The indicator-specific error related to the 
-                    final value.
-                - error_beta: The indicator-specific error related to the 
-                    rate of positive changes.
-                - GoF_alpha: The indicator-specific goodness-of-fit metric 
-                    related to the final value.
-                - GoF_beta: The indicator-specific goodness-of-fit metric 
-                    related to the rate of positive changes.
+        Parameters
+        ----------
+            I0: numpy array 
+                Vector with initial values of the development indicators. These are
+                the initial conditions for the indicators in the simulations.
+            indic_final: numpy array 
+                Vector with final values of the development indicators. These are
+                used to compute one type of error: whether the simulated values
+                end at the same levels as the empirical ones.
+            success_rates: numpy array 
+                Vector with the rate of growth of the development indicators.
+                so_network growth rate, for an indicator, is the number of times a posivite 
+                change was observed, divided by the the total number of changes 
+                (which should be the number of periods in the time series minus one).
+                These rates must be greater than zero and less or equal to 1.
+                If an indicator does not show positive changes, it is suggested
+                to assign a rate close to zero. If success_rates contains values 
+                that are zero (or less) or ones, they will be automatically replaced
+                by 0.01 and 1.0 respectively.
+                This input is used to compute another type of error: whether the 
+                endogenous probability of success of each indicator matches the 
+                empirical rate of positive changes.
+            so_network:  2D numpy array (optional)
+                The adjacency matrix of the spillover network of development 
+                indicators. so_network[i,j] represents i->j If not provided, the default value is a matrix 
+                full of zeros.
+            R:  numpy array (optional)
+                Vector that specifies whether an indicator is instrumental
+                or collateral. Instrumental indicators have value 1 and collateral
+                ones have zero. If not provided, the default value is
+                a vector of ones.
+            bs: numpy array (optional)
+                Vector with modulating factors for the budgetary allocation of
+                each instrumental indicator. Its size should be equal to the number
+                of instrumental indicators. If not provided, the default value is
+                a vector of ones.
+            qm: A floating point, an integer, or a numpy array (optional)
+                Vector with parametrs capturing the quality of the monitoring 
+                mechanisms that procure public governance. There are three options
+                to specify qm:
+                    - A floating: it assumes that the quality of monitoring is qm,
+                    that it is the same for every indicator, that it is exogenous, 
+                    and that it remains constant through time. In this case, qm 
+                    should have a value between 0 and 1.
+                    - An integer: it assumes that the quality of monitoring is one 
+                    of the indicators, so qm gives the index in I0 where this indicator
+                    is located. Here, the quality of monitoring is endogenous, 
+                    dynamic, and homogenous across the indicators.
+                    - A vector: it assumes that the quality of monitoring is
+                    heterogeneous across indicators, exogenous, and constant. Thus,
+                    qm has to have a size equal to the number of instrumental
+                    indicators. Each entry in qm denotes the quality of monitoring
+                    in a particular policy issue (indicator).
+                If not provided, the default values is qm=0.5.
+            rl: A floating point, an integer, or a numpy array (optional)
+                Vector with parametrs capturing the quality of the rule of law. 
+                There are three options to specify rl:
+                    - A floating: it assumes that the quality of the rule of law  is rl,
+                    that it is the same for every indicator, that it is exogenous, 
+                    and that it remains constant through time. In this case, rl 
+                    should have a value between 0 and 1.
+                    - An integer: it assumes that the quality of the rule of law is one 
+                    of the indicators, so rl gives the index in I0 where this indicator
+                    is located. Here, the quality of the rule of law is endogenous, 
+                    dynamic, and homogenous across the indicators.
+                    - A vector: it assumes that the quality of the rule of law is
+                    heterogeneous across indicators, exogenous, and constant. Thus,
+                    rl has to have a size equal to the number of instrumental
+                    indicators. Each entry in rl denotes the quality of monitoring
+                    in a particular policy issue (indicator).
+                If not provided, the default values is rl=0.5.
+            Bs: numpy ndarray or floating point (optional)
+                Disbursement schedule across expenditure programs. There are three 
+                options to specify Bs:
+                    - A matrix: this is a disaggregated specification of the 
+                    disbursement schedule across expenditure programs and time. 
+                    The rows correspond to expenditure programs and the columns
+                    to simulation periods. Since there may be more or less expenditure 
+                    programs than indicators, the number of rows in Bs should be
+                    consistent with the information contained in parameter B_dict,
+                    otherwise PPI will throw and exception. Since the number of 
+                    columns denotes the number of simulation periods, parameter T
+                    will be overriden.
+                    - A vector: this would be equivalent to a matrix with a single
+                    row, i.e. to having a single expenditure program. This representation
+                    is useful when there is no information available across programs,
+                    but there is across time. Like in the matrix representation, 
+                    this input should be consistent with B_dict.
+                    - A floating point: this assumes there is no information about
+                    expenditure across programs nor time. In this case, PPI uses
+                    the amount provided for every simulated period, as in the case
+                    of the vector specification. Since here, there is no temporal 
+                    information about the disbursement schedule, the number of 
+                    simulated periods is given by parameter T.
+                If not provided, the default value is Bs=100.
+            B_dict: dictionary (optional)
+                A dictionary that maps the indices of every indicator into the 
+                expenditure program(s) designed to impact them. Since there may be
+                multiple programs designed to impact and indicator, or multiple
+                indicators impacted by the same program, this mapping is not 
+                one to one. To account for this, B_dict has, as keys, the indices 
+                of the instrumental indicators and, as values, lists containing
+                the indices of the expenditure programs designed to impact them.
+                The user should make sure that the keys are consistent with the 
+                indices of those indicators that are instrumental. Likewise, the
+                indices of the expenditure programs should be consistent with the
+                number of rows in Bs, otherwise PPI will throw an exception.
+                Providing B_dict is necessary if Bs is a matrix with more than one 
+                row.
+            T: int (optional)
+                The maximum number of simulation periods. If Bs is provided, then T
+                is overwritten by the number of columns in Bs. If not provided, the
+                default value in T=50.
+            threshold: float (optional)
+                The goodness-of-fit threshold to stop the calibration routine. This
+                consists of the worst goodness-of-fit metric (across indicators) that
+                the user would like to obtain. The best possible metric is 1, but it
+                is impossible to achieve due to the model's stochasticity. Higher
+                thresholds demand more computing because more simulations are 
+                necessary in order to achieve high precision. If not provided,
+                the default value is 0.8.
+            parallel_processes: integer (optional)
+                The number of processes to be run in parallel. Each process carries
+                a work load of multiple Monte Carlo simulations of PPI. Parallel
+                processing is optional. If not provided, the Monte Carlo simulations
+                are run in a serial fashion.
+            verbose: boolean (optional)
+                Whether to print the calibration progress. If not provided, the
+                default value is False.
+            low_precision_counts: integer (optional)
+                Hyperparameter of how many low-precision iterations will be run.
+                Low precision means that only 10 Monte Carlo simulations are performed
+                in each iteration/evaluation. Once low_precision_counts has been met,
+                the number of Monte Carlo simulations increases in each iteration
+                by the amount specified in the hyperparameter: increment. If not
+                provided, the default value is 100.
+            increment: integer (optional)
+                Hyperparameter that sets the number of Montecarlo Simulations to
+                increase with each iteration, once low_precision_counts has been
+                reached. If not provided, the default value is 1000.
+            
+        Returns
+        -------
+        output: Dictionary
+            keys: value
+            'parameters' 2D numpy array
+                A matrix with the calibration results, organized in the following 
+                columns (the matrix includes the column titles):
+                    - alpha: The structural parameter of each indicator associated
+                        with positive changes.
+                    - alpha_prime: The structural parameter of each indicator associated
+                        with negative changes.
+                    - beta: The normalizing constant of each parameter that helps 
+                        mapping the expenditure and spillovers into a probability.
+                    - T: The number of simulation periods to be run in each simulation.
+                        It only appears in the first row of the column, while the 
+                        rest remain empty.
+                    - error_alpha: The indicator-specific error related to the 
+                        final value.
+                    - error_beta: The indicator-specific error related to the 
+                        rate of positive changes.
+                    - GoF_alpha: The indicator-specific goodness-of-fit metric 
+                        related to the final value.
+                    - GoF_beta: The indicator-specific goodness-of-fit metric 
+                        related to the rate of positive changes.
+            (optional) time_elapsed: float
+            (optional) iterations: int
     """
-    
-    
     
     # Check data integrity
     success_rates[success_rates<=0] = 0.05
@@ -541,13 +636,16 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
     # Initialize hyperparameters and containers
     N = len(I0)
     params = np.ones(3*N)*.5 # vector containing all the parameters that need calibration
-    sample_size = 10
+    sample_size = mc_simulations # starting number of Monte Carlo simulations to be run 
     counter = 0
     GoF_alpha = np.zeros(N)
     GoF_beta = np.zeros(N)
     
     # Main iteration of the calibration
-    # Iterates until the minimum threshold criterion has been met, and at least 100 iterations have taken place
+    # Iterates until the minimum threshold criterion has been met, and at least 'low_precision_counts' iterations have taken place
+    if time_experiments:
+        start_time = time.time()
+
     while np.sum(GoF_alpha<threshold) > 0 or np.sum(GoF_beta<threshold) > 0 :
 
         counter += 1 # Makes sure at least 100 iteartions are performed
@@ -591,23 +689,59 @@ def calibrate(I0, indic_final, success_rates, so_network=None, R=None, qm=None, 
         
         # check low_precision_counts iterations have been reached
         # after low_precision_counts iterations, increase the number of Monte Carlo simulations by
-        # 1000 in every iterations in order to achieve higher precision and 
+        # increment in every iterations in order to achieve higher precision and 
         # minimize the error more effectively
         if counter >= low_precision_counts:
             sample_size += increment
             
         # prints the calibration iteration and the worst goodness-of-fit metric
-        if verbose:
-            print( 'Iteration:', counter, '.    Worst goodness of fit:', np.min(GoF_alpha.tolist()+GoF_beta.tolist()) )
+        if verbose and ( ( counter<=low_precision_counts and counter%10==0 ) or (counter>low_precision_counts and counter%1==0) ):
+            msg = 'Iteration: ' + str(counter) + '.    Worst goodness of fit: ' + str(np.min(GoF_alpha.tolist()+GoF_beta.tolist()))
+            if logging is not None:
+                logging.info(msg)
+            else:
+                print( msg  )
     
+    
+    if logging is not None:
+        logging.info('Calibration finished!')
+        logging.info('Iterations: ' + str(counter))
+
+    if time_experiments: time_elapsed = time.time() - start_time
     # save the last parameter vector and de associated errors and goodness-of-fit metrics
-    output = np.array([['alpha', 'alpha_prime', 'beta', 'T', 'error_alpha', 
+    parameters = np.array([['alpha', 'alpha_prime', 'beta', 'T', 'error_alpha', 
             'error_beta', 'GoF_alpha', 'GoF_beta']] + [[alphas[i], alphas_prime[i], betas[i], TF, 
             errors_alpha[i], errors_beta[i], GoF_alpha[i], GoF_beta[i]] \
             if i==0 else [alphas[i], alphas_prime[i], betas[i], 
              np.nan, errors_alpha[i], errors_beta[i], 
              GoF_alpha[i], GoF_beta[i]] \
             for i in range(N)])
-        
-    return output
+ 
     
+    df_parameters = DataFrame(parameters[1::,:], columns=parameters[0])
+    
+    dict_output = {
+        'parameters': df_parameters
+        }
+    if time_experiments: 
+        dict_output['time_elapsed'] = time_elapsed
+        dict_output['iterations'] = counter
+        
+    return dict_output
+    
+
+def align_Bs_with_B_dict(Bs:np.array, b2i_network:dict[int,list]):
+    
+    relevant_bi_idxs = sorted(np.unique([item for sublist in b2i_network.values() for item in sublist]).tolist())
+    relevant_bi_idxs = [idx for idx in relevant_bi_idxs if idx < Bs.shape[0]]
+    
+    # re-index the bi_idxs to new idxs
+    dict_biidx_reindx = { old_idx:new_idx for new_idx, old_idx in enumerate(relevant_bi_idxs) }
+
+    # filter Bs
+    Bs = Bs[relevant_bi_idxs, :]
+
+    # re-index the b2i_network
+    b2i_network = { key:[dict_biidx_reindx[old_idx] for old_idx in value] for key, value in b2i_network.items() }
+
+    return Bs, b2i_network

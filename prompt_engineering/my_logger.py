@@ -4,6 +4,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 import os, sys
 from datetime import datetime
+import traceback
 
 def setup_logging(filename, debugging=False):
     if not debugging:
@@ -17,7 +18,16 @@ def setup_logging(filename, debugging=False):
 
     # Configure logging
     logging.basicConfig(filename=log_filename, level=logging.INFO, 
-                        format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+                        format='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S', )
+
+    def handle_exception(exctype, value, tb):
+        # exception_str = ''.join(traceback.format_exception(exctype, value, tb))
+
+        # logging.error("Unhandled exception:\n%s", exception_str)
+        logging.error("Unhandled exception in %s at line %s:\n%s", tb.tb_frame.f_code.co_filename, tb.tb_lineno, ''.join(traceback.format_exception(exctype, value, tb)))
+
+    sys.excepthook = handle_exception
+
     return logging
 
 def setup_logging_predict( llm_name, debugging=False ):
@@ -25,15 +35,12 @@ def setup_logging_predict( llm_name, debugging=False ):
     dt_string = now.strftime("%Y%m%d_%H%M%S")
 
     llm_name = ''.join(llm_name.split('/')[1:])
-
     log_filename = f'{llm_name}_{dt_string}.log'
-
     logging = setup_logging(log_filename, debugging)
 
-    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
+
 
     return logging
-
 
 def setup_logging_preprocess( dset_name, llm_name, debugging=False ):
     now = datetime.now()
@@ -44,8 +51,6 @@ def setup_logging_preprocess( dset_name, llm_name, debugging=False ):
     log_filename = f'pprcs_{dset_name}_{llm_name}_{dt_string}.log'
 
     logging = setup_logging(log_filename, debugging)
-
-    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
 
     return logging
 
@@ -58,6 +63,28 @@ def setup_logging_scrape_rps( debugging ):
 
     logging = setup_logging(log_fn, debugging)
 
-    sys.excepthook = lambda exctype, value, traceback: logging.exception(value)
+    
+
+    return logging
+
+def setup_logging_add_i2i_edge_weights( debugging=False ):
+    now = datetime.now()
+    dt_string = now.strftime("%Y%m%d_%H%M%S")
+
+    log_fn = f'add_i2i_edge_weights_{dt_string}.log'
+    logging = setup_logging(log_fn, debugging)
+
+    
+
+    return logging
+
+def setup_logging_calibration(debugging, exp_group):
+    now = datetime.now()
+    dt_string = now.strftime("%Y%m%d_%H%M%S")
+
+    log_fn = os.path.join(f'calibration_{exp_group}_{dt_string}.log')
+    logging = setup_logging(log_fn, debugging)
+
+    
 
     return logging

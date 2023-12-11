@@ -2,7 +2,7 @@ from time import sleep
 import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
-from langchain import PromptTemplate, LLMChain
+from langchain import HuggingFacePipeline, PromptTemplate, LLMChain
 from langchain.schema import (
     HumanMessage,
     SystemMessage
@@ -22,6 +22,12 @@ import warnings
 import os
 from contextlib import redirect_stdout
 import openai
+from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
+from  langchain.chat_models import ChatOpenAI
+from  langchain.llms import HuggingFaceHub
+
+from transformers import PreTrainedTokenizer, pipeline
+
 
 #https://old.reddit.com/r/LocalLLaMA/wiki/models#wiki_current_best_choices
 HUGGINGFACE_MODELS = [ 
@@ -42,7 +48,8 @@ HUGGINGFACE_MODELS = [
     'upstage/llama-30b-instruct-2048',
     'upstage/Llama-2-70b-instruct-v2',
     'stabilityai/StableBeluga2',
-    ]
+    
+    'trl-internal-testing/dummy-GPT2-correct-vocab']
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
@@ -60,6 +67,8 @@ MAP_LOAD_IN_NBIT = {
     'upstage/llama-30b-instruct-2048':4,
     'upstage/Llama-2-70b-instruct-v2':4,
     'stabilityai/StableBeluga2':4,
+
+    'trl-internal-testing/dummy-GPT2-correct-vocab':4
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
@@ -67,11 +76,12 @@ ALL_MODELS = HUGGINGFACE_MODELS + OPENAI_MODELS
 from collections import Counter
 import logging
        
-def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, finetune_dir='./finetune/finetuned_models/', exp_name='', finetune_version=0 ):
-    from  langchain.chat_models import ChatOpenAI
-    from  langchain.llms import HuggingFaceHub
-    from langchain import HuggingFacePipeline
-    import torch
+def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, 
+             finetune_dir='./finetune/finetuned_models/', exp_name='',
+             finetune_version=0,
+             loraConfig=None ) -> tuple[HuggingFacePipeline|ChatOpenAI, PreTrainedTokenizer|None]:
+    
+    
 
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
@@ -80,22 +90,27 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
+        from torch import bfloat16
 
         if llm_name in HUGGINGFACE_MODELS:
             from transformers import BitsAndBytesConfig
             
             bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
             bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
-            quant_config = BitsAndBytesConfig(
-                
-                load_in_8bit=bool_8,
-                llm_int8_has_fp16_weights=bool_8,
-                
-                load_in_4bit=bool_4,
-                bnb_4bit_quant_type="nf4" ,
-                bnb_4bit_use_double_quant=bool_4,
-                bnb_4bit_compute_dtype=torch.bfloat16 if bool_4 else None
-            )
+            
+            if bool_8 or bool_4:
+                quant_config = BitsAndBytesConfig(
+                    
+                    load_in_8bit=bool_8,
+                    llm_int8_has_fp16_weights=bool_8,
+                    
+                    load_in_4bit=bool_4,
+                    bnb_4bit_quant_type="nf4" ,
+                    bnb_4bit_use_double_quant=bool_4,
+                    bnb_4bit_compute_dtype=bfloat16 if bool_4 else None
+                )
+            else:
+                quant_config = None
 
             if not finetuned:
                 model_id = llm_name
@@ -106,13 +121,18 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                                     'quantization_config':quant_config,
                                     'do_sample':False,
                                     'device_map':'auto'
-                                    },
-                    )
+                                    },)
+
+                tokenizer = llm.pipeline.tokenizer
+                if loraConfig is not None:
+                    # llm = get_peft_model(llm.pipeline.model, loraConfig)
+                    llm.pipeline.model = get_peft_model(llm.pipeline.model, loraConfig)
+                    
             else:
                 # load pytorch lightning LightningModule from finetune_dir then extract the llm as lightningModule.model
                 # Load the best checkpoint automatically
 
-                from prompt_engineering.finetune import PromptEngineeringLM
+                from prompt_engineering.finetune.finetune import PromptEngineeringLM
                 import re
 
                 # Set your checkpoints directory
@@ -130,13 +150,14 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                 best_ckpt_path = os.path.join(ckpt_dir, best_ckpt)
 
                 # Load the best model
-                model = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path)
+                prompt_engineering_lm = PromptEngineeringLM.load_from_checkpoint(checkpoint_path=best_ckpt_path, llm_name=llm_name, 
+                    map_location={'':'cuda:0'}, val_tasks=None)
 
                 # Extract the llm
-                llm = model.model
-
-
-
+                # llm = prompt_engineering_lm.model
+                tokenizer = prompt_engineering_lm.tokenizer
+                llm = HuggingFacePipeline( pipeline=pipeline('text-generation', model=prompt_engineering_lm.model, tokenizer=tokenizer ))
+                
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for local use")
         
@@ -153,11 +174,12 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                     repo_id=llm_name, huggingfacehub_api_token=api_key, model_kwargs={ 'do_sample':False } ) #type: ignore
         else:
             raise NotImplementedError(f"llm_name {llm_name} is not implemented for remote use")
-
+        tokenizer = None
     else:
         llm = None
+        tokenizer = None
 
-    return llm 
+    return llm, tokenizer
 
 class PredictionGenerator():
     """
@@ -197,38 +219,27 @@ class PredictionGenerator():
       
         self.effect_type = effect_type
 
-    # @lru_cache(maxsize=2)
-    # def get_generation_params(self, prompt_style:str):
-    #     generation_params = {}
-    #     k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
-    #     if prompt_style == 'yes_no':
-    #         generation_params[k] = 10
-    #     elif prompt_style == 'open':
-    #         generation_params[k] = 10
-    #     elif prompt_style == 'categorise':
-    #         generation_params[k] = 10
-    #     elif prompt_style == 'cot_categorise':
-    #         generation_params[k] = 250
-
-    #     if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
-    #         generation_params['early_stopping'] = True
-        
-    #     return generation_params
-
-    def predict(self, li_li_filled_template:list[list[str]], reverse_categories=False)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
+    def predict(self, li_li_filled_template:list[list[str]], reverse_categories=False, **kwargs)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
         
 
         # Parse {'Yes':prob_yes, 'No':prob_no, 'Nan':prob_nan } from the predictions
         if self.parse_style == 'rules':
-            li_li_pred = [ self.parse_outp_rules(li_filled_template) for li_filled_template in li_li_filled_template]
+            if self.prompt_style == 'yes_no':
+                li_li_pred = [ self.parse_outp_rules(li_filled_template) for li_filled_template in li_li_filled_template]
+            elif self.prompt_style == 'verbalize_scale':
+                li_li_pred = [ self.parse_outp_scale_rules(li_filled_template, scale_max = kwargs.get('scale_max',5)) for li_filled_template in li_li_filled_template]            
         elif self.parse_style == 'categories_rules':
             li_li_pred = [ self.parse_outp_categories_rules(li_filled_template) for li_filled_template in li_li_filled_template]        
         elif self.parse_style == 'categories_perplexity':
             if self.prompt_style == 'categorise':
-                li_li_pred = [ self.parse_outp_categories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
+                li_li_pred = [ self.parse_outp_categories_perplexity(li_filled_template, reverse_categories=reverse_categories, **kwargs) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'cot_categorise':
                 li_li_pred = [ self.parse_outp_cotcategories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
+            elif self.prompt_style == 'categories_scale':
+                li_li_pred = [ self.parse_outp_categories_scale(li_filled_template, scale_max = kwargs.get('scale_max',5)) for li_filled_template in li_li_filled_template]
+        
+
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
@@ -236,7 +247,7 @@ class PredictionGenerator():
 
     def parse_outp_rules(self, li_filled_template:list[str]) -> list[dict[str,float]] :
         
-        li_preds = [{}]*len(li_filled_template)
+        li_preds = [{} for _ in li_filled_template ]
 
         # Parse yes/no from falsetrue
         for idx, prediction in enumerate(li_filled_template):
@@ -265,7 +276,28 @@ class PredictionGenerator():
             li_preds[idx] = dict_pred 
                    
         return li_preds
-               
+
+    def parse_outp_scale_rules(self, li_filled_template:list[str], scale_max=5) -> list[dict[str,float]] :
+
+        li_preds = [{} for _ in li_filled_template]
+
+        scale = [ num for num in range(0,1+scale_max) ]
+
+        # Parse yes/no from falsetrue
+        for idx, prediction in enumerate(li_filled_template):
+            
+            # prediction = copy.deepcopy(prediction).lower()
+
+            pred = next((int(s) for s in prediction.lower() if s.isdigit()), None)
+
+            if pred is not None:
+                if pred not in scale:
+                    pred = None
+
+            li_preds[idx] = {'mean':pred}
+                   
+        return li_preds
+
     def parse_outp_categories_rules(self, li_preds:list[str])-> list[dict[str, float]] :
         
         """
@@ -368,7 +400,10 @@ class PredictionGenerator():
 
         return li_map_probability
     
-    def parse_outp_categories_perplexity(self, li_filledtemplate:list[str], reverse_categories=False)->  list[dict[str,float]] :
+    def parse_outp_categories_perplexity(self, li_filledtemplate:list[str], reverse_categories=False, **kwargs)->  list[dict[str,float]] :
+        
+        map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
+        map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate_fmtd = [
@@ -383,20 +418,23 @@ class PredictionGenerator():
         answers = [ str(num) for num in range(1,1+len(map_category_answer.keys()) ) ]
         li_li_filledtemplates_with_answers = [ [ filledtemplate + ans for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
 
-
-        # For each filled template set calcualte the relative probability of each answer
-        li_li_probability = []
-        for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
-
-            li_probability = joint_probabilities_for_category(
+        # Flattening out the list of list of prompt templates
+        original_shape = [ len(li_filledtemplate) for li_filledtemplate in li_li_filledtemplates_with_answers]        
+        li_filledtemplates_with_answers = [ prompt for li_filledtemplate in li_li_filledtemplates_with_answers for prompt in li_filledtemplate ]
+        _ = joint_probabilities_for_category(
                 li_filledtemplates_with_answers, 
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
-                batch_size=len(map_category_answer.keys()), 
+                batch_size=kwargs.get('gpu_batch_size', len(map_category_answer.keys())), 
                 category_token_len=1 ) 
-            
-            li_li_probability.append(li_probability)
         
+        # Reshaping so each inner lists represents probabilities of different answers for a shared prompt
+        li_li_probability = []
+        start_idx = 0
+        for shape in original_shape:
+            li_li_probability.append( _[start_idx:start_idx+shape] )
+            start_idx += shape
+            
         # Convert set of perplexities into a list of list with each sublist having a probability for each category of answer
         _categorise_response_labels = copy.deepcopy(map_category_label)
         if reverse_categories:
@@ -411,19 +449,67 @@ class PredictionGenerator():
 
         return li_map_probability
 
-    def aggregate_predictions(self, li_li_dict_preds:list[list[dict[str,int|float]]] )->  list[float | dict[str,float] ] :
+    def parse_outp_categories_scale(self, li_filledtemplate:list[str], scale_max=5)->  list[dict[str,float]] :
+        # returns a multinomial distribution over the values 1-10
+
+        category_scale = copy.deepcopy( map_relationship_promptsmap[self.relationship]['category_scale'] )
+        
+        # Formatting prompts to adhere to format required by Base Language Model
+        li_filledtemplate_fmtd = [
+                map_llmname_input_format(self.llm_name,
+                                        user_message = prompt, 
+                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
+                                        # system_message = map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
+                                        # system_message = None
+                                        )
+                                    for prompt in li_filledtemplate ] #Added some base model formatting
+
+        # For each template, create the set of 2 filled templates with each of the possible answers
+        # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
+        # NOTE: In our work we found that the template required a space after the filled template or it would not work for weaker models
+        answers = category_scale
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + str(ans) for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
+
+
+        # For each filled template set calcualte the relative probability of each answer
+        li_li_probability = []
+        for li_filledtemplates_with_answers in li_li_filledtemplates_with_answers:
+
+            li_probability = joint_probabilities_for_category(
+                li_filledtemplates_with_answers, 
+                self.llm.pipeline.model, 
+                self.llm.pipeline.tokenizer,
+                batch_size=len(answers), 
+                category_token_len=1 ) 
+            
+            li_li_probability.append(li_probability)
+        
+        # Convert set of perplexities into a list of list with each sublist having a probability for each category of answer
+        li_map_probability = [{ans: li_probability[idx] for idx, ans in enumerate(answers)} for li_probability in li_li_probability]
+
+        # Convert this to normalised probabilities
+        li_map_probability = [  nomalized_probabilities(map_probability) for map_probability in li_map_probability ]
+
+        return li_map_probability
+
+    def aggregate_predictions(self, li_li_dict_preds:list[list[dict[str,int|float]]], **kwargs )->  list[float | dict[str,float] ] :
         
         """            
             For Each prediction we have a list of samples.
                 Each sample is a dictionary with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}"
 
             edge_value: 'binary_weight': for a prediction p with n samples, returns 1 if Yes is the modal prediction
-
+                output format: list of dictionaries with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}. Reduced to 1 sample per prediction
+            
             edge_value: 'float_weight': for a prediction p with n samples, returns the average relative weight of Yes for each sample
+                output format: list of dictionaries with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}. Reduced to 1 sample per prediction
             
             edge_value: 'distribution': for a prediction p with n samples, returns the average relative weights of Yes/No/NA for each sample
+                output format: list of dictionaries with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}. Reduced to 1 sample per prediction
 
-            output format: list of dictionaries with keys {'Yes':pred_yes, 'No':pred_no, 'NA':pred_na}. Reduced to 1 sample per prediction
+            edge:_value: 'scale': for a multinomial prediction P with ensemble size, returns the average multinomiial mean of each distribution, then averages this average
+                output format: list of dictionaries with keys {'mean':pred_mean, 'scaled_mean':pred_scaled_mean}. Reduced to 1 sample per prediction
+            
         """
         
         if self.edge_value == 'binary_weight':
@@ -467,6 +553,42 @@ class PredictionGenerator():
             li_pred_agg = [ avg_relative_y(li_dict_pred) for li_dict_pred in li_li_dict_preds ]
 
             li_pred_agg = [{key: round(value, 3) for key, value in nested_dict.items()} for nested_dict in li_pred_agg]
+        
+        elif self.edge_value == 'multinomial_distribution':
+            # Given a list of ensembles of predictions, for each ensemble calculate the mean of the ensemble. Then scale the mean to be in the 0-1 range
+                        
+            sc = kwargs.get('scale_max', 5)
+
+            def create_mean_of_scale_preds(li_dict_pred):
+
+                li_mean = [ sum( val*prob for val, prob in dict_pred.items() ) for dict_pred in li_dict_pred ]
+                mean = sum(li_mean)/len(li_mean)
+
+                return {'mean':mean, 'scaled_mean':mean/sc}
+
+            li_pred_agg = [ create_mean_of_scale_preds(li_dict_pred) for li_dict_pred in li_li_dict_preds]
+
+            li_pred_agg = [{key: round(value, 3) for key, value in nested_dict.items()} for nested_dict in li_pred_agg]
+        
+        elif self.edge_value == 'scale':
+            
+            sc = kwargs.get('scale_max', 5)
+
+            def create_mean_of_scale_preds(li_dict_pred):
+
+                li_mean = [  int(dict_pred['mean']) for dict_pred in li_dict_pred if dict_pred['mean'] is not None ]
+                
+                if len(li_mean)>0:
+                    mean = sum(li_mean)/len(li_mean)
+                else:
+                    mean = 0
+
+                return {'mean':mean, 'scaled_mean':mean/sc}
+
+            li_pred_agg = [ create_mean_of_scale_preds(li_dict_pred) for li_dict_pred in li_li_dict_preds]
+
+            li_pred_agg = [{key: round(value, 3) for key, value in nested_dict.items()} for nested_dict in li_pred_agg]
+
 
         else:
             raise NotImplementedError(f"Aggregation method {self.edge_value} not implemented")
@@ -477,8 +599,10 @@ def load_annotated_examples(k_shot_example_dset_name:str|None,
                             relationship_type:str='budgetitem_to_indicator') -> list[dict[str,str]] | None:
     
     li_records: list[dict[str,str]] | None = None
+    if k_shot_example_dset_name is None:
+        pass
 
-    if k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
+    elif k_shot_example_dset_name == 'spot' and relationship_type == 'budgetitem_to_indicator':
         # Load spot dataset as pandas dataframe
         dset = pd.read_csv('./data/spot/spot_b2i_broad_train.csv')
         

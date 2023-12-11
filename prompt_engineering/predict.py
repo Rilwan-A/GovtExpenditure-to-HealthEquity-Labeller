@@ -25,21 +25,22 @@ import json as json
 
 # Testing models to see how well they aligned to expert's annotations of the SPOT dataset with yes_no prompt style w/ rule based parsing and binary weight edge value 
 
-from prompt_engineering.langchain.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
+from prompt_engineering.utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
-from prompt_engineering.langchain.utils import load_annotated_examples, load_llm
+from prompt_engineering.utils import load_annotated_examples, load_llm
 
 import yaml
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
 import random
+import time
 
 def main(
     llm_name:str,
     exp_name:str,
+    exp_group:str,
     finetuned:bool,
-    
     
     predict_b2i:bool,
     predict_i2i:bool,
@@ -52,12 +53,13 @@ def main(
     edge_value:str,
 
     input_file:str|UploadedFile,
+    line_range:str|None=None,
 
     k_shot_b2i:int=2,
     k_shot_i2i:int=0,
 
-    k_shot_example_dset_name_b2i:str = 'spot',
-    k_shot_example_dset_name_i2i:str|None = None,
+    k_shot_example_dset_name_b2i:str|None = 'spot',
+    k_shot_example_dset_name_i2i:str|None = 'spot',
 
     unbias_categorisations:bool = False,
 
@@ -71,7 +73,9 @@ def main(
     debugging:bool= False,
     data_load_seed:int = 10,
     
-    finetune_dir:str|None=None):
+    finetune_dir:str|None=None,
+    finetune_version:int=0,
+    ):
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
     
@@ -93,6 +97,8 @@ def main(
     logging.info(f"\tllm_name: {llm_name}")
     logging.info(f"\texp_name: {exp_name}")
     logging.info(f"\tfinetuned: {finetuned}")
+    if finetuned:
+        logging.info(f"\tfinetune_version: {str(finetune_version)}")
     logging.info(f"\tpredict_b2i: {predict_b2i}")
     logging.info(f"\tpredict_i2i: {predict_i2i}")
     logging.info(f"\tprompt_style: {prompt_style}")
@@ -106,6 +112,8 @@ def main(
     logging.info(f"\tk_shot_example_dset_name_b2i: {k_shot_example_dset_name_b2i}")
     logging.info(f"\tk_shot_example_dset_name_i2i: {k_shot_example_dset_name_i2i}")
     logging.info(f"\tunbias_categorisations: {unbias_categorisations}")
+    if line_range is not None:
+        logging.info(f"\tline_range: {line_range}")
     
 
     logging.info("Starting Prediction Script with model: {}".format(llm_name))
@@ -113,7 +121,7 @@ def main(
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir)
+        llm, tokenizer =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir, exp_name, finetune_version=finetune_version)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -130,13 +138,13 @@ def main(
                                         ensemble_size, annotated_examples_b2i, 
                                         effect_type, relationship='budgetitem_to_indicator',
                                         seed=data_load_seed,
-
+                                        tokenizer = tokenizer
                                         )
     
     prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type, relationship='indicator_to_indicator',
-                                                                           seed=data_load_seed)
+                                                                           seed=data_load_seed, tokenizer=tokenizer)
     logging.info("\tPrompt Builders Created")
 
     # Create Prediction Generators
@@ -176,6 +184,15 @@ def main(
                                                             logging=logging )
     logging.info("\tData Prepared")
     
+    if line_range is not None:
+        start, end = line_range.split(',')
+        start, end = int(start), int(end)
+        
+        if li_record_b2i is not None:
+            li_record_b2i = li_record_b2i[start:end+1]
+        
+        if li_record_i2i is not None:
+            li_record_i2i = li_record_i2i[start:end+1]
 
     # run predictions
     logging.info("\tRunning Predictions")
@@ -194,23 +211,32 @@ def main(
         experiment_config = {
                             "llm_name": llm_name,
                             "exp_name": exp_name,
+                            "exp_group": exp_group,
                             'codebase': 'langchain',
+                            'line_range': line_range,
                             "finetuned": finetuned,
                             "prompt_style": prompt_style,
                             "parse_style": parse_style,
                             "ensemble_size": ensemble_size,
                             "effect_type": effect_type,
                             "edge_value": edge_value,
+                            "predict_b2i": predict_b2i,
+                            "predict_i2i": predict_i2i,
                             "k_shot_b2i": k_shot_b2i,
                             "k_shot_i2i": k_shot_i2i,
                             "k_shot_example_dset_name_b2i": k_shot_example_dset_name_b2i,
                             "k_shot_example_dset_name_i2i": k_shot_example_dset_name_i2i,
                             "local_or_remote": local_or_remote,
-                            "unbias_categorisations": unbias_categorisations,
-                        }
+                            "unbias_categorisations": unbias_categorisations}
+        if finetuned:
+            experiment_config['finetune_version'] = finetune_version
         
         # Save experiment config
-        dir_experiments = os.path.join('prompt_engineering','output','spot','exp_runs' )
+        if not debugging:
+            dir_experiments = os.path.join('prompt_engineering','output','spot', exp_group )
+        else:
+            dir_experiments = os.path.join('prompt_engineering','output','spot', f'{exp_group}_debug' )
+
         os.makedirs(dir_experiments, exist_ok=True )
 
         existing_numbers = [int(x.split('_')[-1]) for x in os.listdir(dir_experiments) if x.startswith(f'exp_{exp_name}') ]
@@ -295,10 +321,23 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
     if debugging:
         random.seed(data_load_seed)
         # sample 5 where 'related' is Yes and 5 where 'related' is No
+    
         li_record_b2i_yes = [x for x in li_record_b2i if x['related']=='Yes']
         li_record_b2i_no = [x for x in li_record_b2i if x['related']=='No']
-        li_record_b2i = random.sample(li_record_b2i_yes, 3) + random.sample(li_record_b2i_no, 3)
-    
+        
+        li_record_b2i_ = []
+        if len(li_record_b2i_yes) > 0:
+            li_record_b2i_ += random.sample(li_record_b2i_yes, 3)
+        else:
+            li_record_b2i_ += random.sample(li_record_b2i, 3)
+
+        if len(li_record_b2i_no) > 0:
+            li_record_b2i_ += random.sample(li_record_b2i_no, 3)
+        else:
+            li_record_b2i_ += random.sample(li_record_b2i, 3)
+
+        li_record_b2i = li_record_b2i_
+
     return li_record_b2i # type: ignore
 
 def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, 
@@ -367,20 +406,26 @@ def predict_batches(prompt_builder:PromptBuilder,
 
     li_li_record = [ li_record[i:i+batch_size] for i in range(0, len(li_record), batch_size) ]
 
+    last_log_time = time.time() - 30
+
     for idx, batch in enumerate(li_li_record):
         if logger is not None:
-            logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
-
+            # Make it log at a minimal rate of 1 per 30seconds to avoid spamming the log file
+            current_time = time.time()
+            if current_time - last_log_time > 120:
+                logger.info(f"Predicting batch {idx+1} of {len(li_li_record)}")
+                last_log_time = current_time
+                
         # Create prompts
-        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch)
+        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch, gpu_batch_size=batch_size)
         
         # Generate predictions
-        batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement) 
+        batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement, gpu_batch_size=batch_size) 
 
         # Generate any predictions with category order reversed
         if unbias_categorisations:
             batch_li_li_statement_reversed, batch_li_li_discourse_reversed = prompt_builder(batch, reverse_categories_order=True)
-            batch_pred_ensembles_reversed = prediction_generator.predict(batch_li_li_statement_reversed, reverse_categories=True)
+            batch_pred_ensembles_reversed = prediction_generator.predict(batch_li_li_statement_reversed, reverse_categories=True, gpu_batch_size=batch_size)
 
             # Merge the two sets of outputs, datum for datum merge
             batch_li_li_statement = [ prompt_ensembles + prompt_ensembles_reversed for prompt_ensembles, prompt_ensembles_reversed in zip(batch_li_li_statement, batch_li_li_statement_reversed) ]
@@ -426,10 +471,9 @@ def save_experiment(
             df['related'] = [ d['related'] for d in li_record]
             df = df[['budget_item', 'indicator', 'related', 'pred_aggregated', 'prompts', 'predictions', 'discourse']]
 
-
     elif relationship == 'indicator_to_indicator':
-        df = pd.DataFrame({ 'indicator_1': [ d['indicator_1'] for d in li_record],
-                           'indicator_2': [ d['indicator_2'] for d in li_record],
+        df = pd.DataFrame({ 'indicator1': [ d['indicator1'] for d in li_record],
+                           'indicator2': [ d['indicator2'] for d in li_record],
                         #    'related': [ d['related'] for d in li_record],
                         'pred_aggregated':li_pred_agg, 'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble),
@@ -457,21 +501,23 @@ def parse_args():
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
     parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
     parser.add_argument('--exp_name', type=str, default='mpt7b', required=True )
+    parser.add_argument('--exp_group', type=str, default='exp_run', required=True )
 
     
-    parser.add_argument('--predict_b2i', action='store_true', default=True, help='Indicates whether to predict budgetitem to indicator' )
+    parser.add_argument('--predict_b2i', action='store_true', default=False, help='Indicates whether to predict budgetitem to indicator' )
     parser.add_argument('--predict_i2i', action='store_true', default=False, help='Indicates whether to predict indicator to indicator' )
 
     parser.add_argument('--finetuned', action='store_true', default=False, help='Indicates whether a finetuned version of nn_name should be used' )
-    parser.add_argument('--finetune_dir', type=str, default='/mnt/Data1/akann1w0w1ck/AlanTuring/prompt_engineering/finetune/ckpt', help='Directory where finetuned model is stored' )
-    
+    parser.add_argument('--finetune_dir', type=str, default='/mnt/Data1/akann1warw1ck/AlanTuring/prompt_engineering/finetune/ckpt', help='Directory where finetuned model is stored' )
+    parser.add_argument('--finetune_version', type=int, default=0, help='Version of finetuned model to use')
+
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot_categorise' ], default='open', help='Style of prompt' )
     parser.add_argument('--parse_style', type=str, choices=['rules', 'categories_rules', 'categories_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
 
     parser.add_argument('--ensemble_size', type=int, default=1 )
     parser.add_argument('--effect_type', type=str, default='arbitrary', choices=['arbitrary', 'directly', 'indirectly'], help='Type of effect to ask language model to evaluate' )
     parser.add_argument('--edge_value', type=str, default='binary_weight', choices=['binary_weight', 'distribution'], help='' )
-
+ 
     parser.add_argument('--input_file', type=str, default='./data/spot/spot_b2i_broad_test.csv', help='Path to the file containing the input data' )
 
     parser.add_argument('--k_shot_b2i', type=int, default=0, help='Number of examples to use for each prompt for the budget_item to indicator predictions' )
@@ -488,8 +534,9 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=1 )
 
     parser.add_argument('--data_load_seed', type=int, default=10, help='The seed to use when loading the data' )
+    parser.add_argument('--line_range', type=str, default=None, help='The range of lines to load from the input file' )
 
-    parser.add_argument('--save_output', action='store_true', default=False, help='Indicates whether the output should be saved' )
+    parser.add_argument('--save_output', action='store_true', default=True, help='Indicates whether the output should be saved' )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
 

@@ -2,6 +2,7 @@ import pandas as pd
 import math
 import torch
 from torch.nn import CrossEntropyLoss
+
 import numpy as np
 from contextlib import nullcontext
 import random
@@ -16,10 +17,14 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
+from transformers import PreTrainedModel
 from time import sleep
-
+from itertools import islice
 import peft
+from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
+from transformers import AutoTokenizer
+from langchain.llms.huggingface_pipeline import HuggingFacePipeline
 
 map_relationship_promptsmap ={}
 
@@ -68,7 +73,6 @@ li_prompts_categorical_question_w_reasoning_reversed_b2i: list[str] = [
     f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_label_b2i["1"]}'
         ]
 
-
 li_prompts_categorical_question_b2i: list[str] = [
     # f'Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please answer the question using one of the following categories and respond only with the number (1 or 2) of the selected category: 1) {map_category_answer_b2i["1"]}, 2) {map_category_answer_b2i_b2i["2"]}.'
     # f'Please answer the following question using one of the following categories and respond only with the number (1 or 2) of the selected category.\nCategories:\n1) {map_category_answer_b2i_b2i["1"]}\n2) {map_category_answer_b2i["2"]}. \nQuestion: Does local government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"?'
@@ -106,7 +110,7 @@ budgetitem_to_indicator_prompts = {
     'li_prompts_categorical_question':li_prompts_categorical_question_b2i,
     'li_prompts_categorical_question_reversed':li_prompts_categorical_question_reversed_b2i,
 
-    'map_cateogry_answer':map_category_answer_b2i,
+    'map_category_answer':map_category_answer_b2i,
     'map_category_label':map_category_label_b2i
 }
 map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator_prompts
@@ -158,6 +162,12 @@ li_prompts_categorical_question_reversed_i2i: list[str] = [
     'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
     ]
 
+li_prompts_categories_scale_question_i2i: list[str] = [
+    'On a scale of 0 to {scale_max}, how strong is the influence of changes in \"{indicator1}\" on changes in \"{indicator2}\"?'
+]
+
+# Prompts for the scaling categorisation method
+category_scale_i2i = list(range(0,6))
 
 indicator_to_indicator_prompts = {
     'li_prompts_yes_no_question': li_prompts_yes_no_question_i2i,
@@ -167,11 +177,19 @@ indicator_to_indicator_prompts = {
     'li_prompts_categorical_question_w_reasoning_reversed': li_prompts_categorical_question_w_reasoning_reversed_i2i,
 
     'li_prompts_categorical_question': li_prompts_categorical_question_i2i,
-    'li_prompts_categorical_question_reversed': li_prompts_categorical_question_reversed_i2i
+    'li_prompts_categorical_question_reversed': li_prompts_categorical_question_reversed_i2i,
+
+    'li_prompts_categories_scale_question': li_prompts_categories_scale_question_i2i,
+
+    'map_category_answer': map_category_answer_i2i,
+    'map_category_label': map_category_label_i2i,
+
+    'category_scale':category_scale_i2i
 }
 
 map_relationship_promptsmap['indicator_to_indicator'] = indicator_to_indicator_prompts
 # endregion
+
 
 # region SystemMessages
 system_prompt_b2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
@@ -179,9 +197,9 @@ system_prompt_b2i_directly = 'You are a socio-economic researcher tasked with an
 system_prompt_b2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether government spending on a "government budget item" indirectly affects a "socio-economic/health indicator". In the question the government budget item and socio-economic/health indicator will be presented within quotation marks.'
 
 
-system_prompt_i2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
-system_prompt_i2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" directly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
-system_prompt_i2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of "socio-economic/health indicator" indirectly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_arbitrary = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of a "socio-economic/health indicator" affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_directly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of a "socio-economic/health indicator" directly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
+system_prompt_i2i_indirectly = 'You are a socio-economic researcher tasked with answering a question about whether changes in the level of a "socio-economic/health indicator" indirectly affects the level of another "socio-economic/health indicator". In the question, both of the socio-economic/health indicators will be presented within quotation marks.'
 
 map_system_prompts_b2i = {
     'arbitrary':system_prompt_b2i_arbitrary,
@@ -190,10 +208,8 @@ map_system_prompts_b2i = {
     'yes_no':'Answer the following question with "Yes" or "No".',
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.'
-
+    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
 }
-
 
 map_system_prompts_i2i = {
     'indirectly':system_prompt_i2i_indirectly,
@@ -202,7 +218,9 @@ map_system_prompts_i2i = {
     'yes_no':'Answer the following question with "Yes" or "No".',
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.'
+    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
+    'categories_scale':'Answer the following question with only a number between 0 and {scale_max}.',
+    'verbalize_scale':'Answer the following question with only a number.'
 
 }
 
@@ -324,7 +342,7 @@ def create_negative_examples_b2i(dset:pd.DataFrame, random_state=None) -> pd.Dat
     return dset
 
 def joint_probabilities_for_category(
-    data, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
+    li_text, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
 
 
     """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
@@ -334,50 +352,47 @@ def joint_probabilities_for_category(
     """
 
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
+    from peft import PeftModel
     from torch.nn.functional import log_softmax
 
-    assert isinstance(model, PreTrainedModel)
+    assert isinstance(model, PreTrainedModel) or isinstance(model, PeftModel)
     assert isinstance(tokenizer, PreTrainedTokenizerBase)
     assert category_token_len == 1, "Currently only supports category tokens of length 1"
 
     model = model
     tokenizer = tokenizer
 
-    if tokenizer.pad_token is None and batch_size > 1:
+    if tokenizer.pad_token is None:
         existing_special_tokens = list(tokenizer.special_tokens_map_extended.values())
         assert (
             len(existing_special_tokens) > 0
         ), "If batch_size > 1, model must have at least one special token to use for padding. Please use a different model or set batch_size=1."
         tokenizer.add_special_tokens({"pad_token": existing_special_tokens[0]})
-
-    max_tokenized_len = max_length
-
-    tokenizer.padding_side = 'left'
-    tokenizer.truncation_side = 'left'
-
-    encodings = tokenizer(
-        data,
-        add_special_tokens=False,
-        padding=True,
-        truncation=False,
-        max_length=max_tokenized_len,
-        return_tensors="pt",
-        return_attention_mask=True,
-    ).to(model.device)
-
-    tokenizer.padding_side = 'right'
-    tokenizer.truncation_side = 'right'
-
-    encoded_texts = encodings["input_ids"]
-    attn_masks = encodings["attention_mask"]
+        # tokenizer.pad_token = existing_special_tokens[0]
 
     joint_probs = []
 
-    for start_index in range(0, len(encoded_texts), batch_size):
-        end_index = min(start_index + batch_size, len(encoded_texts))
-        encoded_texts_batch = encoded_texts[start_index:end_index]
-        attn_masks_batch = attn_masks[start_index:end_index]
+    for start_index in range(0, len(li_text), batch_size):
+        end_index = min(start_index + batch_size, len(li_text))
 
+        # Encode the data for this sub batch
+        tokenizer.padding_side = 'left'
+        tokenizer.truncation_side = 'left'
+        encodings = tokenizer(
+            li_text[start_index:end_index],
+            add_special_tokens=True,
+            padding=True,
+            truncation=False,
+            max_length=None,
+            return_tensors="pt",
+            return_attention_mask=True,
+        ).to(model.device)
+        tokenizer.padding_side = 'right'
+        tokenizer.truncation_side = 'right'
+
+        encoded_texts_batch = encodings["input_ids"]
+        attn_masks_batch = encodings["attention_mask"]
+        
         labels = encoded_texts_batch
 
         with torch.no_grad():
@@ -412,21 +427,6 @@ def joint_probabilities_for_category(
 
     return joint_probs
 
-def perplexity_to_normalised_probability( perplexities: dict[str,float]) -> dict[str,float]:
-
-    """Converts a dictionary of perplexity scores to normalised probabilities"""
-    # Convert perplexity to probabilities
-    probs = {}
-    for k,v in perplexities.items():
-        probs[k] = 1/v
-
-    # Normalise probabilities
-    total = sum(probs.values())
-    for k,v in probs.items():
-        probs[k] = v/total
-
-    return probs
-
 def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
     
         """Normalises a dictionary of probabilities"""
@@ -445,7 +445,7 @@ class PromptBuilder():
                  k_shot:int,
                  ensemble_size:int, 
                  examples_dset:list[dict]|None=None, 
-                 effect_type:str="arbitrary", 
+                 effect_type:str="arb'itrary", 
                  relationship:str="budgetitem_to_indicator",
                  seed:int=10,
                  **kwargs ) -> None:
@@ -453,7 +453,7 @@ class PromptBuilder():
             unbias_categorisations (bool): If true, the PromptBuilder builds two categorical answer prompts with the order of categories reversed in order to remove any bias towards select 1st of 2nd answer  
         """
         
-        assert prompt_style in ['yes_no','open', 'categorise', 'cot_categorise' ], "Prompt style must be either yes_no, open, categorise or cot_categorise"
+        assert prompt_style in ['yes_no','open', 'categorise', 'cot_categorise', 'categories_scale', 'verbalize_scale' ], "Prompt style must be either yes_no, open, categorise or cot_categorise"
         assert effect_type in ['arbitrary', 'directly', 'indirectly'], "Effect order must be either arbitrary, directly or indirectly"
         assert relationship in ['budgetitem_to_indicator', 'indicator_to_indicator'], "Relationship must be either budgetitem_to_indicator or indicator_to_indicator"
         assert k_shot <= len(examples_dset) if examples_dset is not None else True, "User can not create a K-shot context with more examples than the number of examples in the dataset"
@@ -462,6 +462,7 @@ class PromptBuilder():
             assert k_shot == 0, "K-shot must be 0 for cot prompts"
 
         self.llm = llm
+
         self.llm_name = llm_name
         self.tokenizer = kwargs.get('tokenizer', None)
         self.prompt_style = prompt_style
@@ -478,7 +479,7 @@ class PromptBuilder():
     def effect_type_str(self) -> str:
         return '' if self.effect_type == 'arbitrary' else self.effect_type 
     
-    def __call__(self, batch:list[dict], reverse_categories_order:Optional[bool]=False) -> list[list[str]]:
+    def __call__(self, batch:list[dict], reverse_categories_order:Optional[bool]=False, **kwargs) -> list[list[str]]:
         """
             Given a batch of examples, this function returns a list of prompts for each example in the batch
         """
@@ -493,19 +494,30 @@ class PromptBuilder():
             templates = self._categorise_template(reverse_categories_order=reverse_categories_order, seed=self.seed)
         elif self.prompt_style == 'cot_categorise':
             templates = self._cot_template(seed=self.seed)
+        elif self.prompt_style == 'categories_scale':
+            scale_max = kwargs.get('scale_max', 5)
+            templates = self._categories_scale_template(scale_max=scale_max)
+        elif self.prompt_style == 'verbalize_scale':
+            scale_max = kwargs.get('scale_max', 5)
+            templates = self._categories_scale_template(scale_max=scale_max)
+
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
     
         # Second given a k_shot prompt template, we then create n = ensemble_size, realisations of the template by sampling from the training set
         if self.prompt_style == 'yes_no':
-            li_filled_templates, li_li_discourse = self.fill_template_yesno(templates, batch)
+            li_filled_templates, li_li_discourse = self.fill_template_yesno(templates, batch, **kwargs)
         elif self.prompt_style == 'open':
             li_filled_templates, li_li_discourse = self.fill_template_open(templates, batch)
         elif self.prompt_style == 'categorise':
             li_filled_templates, li_li_discourse = self.fill_template_categorise(templates, batch, reverse_categories_order=reverse_categories_order)
         elif self.prompt_style == 'cot_categorise':
             li_filled_templates, li_li_discourse = self.fill_template_cot(templates, batch, reverse_categories_order=reverse_categories_order)
-        
+        elif self.prompt_style == 'categories_scale':
+            li_filled_templates, li_li_discourse = self._fill_template_categories_scale(templates, batch)
+        elif self.prompt_style == 'verbalize_scale':
+            li_filled_templates, li_li_discourse = self._fill_template_verbalize_scale(templates, batch, **kwargs)
+
         else:
             li_filled_templates = []
          
@@ -514,19 +526,36 @@ class PromptBuilder():
     @lru_cache(maxsize=2)
     def get_generation_params(self, prompt_style:str, **gen_kwargs):
         generation_params = {}
-        k = isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline )*'max_new_tokens' + isinstance(self.llm, langchain.chat_models.ChatOpenAI)*'max_tokens' + isinstance(self.llm, peft.peft_model.PeftModelForCausalLM )*'max_new_tokens'
+        _ = {
+            langchain.llms.huggingface_pipeline.HuggingFacePipeline:'max_new_tokens',
+            langchain.chat_models.ChatOpenAI:'max_tokens',
+            PeftModel:'max_new_tokens',
+            PreTrainedModel:'max_new_tokens'
+        }
+        k = _.get( next( (k for k in _.keys() if isinstance(self.llm, k)) ), None  )        
+        
+        
         if prompt_style == 'yes_no':
-            generation_params[k] = 10
+            generation_params[k] = 5
         elif prompt_style == 'open':
             generation_params[k] = 200
         elif prompt_style == 'categorise':
             generation_params[k] = 2
         elif prompt_style == 'cot_categorise':
             generation_params[k] = 300
+        elif prompt_style == 'verbalize_scale':
+            generation_params[k] = 2
         
         if isinstance(self.llm, langchain.llms.huggingface_pipeline.HuggingFacePipeline ):
             generation_params['early_stopping'] = True
             generation_params['do_sample'] = False
+
+        if isinstance(self.llm, PeftModel ):
+            generation_params['do_sample'] = False
+        
+        if isinstance(self.llm, PreTrainedModel ):
+            generation_params['do_sample'] = False
+            generation_params['early_stopping'] = True
 
         
         # Overriding any set keys with k,v in gen_kwargs
@@ -536,16 +565,25 @@ class PromptBuilder():
             
         return generation_params
 
-    def generate(self, li_li_prompts, include_user_message_pre_prompt=True, include_system_message=True, **gen_kwargs):
+    def generate(self, li_li_prompts, include_user_message_pre_prompt=True, include_system_message=True, add_suffix_space=False,**gen_kwargs):
         li_li_preds= []
         li_li_prompts_fmtd = []
 
-        if isinstance(self.llm, langchain.chat_models.ChatOpenAI): #type: ignore
+        # Shift away from HuggingFace pipeline to allow for batched processing
+        
+        if gen_kwargs.get('gpu_batch_size',1) >1 and isinstance(self.llm, HuggingFacePipeline):
+            # tokenizer = self.llm.pipeline.tokenizer
+            model = self.llm.pipeline.model
+            
+        else:
+            model = self.llm
+
+        if isinstance(model, langchain.chat_models.ChatOpenAI): #type: ignore
             
             generation_params = self.get_generation_params(self.prompt_style, **gen_kwargs)
             
             for k,v in generation_params.items():
-                setattr(self.llm, k, v)
+                setattr(model, k, v)
 
             for li_prompts in li_li_prompts:
                 sleep(20)
@@ -557,18 +595,18 @@ class PromptBuilder():
                     ]
                 
                 
-                outputs = self.llm.generate( batch_messages )
+                outputs = model.generate( batch_messages )
                 li_preds: list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
-        elif isinstance(self.llm, langchain.llms.base.LLM): #type: ignore
+        elif isinstance(model, langchain.llms.base.LLM): #type: ignore
 
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
             for k,v in self.get_generation_params(self.prompt_style, **gen_kwargs).items():
                 try:
-                    self.llm.pipeline._forward_params[k] = v
+                    model.pipeline._forward_params[k] = v
                 except AttributeError:
-                    self.llm.pipeline._forward_params = {k:v}
+                    model.pipeline._forward_params = {k:v}
 
             for li_prompts in li_li_prompts:
                 
@@ -593,7 +631,7 @@ class PromptBuilder():
                             )
                     )
 
-                outputs = self.llm.generate(
+                outputs = model.generate(
                     prompts=li_prompts_fmtd)
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
@@ -601,19 +639,39 @@ class PromptBuilder():
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         
-        elif  isinstance(self.llm, peft.peft_model.PeftModelForCausalLM): #type: ignore
-            # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
+        elif  isinstance(model, PeftModel) or isinstance(model, PreTrainedModel): #type: ignore
             
+            # Setting Batch size for llm to process
+            gpu_batch_size = gen_kwargs.get('gpu_batch_size', None)
+            if gpu_batch_size is not None:
+                # Flatten the list
+                flattened = [item for sublist in li_li_prompts for item in sublist]
+                
+                # Backup the original shape of li_li_prompts for reshaping later
+                original_shapes = [len(inner) for inner in li_li_prompts]
+
+                # Split the flattened list into chunks of gpu_batch_size
+                li_li_prompts = [flattened[i:i + gpu_batch_size] for i in range(0, len(flattened), gpu_batch_size)]
+
+
             generation_params = self.get_generation_params(self.prompt_style)
 
-            self.llm.generation_config.pad_token_id = self.tokenizer.pad_token_id
-            self.llm.generation_config.bos_token_id = self.tokenizer.bos_token_id
-            self.llm.generation_config.eos_token_id = self.tokenizer.eos_token_id
-            self.llm.generation_config.max_length = None
+            if model.generation_config.pad_token_id is None and self.tokenizer.pad_token_id is not None:
+                model.generation_config.pad_token_id = self.tokenizer.pad_token_id
+                self.tokenizer.pad_token = self.tokenizer.decode([self.tokenizer.pad_token_id])
+
+            elif self.tokenizer.pad_token_id is None and model.generation_config.pad_token_id is not None:
+                self.tokenizer.pad_token_id = model.generation_config.pad_token_id
+                self.tokenizer.pad_token = self.tokenizer.decode([self.tokenizer.pad_token_id])
+                
+            model.generation_config.bos_token_id = self.tokenizer.bos_token_id
+            model.generation_config.eos_token_id = self.tokenizer.eos_token_id
+            # model.generation_config.max_length = None
 
             for k,v in generation_params.items():
-                setattr(self.llm.generation_config, k, v)
+                setattr(model.generation_config, k, v)
             
+
             for li_prompts in li_li_prompts:
                 
                 li_prompts_fmtd = []
@@ -636,15 +694,17 @@ class PromptBuilder():
                     )
 
                 # Removing trailing space from end: (for some reason a space at the end causes to model to instaly stop generating)
-                li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
+                if add_suffix_space is True:
+                    li_prompts_fmtd = [ prompt + ' ' for prompt in li_prompts_fmtd ]
+                else:
+                    li_prompts_fmtd = [ prompt.strip(' ') for prompt in li_prompts_fmtd ]
 
                 # Decide how to pad and truncate the inputs
                 self.tokenizer.padding_side = 'left'
-                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', truncation=False ).to(self.llm.device)
+                inputs = self.tokenizer(li_prompts_fmtd, return_tensors='pt', padding='longest', truncation=False ).to(model.device)
                 self.tokenizer.padding_side = 'right'
                 
-                # Ignoring any warning from the model
-                outputs = self.llm.generate(**inputs, **generation_params, generation_config=self.llm.generation_config )
+                outputs = model.generate(**inputs, **generation_params, generation_config=model.generation_config )
 
                 output_text = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
@@ -652,9 +712,31 @@ class PromptBuilder():
 
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
+            
+            if gpu_batch_size is not None:
+                reshaped_li_prompts_fmtd = []
+                reshaped_li_preds = []
+
+                li_li_prompts_fmtd_flattened =  [item for sublist in li_li_prompts_fmtd for item in sublist] 
+                li_li_preds_flattened =  [item for sublist in li_li_preds for item in sublist] 
+
+                idx = 0
+                for shape in original_shapes:
+                    _1 = li_li_prompts_fmtd_flattened[idx:idx+shape]
+                    _2 = li_li_preds_flattened[idx:idx+shape]
+
+                    reshaped_li_prompts_fmtd.append( _1 )
+                    reshaped_li_preds.append( _2 )
+                    idx += shape
+
+                li_li_prompts_fmtd = reshaped_li_prompts_fmtd
+                li_li_preds = reshaped_li_preds
+
+            inputs = inputs.to('cpu')    
+            outputs = outputs.to('cpu')
         
         else:
-            raise ValueError(f"llm type {type(self.llm)} not recognized")
+            raise ValueError(f"llm type {type(model)} not recognized")
             
         return li_li_prompts_fmtd, li_li_preds
 
@@ -780,7 +862,21 @@ class PromptBuilder():
         
         return templates
 
-    def fill_template_yesno(self, templates:list[str], batch:list[dict]) -> tuple[list[list[str]], list[list[str]]]:
+    def _categories_scale_template(self, seed=None, scale_max=5) -> list[str]:
+        li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categories_scale_question']
+        templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
+        
+        for ens_idx in range(self.ensemble_size):
+            
+            if self.relationship == 'budgetitem_to_indicator':
+                raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
+            elif self.relationship == 'indicator_to_indicator':
+                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', scale_max=scale_max ).replace('  ',' ')
+
+            templates[ens_idx] = prompt
+        return templates
+
+    def fill_template_yesno(self, templates:list[str], batch:list[dict], **kwargs) -> tuple[list[list[str]], list[list[str]]]:
         """Fill in the template with the target and k_shot context"""
 
         li_li_prompts = []
@@ -819,7 +915,7 @@ class PromptBuilder():
             li_li_prompts.append(li_prompts)
         
         # Adding Prediction
-        li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts)
+        li_li_prompts_fmtd, li_li_statement = self.generate(li_li_prompts, **kwargs)
         li_li_discourse = [ [ prompt_fmtd+statement for prompt_fmtd, statement in zip(li_prompts, li_statement) ] for li_prompts, li_statement in zip(li_li_prompts_fmtd, li_li_statement) ]
 
         return li_li_statement, li_li_discourse
@@ -1034,3 +1130,65 @@ class PromptBuilder():
         
         return li_li_filledtemplate
 
+    def _fill_template_categories_scale(self, templates, batch ) -> tuple[list[list[str]], list[list[str]]]:
+        
+        """ fill in the template with the indicators """
+
+        li_li_prompts = []
+        
+        for row in batch:
+
+            li_prompts = []
+            prompt = None
+
+            for ens_idx in range(self.ensemble_size):
+
+                if self.relationship == 'budgetitem_to_indicator':
+                    raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
+
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_indicator1= row['indicator1'], 
+                        target_indicator2=row['indicator2']
+                    )
+                li_prompts.append(prompt)
+
+            li_li_prompts.append(li_prompts)
+        
+        li_filled_prompt = li_li_prompts
+        li_discourse = [] # No discourse was needed for this output
+
+        return li_filled_prompt, li_discourse
+
+    def _fill_template_verbalize_scale(self, templates, batch, **kwargs ) -> tuple[list[list[str]], list[list[str]]]:
+        
+        """ fill in the template with the indicators """
+
+        li_li_prompts = []
+        
+        for row in batch:
+
+            li_prompts = []
+            prompt = None
+
+            for ens_idx in range(self.ensemble_size):
+
+                if self.relationship == 'budgetitem_to_indicator':
+                    raise NotImplementedError("Scale question not implemented for budgetitem_to_indicator relationship")
+
+                elif self.relationship == 'indicator_to_indicator':
+                    prompt = templates[ens_idx].format(
+                        target_indicator1= row['indicator1'], 
+                        target_indicator2=row['indicator2']
+                    ) 
+                li_prompts.append(prompt)
+                
+            li_li_prompts.append(li_prompts)
+        
+
+        li_li_prompts_fmtd, li_li_preds = self.generate(li_li_prompts, add_suffix_space=True, **kwargs)
+
+        li_li_statement = li_li_preds
+        li_li_discourse = [ [ prompts_fmtd+pred for prompts_fmtd, pred in zip(li_prompts, li_preds) ] for li_prompts, li_preds in zip(li_li_prompts_fmtd, li_li_preds) ]
+        
+        return li_li_statement, li_li_discourse
