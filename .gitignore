@@ -15,6 +15,7 @@ tests/env_vars.yml
 # Temporary Files
 **/**.temp
 temp*
+*temp*
 
 # Bash scripts
 **/**.sh
