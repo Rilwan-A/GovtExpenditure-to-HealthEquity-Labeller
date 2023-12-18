@@ -292,12 +292,16 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
                 B_dict[int(row.indicator_index)] = [int(programme) for programme in row.values[1::][row.values[1::].astype(str)!='nan']]
     return B_dict
 
-def get_i2i_network(i2i_method, indic_count, model_size=None):
+def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=None):
     # Creates an array representing indicator to indicator relationships
 
-    if i2i_method in ['verbalize', 'CPUQ_multinomial', 'verbalize','entropy']:
+    if i2i_method in ['verbalize', 'CPUQ_multinomial', 'CPUQ_multinomial_adj','verbalize','entropy']:
         assert model_size is not None, 'model_size must be specified when using verbalize or CPUQ_multinomial'
+    if entropy_threshold is not None:
+        assert i2i_method in ['CPUQ_multinomial'], 'Can only filter out edges by entropy when using CPUQ_multinomial'
     
+    i2i_network = None
+
     if i2i_method == 'zero':
         i2i_network = np.zeros((indic_count, indic_count))
 
@@ -315,7 +319,7 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
             w = row.Weight
             i2i_network[i,j] = w
 
-    elif i2i_method in [ 'CPUQ_multinomial', 'verbalize', 'entropy']:
+    elif i2i_method in [ 'CPUQ_multinomial', 'CPUQ_multinomial_adj' ,'verbalize', 'entropy']:
 
         # Reading in the i2i network
         _1 = {
@@ -324,9 +328,8 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
             '30bn':os.path.join('exp_i2i_30b_distr','exp_upllama30b_non_uc'),
         }
 
-        _2 = {'CPUQ_multinomial':'mn', 'verbalize':'vb', 'entropy':'et'}
+        _2 = {'CPUQ_multinomial':'mn', 'verbalize':'vb', 'entropy':'et', 'CPUQ_multinomial_adj':'mn_adjusted'}
         
-
         _path = os.path.join('prompt_engineering','output', 'spot', _1[model_size], 
             f'i2i_{_2[i2i_method]}_weights.csv')
         
@@ -335,6 +338,9 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
             # filtering out rows where no weight predict or weight was None
             df_net = df_net[ ~df_net.weight.isnull() ]
             df_net.weight =  df_net.weight.apply(lambda x: eval(x))
+
+            if entropy_threshold is not None and 'distribution' in df_net.columns:                 
+                df_net.distribution = df_net.distribution.apply(lambda x: eval(x))
 
         else:
             raise FileNotFoundError(f'i2i Network not created - no file at {_path}')
@@ -352,12 +358,22 @@ def get_i2i_network(i2i_method, indic_count, model_size=None):
             
             if weight == 0.0:
                 continue
+            
+            if False and entropy_threshold is not None:
+            # Filtering out edges with entropy above threshold
+                base = len(row.distribution)
+                entropy = - sum( [ (p/base) * (np.log(p)/np.log(base) ) for p in row.distribution ] )
+                if entropy > entropy_threshold:
+                    continue
 
             i = dict_indic_idx[row.indicator1] 
             j = dict_indic_idx[row.indicator2] 
             
             i2i_network[i,j] = weight
-            
+    
+    if entropy_threshold is not None:
+        pass
+    
     return i2i_network
 
 def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T, i2i_network,
@@ -390,7 +406,7 @@ def get_args():
     parser.add_argument('--mc_simulations', type=int, default=5, help='Number of Monte Carlo simulations to run for each iteration')
 
     parser.add_argument('--b2i_method', type=str, default='ccdr', choices=[ 'ea', 'verbalize', 'CPUQ_binomial' ], help='Name of the spillover predictor model')
-    parser.add_argument('--i2i_method', type=str, default='ccdr', choices=['ccdr', 'verbalize' ,'CPUQ_multinomial', 'zero', 'entropy'], help='Name of the indicator to indicator edge predictor method')
+    parser.add_argument('--i2i_method', type=str, default='ccdr', choices=['ccdr', 'verbalize' ,'CPUQ_multinomial', 'CPUQ_multinomial_adj' ,'zero', 'entropy'], help='Name of the indicator to indicator edge predictor method')
     parser.add_argument('--model_size', type=str, default=None, choices=['7bn','13bn','30bn' ], help='Name of the indicator to indicator edge predictor method')
     
     parser.add_argument('--verbose', action='store_true', default=False, help='Print progress to console')
