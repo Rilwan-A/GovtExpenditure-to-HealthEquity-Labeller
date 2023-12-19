@@ -11,9 +11,25 @@ from agent_based_modelling.calibration import get_b2i_network, get_i2i_network
 
 
 def main( impute_start_year:int=2018, impute_years:int=1,
-            exp_group:str|None=None, mc_simulations:int=1, parallel_processes:int|None=None,
+            exp_group:str|None=None, exp_num:int=0,
+            mc_simulations:int=1, parallel_processes:int|None=None,
             i2i_thresholding:float|None=None,
-            exp_num:int=0):
+            save_exp_group:str|None=None,
+            save_exp_num:int|None=None):
+    """
+    Impute the missing indicator values for the next n time steps using the PPI model.  
+    
+    Parameters: 
+    - impute_start_year: The year to start imputing from
+    - impute_years: Number of years to impute. This assumes you have the final indicator level after the periods to be imputed
+    - exp_group: The name of the experiment group. Used to load the calibrated parameters. Also used to save the imputations
+    - exp_num: The experiment number. Used to load the calibrated parameters. Also used to save the imputations 
+    - mc_simulations: Number of Monte Carlo simulations to run
+    - parallel_processes: Number of parallel processes to run
+    - i2i_thresholding: The min value an i2i edge weight must have to be included in the i2i network. If None, all i2i edges are included.
+    - save_exp_group: The name of the experiment group to save the imputations to. Overrides the exp_group argument.
+    - save_exp_num: The experiment number to save the imputations to. Overrides the exp_num argument.
+    """
 
     # Load parameters from trained ppi model
     # Load calibration_kwargs e.g. the params for the PPI model
@@ -49,14 +65,18 @@ def main( impute_start_year:int=2018, impute_years:int=1,
         'indicator_names': indicator_names,
         'exp_num': exp_num,
         'exp_group': exp_group,
+        'save_exp_num': save_exp_num if save_exp_num is not None else exp_num,
+        'save_exp_group': save_exp_group if save_exp_group is not None else exp_group,
+        'mc_simulations': mc_simulations,
         'i2i_thresholding': i2i_thresholding,
         'model_hparams': model_hparams,
     }
 
-    save_dir = os.path.join('.','agent_based_modelling','output', 'imputations', f'{exp_group}' )
+
+    save_dir = os.path.join('.','agent_based_modelling','output', 'imputations', f'{save_exp_group if save_exp_group else exp_group}' )
     os.makedirs(save_dir, exist_ok=True)
         
-    fn = f'exp_{str(exp_num).zfill(3)}.pkl'
+    fn = f'exp_{str(save_exp_num if save_exp_num else exp_num).zfill(3)}.pkl'
     with open(os.path.join(save_dir, fn), 'wb') as f:
         pickle.dump(outp, f)
 
