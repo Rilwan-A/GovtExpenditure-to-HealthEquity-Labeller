@@ -11,7 +11,8 @@ from agent_based_modelling.calibration import get_b2i_network, get_i2i_network
 
 
 def main( impute_start_year:int=2018, impute_years:int=1,
-            exp_group:str=None, mc_simulations:int=1, parallel_processes:int=None,
+            exp_group:str|None=None, mc_simulations:int=1, parallel_processes:int|None=None,
+            i2i_thresholding:float|None=None,
             exp_num:int=0):
 
     # Load parameters from trained ppi model
@@ -22,7 +23,7 @@ def main( impute_start_year:int=2018, impute_years:int=1,
     current_I, fBs, frl, fG, time_refinement_factor, impute_periods = load_currI_fBs_frl_fG( impute_start_year=impute_start_year, impute_years=impute_years,
                                                                                 exp_group=exp_group, exp_num=exp_num  )
 
-    i2i_network = get_i2i_network( model_hparams['i2i_method'], current_I.shape[0], model_hparams['model_size'] )
+    i2i_network = get_i2i_network( model_hparams['i2i_method'], current_I.shape[0], model_hparams['model_size'], i2i_thresholding=i2i_thresholding )
     
     b2i_network = get_b2i_network( model_hparams['b2i_method'], model_hparams['model_size'] )
 
@@ -48,7 +49,7 @@ def main( impute_start_year:int=2018, impute_years:int=1,
         'indicator_names': indicator_names,
         'exp_num': exp_num,
         'exp_group': exp_group,
-
+        'i2i_thresholding': i2i_thresholding,
         'model_hparams': model_hparams,
     }
 
@@ -259,6 +260,8 @@ def get_args():
     parser.add_argument('--exp_group', type=str, default=None, help='The name of the experiment group')
     parser.add_argument('--mc_simulations', type=int, default=1, help='Number of Monte Carlo simulations to run')
     parser.add_argument('--parallel_processes', type=int, default=None, help='Number of parallel processes to run')
+    parser.add_argument('--i2i_thresholding', type=str, default=None, help='The min value an i2i edge weight must have \
+        to be included in the i2i network. If None, all i2i edges are included')
     parser.add_argument('--exp_num', type=int, default=0)
     args = parser.parse_args()
     return args
