@@ -293,13 +293,13 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
                 B_dict[int(row.indicator_index)] = [int(programme) for programme in row.values[1::][row.values[1::].astype(str)!='nan']]
     return B_dict
 
-def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=None) -> np.array :
+def get_i2i_network(i2i_method, indic_count, model_size=None, i2i_threshold=None) -> np.ndarray:
     # Creates an array representing indicator to indicator relationships
 
     if i2i_method in ['verbalize', 'CPUQ_multinomial', 'CPUQ_multinomial_adj','verbalize','entropy']:
         assert model_size is not None, 'model_size must be specified when using verbalize or CPUQ_multinomial'
-    if entropy_threshold is not None:
-        assert i2i_method in ['CPUQ_multinomial'], 'Can only filter out edges by entropy when using CPUQ_multinomial'
+    if i2i_threshold is not None:
+        assert i2i_method in ['CPUQ_multinomial', 'CPUQ_multinomial_adj', 'verbalize', 'ccdr' ], 'Can only filter out edges by i2i_threshold when using CPUQ_multinomial, CPUQ_multinomial_adj, verbalize or entropy'
     
     i2i_network = None
 
@@ -315,6 +315,10 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=
 
         i2i_network = np.zeros((indic_count, indic_count)) # adjacency matrix
         for index, row in df_net.iterrows():
+            
+            if row.Weight < i2i_threshold:
+                continue
+
             i = int(row.From)
             j = int(row.To)
             w = row.Weight
@@ -340,11 +344,6 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=
             df_net = df_net[ ~df_net.weight.isnull() ]
             if not isinstance(df_net.weight[0], dict):
                 df_net.weight =  df_net.weight.apply(lambda x: eval(x))
-
-            if entropy_threshold is not None and 'distribution' in df_net.columns:                 
-                if not isinstance(df_net.distribution[0], list):
-                    df_net.distribution = df_net.distribution.apply(lambda x: eval(x))
-
         else:
             raise FileNotFoundError(f'i2i Network not created - no file at {_path}')
         
@@ -362,11 +361,18 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=
             if weight == 0.0:
                 continue
             
-            if entropy_threshold is not None:
+            # thresholding
+            if i2i_threshold is not None and 'distribution' in df_net.columns:
                 # Filtering out edges with entropy above threshold
-                entropy = interpretable_entropy(row.distribution[0])
-                if entropy < entropy_threshold:
-                    continue
+                
+                if i2i_method in ['CPUQ_multinomial', 'CPUQ_multinomial_adj']:
+                    distribution : dict = row.distribution[0] if isinstance(row.distribution, list) else eval(row.distribution)[0]
+                    entropy = interpretable_entropy( distribution  )
+                    if entropy < i2i_threshold:
+                        continue
+                elif i2i_method in ['verbalize']:
+                    if weight < i2i_threshold:
+                        continue
 
             i = dict_indic_idx[row.indicator1] 
             j = dict_indic_idx[row.indicator2] 

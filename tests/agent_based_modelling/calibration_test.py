@@ -91,13 +91,13 @@ class TestCalibration(unittest.TestCase):
 
     @patch('pandas.read_csv')               
     def test_get_i2i_network(self, mock_read_csv):
-        for i2i_method, entropy_threshold in [ ('CPUQ_multinomial',0.2), 
+        for i2i_method, i2i_threshold in [ ('CPUQ_multinomial',0.2), 
                                               ('CPUQ_multinomial',0.7),
-                                              ('ccdr',None),
-                                              ('zero',None), ('verbalize',None),
+                                              ('ccdr',0.1),
+                                              ('zero',None), ('verbalize',2),
                                               ('entropy',None) ]:
             
-            with self.subTest(i2i_method=i2i_method, entropy_threshold=entropy_threshold):
+            with self.subTest(i2i_method=i2i_method, i2i_threshold=i2i_threshold):
                 
                 if i2i_method =='zero':
                     pass
@@ -112,7 +112,7 @@ class TestCalibration(unittest.TestCase):
                     ]
 
                 i2i_network = get_i2i_network(i2i_method, self.indic_count, 
-                                              self.model_size, entropy_threshold)
+                                              self.model_size, i2i_threshold)
 
 
 
@@ -122,14 +122,24 @@ class TestCalibration(unittest.TestCase):
                 if i2i_method in ['verbalize', 'entropy', 'CPUQ_multinomial', 'ccdr' ]:
                     self.assertTrue(np.any(i2i_network != 0))
                 
-                if entropy_threshold is not None:
-                    distributions = self.i2i_networks[i2i_method]['distribution'].values.tolist()
-                    entropies = [interpretable_entropy(d[0]) for d in distributions]
-                    filtered_count = sum([1 for e in entropies if e>= entropy_threshold])  
-
-                    self.assertEqual(np.count_nonzero(i2i_network), filtered_count)
-                    self.assertTrue(np.all( np.array(entropies) <= 1))       
+                if i2i_threshold is not None:
+                    if i2i_method == 'ccdr':
+                        filtered_count = sum([1 for w in self.i2i_networks[i2i_method]['Weight'].tolist() if w>= i2i_threshold])
+                        self.assertEqual(np.count_nonzero(i2i_network), filtered_count)
                     
+                    elif i2i_method == 'verbalization':
+                        filtered_count = sum([1 for w in self.i2i_networks[i2i_method]['weight'].tolist() if w>= i2i_threshold])
+                        self.assertEqual(np.count_nonzero(i2i_network), filtered_count)
+                    
+                    elif i2i_method in ['CPUQ_multinomial', 'CPUQ_multinomial_adj']:
+    
+                        distributions = self.i2i_networks[i2i_method]['distribution'].values.tolist()
+                        entropies = [interpretable_entropy(d[0]) for d in distributions]
+                        filtered_count = sum([1 for e in entropies if e>= i2i_threshold])  
+                        self.assertTrue(np.all( np.array(entropies) <= 1))       
+                    
+                        self.assertEqual(np.count_nonzero(i2i_network), filtered_count)
+
     def test_calibrate(self):
         for b2i_method, i2i_method, parrallel_processes, time_experiments in [
             # ('ea', 'zero', None, False),
