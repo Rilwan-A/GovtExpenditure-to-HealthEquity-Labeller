@@ -359,10 +359,10 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=
             if weight == 0.0:
                 continue
             
-            if False and entropy_threshold is not None:
-            # Filtering out edges with entropy above threshold
+            if entropy_threshold is not None:
+                # Filtering out edges with entropy above threshold
                 base = len(row.distribution)
-                entropy = - sum( [ (p/base) * (np.log(p)/np.log(base) ) for p in row.distribution ] )
+                entropy = 1 - sum( [ p * (np.log(p)/np.log(base) ) for p in row.distribution ] )
                 if entropy > entropy_threshold:
                     continue
 
