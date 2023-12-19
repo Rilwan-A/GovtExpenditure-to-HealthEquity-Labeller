@@ -20,6 +20,7 @@ from copy import deepcopy
 from prompt_engineering.my_logger import setup_logging_calibration
 logging = None
 from builtins import FileNotFoundError
+from typing import Dict
 
 #TODO: ensure the b2i method is handled e.g. figure out what edits to do in order to get the b2i matrix
 
@@ -292,7 +293,7 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
                 B_dict[int(row.indicator_index)] = [int(programme) for programme in row.values[1::][row.values[1::].astype(str)!='nan']]
     return B_dict
 
-def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=None):
+def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=None) -> np.array :
     # Creates an array representing indicator to indicator relationships
 
     if i2i_method in ['verbalize', 'CPUQ_multinomial', 'CPUQ_multinomial_adj','verbalize','entropy']:
@@ -337,10 +338,12 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=
             df_net = pd.read_csv(_path) # columns = ['indicator1', 'indicator2', 'weight']
             # filtering out rows where no weight predict or weight was None
             df_net = df_net[ ~df_net.weight.isnull() ]
-            df_net.weight =  df_net.weight.apply(lambda x: eval(x))
+            if not isinstance(df_net.weight[0], dict):
+                df_net.weight =  df_net.weight.apply(lambda x: eval(x))
 
             if entropy_threshold is not None and 'distribution' in df_net.columns:                 
-                df_net.distribution = df_net.distribution.apply(lambda x: eval(x))
+                if not isinstance(df_net.distribution[0], list):
+                    df_net.distribution = df_net.distribution.apply(lambda x: eval(x))
 
         else:
             raise FileNotFoundError(f'i2i Network not created - no file at {_path}')
@@ -361,20 +364,21 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, entropy_threshold=
             
             if entropy_threshold is not None:
                 # Filtering out edges with entropy above threshold
-                base = len(row.distribution)
-                entropy = 1 - sum( [ p * (np.log(p)/np.log(base) ) for p in row.distribution ] )
-                if entropy > entropy_threshold:
+                entropy = interpretable_entropy(row.distribution[0])
+                if entropy < entropy_threshold:
                     continue
 
             i = dict_indic_idx[row.indicator1] 
             j = dict_indic_idx[row.indicator2] 
             
             i2i_network[i,j] = weight
-    
-    if entropy_threshold is not None:
-        pass
-    
+        
     return i2i_network
+
+def interpretable_entropy(distr:Dict[int,float] ) -> float:
+    base = len(distr)
+    entropy = 1 + sum( [ p * np.log(p) * (1/np.log(base)) if p!=0 else 0.0 for p in distr.values() ] )
+    return entropy  
 
 def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T, i2i_network,
               parallel_processes=6, threshold=0.8,

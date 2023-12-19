@@ -1,9 +1,10 @@
 import unittest
 import numpy as np
 import pandas as pd
-from agent_based_modelling.calibration import get_b2i_network, get_i2i_network, calibrate
+from agent_based_modelling.calibration import get_b2i_network, get_i2i_network, calibrate, interpretable_entropy 
 import itertools
-
+from unittest.mock import patch
+import random
 class TestCalibration(unittest.TestCase):
     
     def setUp(self):
@@ -41,6 +42,45 @@ class TestCalibration(unittest.TestCase):
         self.B_dict = { k: sorted( list(itertools.islice(bi_idx_iter, 2)))  
             for k in range(self.indic_count) }
         
+        
+        indicator1_names = [f"ind1_{i+1}" for i in range(20)]
+        indicator2_names = [f"ind1_{i+2}" for i in range(20)]
+        weights = np.random.uniform(0, 5, 20)
+        
+        self.i2i_networks = {}
+        self.i2i_networks['CPUQ_multinomial'] = pd.DataFrame(
+            {'indicator1': indicator1_names,
+            'indicator2': indicator2_names,
+            'weight': [ {'mean': v, 'scaled_mean':v/5} for v in weights ] ,
+            'distribution': 
+            [ 
+                [{0:0.0, 1:0.0, 2:1.0, 3:0.0, 4:0.0, 5:0.0}] for _ in range(5) # entropy = 1.0
+             ] + [
+                [{0:0.0, 1:0.3, 2:0.6, 3:0.1, 4:0.0, 5:0.0}] for _ in range(5) # entropy =  0.4988
+             ] + [
+                [{0:0.1, 1:0.18, 2:0.18, 3:0.18, 4:0.18, 5:0.18}] for _ in range(10) # entropy = 0.0101
+             ]
+            }
+            )
+        
+        self.i2i_networks['verbalize'] = pd.DataFrame(
+            {'indicator1': indicator1_names,
+            'indicator2': indicator2_names,
+            'preds': [ [{'mean': w}] for w in weights ] ,
+            'weight': [ {'mean':w ,'scaled_mean':w/5} for w in weights] }
+        )
+        self.i2i_networks['entropy'] = pd.DataFrame({
+                                    "indicator1": indicator1_names,
+                                    "indicator2": indicator2_names,
+                                    "weight":  [ {'mean': w} for w in weights ] })
+        self.i2i_networks['CPUQ_multinomial_adj'] = self.i2i_networks['CPUQ_multinomial']
+
+        self.i2i_networks['ccdr'] = pd.DataFrame({
+            'From': list(range(20)),
+            'To': [i+1 for i in range(20)],
+            'Weight': list(weights/5)
+        })
+
 
     def test_get_b2i_network(self):
         for b2i_method in ['ea', 'verbalize', 'CPUQ_binomial']:
@@ -48,15 +88,47 @@ class TestCalibration(unittest.TestCase):
                 B_dict = get_b2i_network(b2i_method, self.model_size)
                 self.assertIsInstance(B_dict, dict)
                 self.assertEqual(len(B_dict), 415)
-                        
-    def test_get_i2i_network(self):
-        for i2i_method in [ 'CPUQ_multinomial', 'ccdr', 'zero', 'verbalize', 'entropy']:
-            with self.subTest(i2i_method=i2i_method):
-                i2i_network = get_i2i_network(i2i_method, self.indic_count, self.model_size)
+
+    @patch('pandas.read_csv')               
+    def test_get_i2i_network(self, mock_read_csv):
+        for i2i_method, entropy_threshold in [ ('CPUQ_multinomial',0.2), 
+                                              ('CPUQ_multinomial',0.7),
+                                              ('ccdr',None),
+                                              ('zero',None), ('verbalize',None),
+                                              ('entropy',None) ]:
+            
+            with self.subTest(i2i_method=i2i_method, entropy_threshold=entropy_threshold):
+                
+                if i2i_method =='zero':
+                    pass
+                elif i2i_method == 'ccdr':
+                    mock_read_csv.side_effect = [self.i2i_networks[i2i_method]]
+                else:
+                    mock_read_csv.side_effect = [
+                        self.i2i_networks[i2i_method],
+                        pd.DataFrame({'indicator_name': list(set( 
+                            self.i2i_networks[i2i_method].indicator1.tolist() +
+                            self.i2i_networks[i2i_method].indicator2.tolist())) })
+                    ]
+
+                i2i_network = get_i2i_network(i2i_method, self.indic_count, 
+                                              self.model_size, entropy_threshold)
+
+
+
                 self.assertIsInstance(i2i_network, np.ndarray)
                 self.assertEqual(i2i_network.shape, (self.indic_count, self.indic_count))
+                
                 if i2i_method in ['verbalize', 'entropy', 'CPUQ_multinomial', 'ccdr' ]:
                     self.assertTrue(np.any(i2i_network != 0))
+                
+                if entropy_threshold is not None:
+                    distributions = self.i2i_networks[i2i_method]['distribution'].values.tolist()
+                    entropies = [interpretable_entropy(d[0]) for d in distributions]
+                    filtered_count = sum([1 for e in entropies if e>= entropy_threshold])  
+
+                    self.assertEqual(np.count_nonzero(i2i_network), filtered_count)
+                    self.assertTrue(np.all( np.array(entropies) <= 1))       
                     
     def test_calibrate(self):
         for b2i_method, i2i_method, parrallel_processes, time_experiments in [
@@ -107,7 +179,8 @@ class TestCalibration(unittest.TestCase):
 
                     self.assertIn('iterations', df_output)
                     self.assertIsInstance(df_output['iterations'], int)
+
     
-        
+      
 if __name__ == '__main__':
     unittest.main()
