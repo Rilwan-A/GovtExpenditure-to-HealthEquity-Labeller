@@ -6,14 +6,14 @@ import yaml
 from agent_based_modelling.ppi import run_ppi, run_ppi_parallel, align_Bs_with_B_dict
 import glob
 import pickle
-
+import logging
 from agent_based_modelling.calibration import get_b2i_network, get_i2i_network
 
 
 def main( impute_start_year:int=2018, impute_years:int=1,
             exp_group:str|None=None, exp_num:int=0,
             mc_simulations:int=1, parallel_processes:int|None=None,
-            i2i_thresholding:float|None=None,
+            i2i_threshold:float|None=None,
             save_exp_group:str|None=None,
             save_exp_num:int|None=None):
     """
@@ -26,7 +26,7 @@ def main( impute_start_year:int=2018, impute_years:int=1,
     - exp_num: The experiment number. Used to load the calibrated parameters. Also used to save the imputations 
     - mc_simulations: Number of Monte Carlo simulations to run
     - parallel_processes: Number of parallel processes to run
-    - i2i_thresholding: The min value an i2i edge weight must have to be included in the i2i network. If None, all i2i edges are included.
+    - i2i_threshold: The min value an i2i edge weight must have to be included in the i2i network. If None, all i2i edges are included.
     - save_exp_group: The name of the experiment group to save the imputations to. Overrides the exp_group argument.
     - save_exp_num: The experiment number to save the imputations to. Overrides the exp_num argument.
     """
@@ -39,7 +39,7 @@ def main( impute_start_year:int=2018, impute_years:int=1,
     current_I, fBs, frl, fG, time_refinement_factor, impute_periods = load_currI_fBs_frl_fG( impute_start_year=impute_start_year, impute_years=impute_years,
                                                                                 exp_group=exp_group, exp_num=exp_num  )
 
-    i2i_network = get_i2i_network( model_hparams['i2i_method'], current_I.shape[0], model_hparams['model_size'], i2i_thresholding=i2i_thresholding )
+    i2i_network = get_i2i_network( model_hparams['i2i_method'], current_I.shape[0], model_hparams['model_size'], i2i_threshold=i2i_threshold )
     
     b2i_network = get_b2i_network( model_hparams['b2i_method'], model_hparams['model_size'] )
 
@@ -68,7 +68,7 @@ def main( impute_start_year:int=2018, impute_years:int=1,
         'save_exp_num': save_exp_num if save_exp_num is not None else exp_num,
         'save_exp_group': save_exp_group if save_exp_group is not None else exp_group,
         'mc_simulations': mc_simulations,
-        'i2i_thresholding': i2i_thresholding,
+        'i2i_threshold': i2i_threshold,
         'model_hparams': model_hparams,
     }
 
@@ -278,11 +278,14 @@ def get_args():
     parser.add_argument('--impute_start_year', type=int, default=2018, help='The year to start imputing from')
     parser.add_argument('--impute_years', type=int, default=1, help='Number of years to impute. This assumes you have the final indicator level after the periods to be imputed')
     parser.add_argument('--exp_group', type=str, default=None, help='The name of the experiment group')
+    parser.add_argument('--exp_num', type=int, default=0)
+    parser.add_argument('--save_exp_group', type=str, default=None, help='The name of the experiment group to save the imputations to. Overrides the exp_group argument.')
+    parser.add_argument('--save_exp_num', type=int, default=None, help='The experiment number to save the imputations to. Overrides the exp_num argument.')
     parser.add_argument('--mc_simulations', type=int, default=1, help='Number of Monte Carlo simulations to run')
     parser.add_argument('--parallel_processes', type=int, default=None, help='Number of parallel processes to run')
-    parser.add_argument('--i2i_thresholding', type=str, default=None, help='The min value an i2i edge weight must have \
+    parser.add_argument('--i2i_threshold', type=float, default=None, help='The min value an i2i edge weight must have \
         to be included in the i2i network. If None, all i2i edges are included')
-    parser.add_argument('--exp_num', type=int, default=0)
+    
     args = parser.parse_args()
     return args
 

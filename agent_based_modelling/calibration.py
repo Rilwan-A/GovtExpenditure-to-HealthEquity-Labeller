@@ -21,7 +21,7 @@ from prompt_engineering.my_logger import setup_logging_calibration
 logging = None
 from builtins import FileNotFoundError
 from typing import Dict
-
+import math
 #TODO: ensure the b2i method is handled e.g. figure out what edits to do in order to get the b2i matrix
 
 def main(   start_year, end_year,
@@ -293,7 +293,7 @@ def get_b2i_network(b2i_method,  model_size) -> dict[int, list[int]]:
                 B_dict[int(row.indicator_index)] = [int(programme) for programme in row.values[1::][row.values[1::].astype(str)!='nan']]
     return B_dict
 
-def get_i2i_network(i2i_method, indic_count, model_size=None, i2i_threshold=None) -> np.ndarray:
+def get_i2i_network(i2i_method, indic_count, model_size=None, i2i_threshold=None):
     # Creates an array representing indicator to indicator relationships
 
     if i2i_method in ['verbalize', 'CPUQ_multinomial', 'CPUQ_multinomial_adj','verbalize','entropy']:
@@ -383,7 +383,7 @@ def get_i2i_network(i2i_method, indic_count, model_size=None, i2i_threshold=None
 
 def interpretable_entropy(distr:Dict[int,float] ) -> float:
     base = len(distr)
-    entropy = 1 + sum( [ p * np.log(p) * (1/np.log(base)) if p!=0 else 0.0 for p in distr.values() ] )
+    entropy = 1 + sum( [ p * math.log(p) * (1/math.log(base)) if p!=0 else 0.0 for p in distr.values() ] )
     return entropy  
 
 def calibrate(indic_start, indic_final, success_rates, R, qm, rl, Bs, B_dict, T, i2i_network,
