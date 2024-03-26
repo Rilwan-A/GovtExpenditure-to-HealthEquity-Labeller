@@ -49,7 +49,9 @@ HUGGINGFACE_MODELS = [
     'upstage/Llama-2-70b-instruct-v2',
     'stabilityai/StableBeluga2',
     
-    'trl-internal-testing/dummy-GPT2-correct-vocab']
+    'trl-internal-testing/dummy-GPT2-correct-vocab',
+    
+    '01-ai/Yi-34B-Chat']
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
@@ -68,7 +70,9 @@ MAP_LOAD_IN_NBIT = {
     'upstage/Llama-2-70b-instruct-v2':4,
     'stabilityai/StableBeluga2':4,
 
-    'trl-internal-testing/dummy-GPT2-correct-vocab':4
+    'trl-internal-testing/dummy-GPT2-correct-vocab':4,
+
+    '01-ai/Yi-34B-Chat':4,
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
@@ -121,6 +125,9 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                                     'quantization_config':quant_config,
                                     'do_sample':False,
                                     'device_map':'auto'
+                                    # 'device_map':None,
+                                    # 'device':None,
+                                    # 'hf_device_map':None
                                     },)
 
                 tokenizer = llm.pipeline.tokenizer
@@ -194,6 +201,7 @@ class PredictionGenerator():
                   relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
                   effect_type:str='directly',
+                  use_system_prompt:bool=True,
                 **kwargs ):
                 
         if parse_style in ['categories_perplexity']: 
@@ -218,6 +226,7 @@ class PredictionGenerator():
         self.local_or_remote = local_or_remote
       
         self.effect_type = effect_type
+        self.use_system_prompt = use_system_prompt
 
     def predict(self, li_li_filled_template:list[list[str]], reverse_categories=False, **kwargs)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
@@ -238,8 +247,6 @@ class PredictionGenerator():
                 li_li_pred = [ self.parse_outp_cotcategories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'categories_scale':
                 li_li_pred = [ self.parse_outp_categories_scale(li_filled_template, scale_max = kwargs.get('scale_max',5)) for li_filled_template in li_li_filled_template]
-        
-
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
@@ -253,7 +260,6 @@ class PredictionGenerator():
         for idx, prediction in enumerate(li_filled_template):
             
             prediction = copy.deepcopy(prediction).lower()
-
             
             if any( ( neg_phrase in prediction for neg_phrase in ['cannot answer','can\'t answer', 'not sure', 'not certain',  ])):
                 dict_pred = {'Yes':0.0, 'No':0.0, 'NA':1.0}
@@ -363,11 +369,20 @@ class PredictionGenerator():
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
+        # li_filledtemplate_fmtd = [
+        #         map_llmname_input_format(self.llm_name,
+        #                                 user_message = filledtemplate, 
+        #                                 system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] )
+        #                             for filledtemplate in li_filledtemplate ] #Added some base model formatting
+
         li_filledtemplate_fmtd = [
-                map_llmname_input_format(self.llm_name,
-                                        user_message = filledtemplate, 
-                                        system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] )
-                                    for filledtemplate in li_filledtemplate ] #Added some base model formatting
+            apply_chat_templates(
+                self.llm.pipeline.tokenizer,
+                system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] if self.use_system_prompt else None,
+                user_messages=[prompt])
+            for prompt in li_filledtemplate
+        ]
+
         
         # For each template, create a set of templates that ask a categorical question about the LLMs answer to if Budget Item affects an indiciator 
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -406,12 +421,21 @@ class PredictionGenerator():
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
+        # li_filledtemplate_fmtd = [
+        #         map_llmname_input_format(self.llm_name,
+        #                                 user_message = prompt, 
+        #                                 system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] 
+        #                                 )
+        #                             for prompt in li_filledtemplate ] #Added some base model formatting
+
         li_filledtemplate_fmtd = [
-                map_llmname_input_format(self.llm_name,
-                                        user_message = prompt, 
-                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] 
-                                        )
-                                    for prompt in li_filledtemplate ] #Added some base model formatting
+            apply_chat_templates(
+                self.llm.pipeline.tokenizer,
+                system_message=(map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]) if self.use_system_prompt else None,
+                # system_message=None,
+                user_messages=[prompt])
+            for prompt in li_filledtemplate
+        ]
 
         # For each template, create a set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -421,12 +445,20 @@ class PredictionGenerator():
         # Flattening out the list of list of prompt templates
         original_shape = [ len(li_filledtemplate) for li_filledtemplate in li_li_filledtemplates_with_answers]        
         li_filledtemplates_with_answers = [ prompt for li_filledtemplate in li_li_filledtemplates_with_answers for prompt in li_filledtemplate ]
+
+        # Creating map_tokenidx_similartokens in order to aggregate the probabilities of similar tokens
+        map_tokenidx_similartokens = {}
+        map_tokenidx_similartokens[self.llm.pipeline.tokenizer.convert_tokens_to_ids(['1'])[0]] = self.llm.pipeline.tokenizer.convert_tokens_to_ids(['TRUE','True','true', 'Yes', 'YES', 'yes' ] if not reverse_categories else ['FALSE','False','false', 'NO', 'No', 'no'])
+        map_tokenidx_similartokens[self.llm.pipeline.tokenizer.convert_tokens_to_ids(['2'])[0]] = self.llm.pipeline.tokenizer.convert_tokens_to_ids(['FALSE','False','false', 'NO', 'No', 'no'] if not reverse_categories else ['TRUE','True','true', 'Yes', 'YES', 'yes'])
+        
         _ = joint_probabilities_for_category(
                 li_filledtemplates_with_answers, 
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
                 batch_size=kwargs.get('gpu_batch_size', len(map_category_answer.keys())), 
-                category_token_len=1 ) 
+                category_token_len=1,
+                map_tokenidx_similartokens=map_tokenidx_similartokens 
+                  ) 
         
         # Reshaping so each inner lists represents probabilities of different answers for a shared prompt
         li_li_probability = []
@@ -445,9 +477,9 @@ class PredictionGenerator():
         li_map_probability = [ { _categorise_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
 
         # Convert this to normalised probabilities
-        li_map_probability = [  nomalized_probabilities(map_probability) for map_probability in li_map_probability ]
+        li_map_probability_norm = [ nomalized_probabilities(map_probability) for map_probability in li_map_probability ]
 
-        return li_map_probability
+        return li_map_probability_norm
 
     def parse_outp_categories_scale(self, li_filledtemplate:list[str], scale_max=5)->  list[dict[str,float]] :
         # returns a multinomial distribution over the values 1-10
@@ -455,14 +487,24 @@ class PredictionGenerator():
         category_scale = copy.deepcopy( map_relationship_promptsmap[self.relationship]['category_scale'] )
         
         # Formatting prompts to adhere to format required by Base Language Model
+        # li_filledtemplate_fmtd = [
+        #         map_llmname_input_format(self.llm_name,
+        #                                 user_message = prompt, 
+        #                                 system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
+        #                                 # system_message = map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
+        #                                 # system_message = None
+        #                                 )
+        #                             for prompt in li_filledtemplate ] #Added some base model formatting
+
         li_filledtemplate_fmtd = [
-                map_llmname_input_format(self.llm_name,
-                                        user_message = prompt, 
-                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
-                                        # system_message = map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
-                                        # system_message = None
-                                        )
-                                    for prompt in li_filledtemplate ] #Added some base model formatting
+            apply_chat_templates(
+                self.llm.pipeline.tokenizer,
+                # system_message=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style],
+                system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max)) if self.use_system_prompt else None,
+                user_messages=[prompt])
+            for prompt in li_filledtemplate
+        ]
+
 
         # For each template, create the set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -620,3 +662,56 @@ def load_annotated_examples(k_shot_example_dset_name:str|None,
         raise ValueError('Invalid dset_name: ' + str(k_shot_example_dset_name))
 
     return li_records
+
+def apply_chat_templates( tokenizer, system_message=None, user_messages:list[str]|None=None, assistant_messages:list[str]|None=None ):
+    """
+        Apply the chat templates to the user message and system message
+    """
+    messages = []
+    user_messages = [] if user_messages is None else user_messages
+    assistant_messages = [] if assistant_messages is None else assistant_messages
+
+    if system_message is not None:
+        system_message = {
+            "role": "system",
+            "content": system_message
+        }
+
+        messages.append(system_message)
+
+
+    len_am = len(assistant_messages) if assistant_messages is not None else 0
+    len_um = len(user_messages)
+    assert len_am in [ len_um, len_um-1], f"Assistant messages and user messages must be the same length or one less. Got {len_am} assistant messages and {len_um} user messages" 
+
+    if len_um > 0:
+        messages.append(
+            {"role": "user",
+            "content": user_messages[0]}
+        )
+
+        for user_message, assistem_message in zip(user_messages[1:], assistant_messages[:-1]):
+
+            assistant_message = {
+                "role": "assistant",
+                "content": assistem_message
+            }
+
+            user_message = {
+                "role": "user",
+                "content": user_message
+            }
+
+            messages.append(user_message)
+            messages.append(assistant_message)
+    
+    if len_am > 0:
+        messages.append(
+            {"role": "assistant",
+            "content": assistant_messages[-1]}
+        )
+
+
+    templated_message = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True )
+
+    return templated_message

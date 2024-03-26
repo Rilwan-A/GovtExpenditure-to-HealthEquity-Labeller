@@ -15,14 +15,18 @@ from prompt_engineering.utils import PredictionGenerator, load_llm
 from prompt_engineering.utils_prompteng import PromptBuilder
 from torch.cuda import empty_cache
 from torch import no_grad
-exp_dirs = [
-    os.path.join('prompt_engineering','output','spot','exp_i2i_7bn_distr', 'exp_sbeluga7b_non_uc'),
-    os.path.join('prompt_engineering','output','spot','exp_i2i_13b_distr', 'exp_sbeluga13b_non_uc'),
-    os.path.join('prompt_engineering','output','spot','exp_i2i_30b_distr','exp_upllama30b_non_uc')
-]
+# exp_dirs = [
+#     os.path.join('prompt_engineering','output','spot','exp_i2i_7bn_distr', 'exp_sbeluga7b_non_uc'),
+#     os.path.join('prompt_engineering','output','spot','exp_i2i_13b_distr', 'exp_sbeluga13b_non_uc'),
+#     os.path.join('prompt_engineering','output','spot','exp_i2i_30b_distr','exp_upllama30b_non_uc'),
+
+    # # TODO: update the following paths when model to be used is decided
+    # os.path.join('prompt_engineering','output','spot','exp_i2i_30bn_distr', '30bn_HMRC'),
+
+# ]
 
 
-def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_max=5, gpu_batch_size=None ):
+def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_max=5, gpu_batch_size=1 ):
     if gpu_batch_size > batch_size:
         batch_size = gpu_batch_size
 
@@ -264,7 +268,8 @@ def entropy_edge_weights(li_records):
 
 def parse_args():
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--exp_idx', type=int, choices=[0,1,2] )
+    # parser.add_argument('--exp_idx', type=int, choices=[0,1,2] )
+    parser.add_argument('--experiment_dir', type=str, default=os.path.join('prompt_engineering','output','spot','exp_i2i_30b_distr','exp_upllama30b_non_uc') )
     parser.add_argument('--batch_size', type=int, default=1 )
     parser.add_argument('--gpu_batch_size', type=int, default=1 )
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
@@ -274,8 +279,8 @@ def parse_args():
 
     args = parser.parse_known_args()[0]
 
-    args.experiment_dir = exp_dirs[args.exp_idx]
-    del args.exp_idx
+    # args.experiment_dir = exp_dirs[args.exp_idx]
+    # del args.exp_idx
     return args
 
 if __name__ == '__main__':

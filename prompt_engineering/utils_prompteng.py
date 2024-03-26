@@ -83,7 +83,7 @@ li_prompts_categorical_question_b2i: list[str] = [
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i["1"]}\n\t2) {map_category_answer_b2i_b2i["2"]}.'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["1"]}" or "2" if the answer is "{map_category_label_b2i["2"]}".',
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Answers: 1) {map_category_label_b2i["1"]} 2) {map_category_label_b2i["2"]}',
-    f'Write "1" if the following statement is True or "2" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
+    f'I want you to write 1 if the following statement is True or write 2 if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
     ]
 
 li_prompts_categorical_question_reversed_b2i: list[str] = [
@@ -95,7 +95,7 @@ li_prompts_categorical_question_reversed_b2i: list[str] = [
     # f'Categories:\n1) {map_category_answer_b2i_b2i_b2i_b2i["2"]}\n2) {map_category_answer_b2i["1"]}\nWrite the number of the category that best answers whether government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i_b2i["2"]}\n\t2) {map_category_answer_b2i["1"]}.'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["2"]}" or "2" if the answer is "{map_category_label_b2i["1"]}".'
-    f'Write "2" if the following statement is True or "1" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
+    f'I want you to write 1 if the following statement is False or write 2 if it is True. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
 ]
 
 # endregion
@@ -155,15 +155,26 @@ li_prompts_categorical_question_w_reasoning_reversed_i2i: list[str] = [
 ]
 
 li_prompts_categorical_question_i2i: list[str] = [
-    f'Write "1" if the following statement is True or "2" if it is False. The level of "{{indicator1}}" is {{effect_type}} influential to the state of "{{indicator2}}".'
+    # f'Write "1" if the following statement is True or "2" if it is False. The level of "{{indicator1}}" is {{effect_type}} influential to the state of "{{indicator2}}".',
+    # f'I want you to write the number 1 if the following statement is true or write the number 2 if it is false. The level of "{{indicator1}}" is {{effect_type}} influential to the level of "{{indicator2}}".'
+    # f'Choose 1 if the following statement is true or choose 2 if the following statement is false.\nStatement: The level of "{{indicator1}}" {{effect_type}} affects the level of "{{indicator2}}".',
+    # f'Is the following statement true (1) or false (2)?\n"The level of {{indicator1}} {{effect_type}} influences the level of {{indicator2}}"',
+    # f"Answer with '1' for True and '2' for False.\nTrue or False: Does the level of {{indicator1}} {{effect_type}} affect the level of {{indicator2}}?",
+    f"The level of {{indicator1}} {{effect_type}} affects the level of {{indicator2}}.\n1) Yes 2) No"
+    
     ]
 
 li_prompts_categorical_question_reversed_i2i: list[str] = [
-    'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
+    # 'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
+    #f'I want you to write the number 1 if the following statement is false or write the number 2 if it is true. The level of "{{indicator1}}" is {{effect_type}} influential to the level of "{{indicator2}}".'
+    # f'Choose 1 if the following statement is false or choose 2 if the following statement is true.\nStatement: The level of "{{indicator1}}" {{effect_type}} affects the level of "{{indicator2}}".'
+    # f'Is the following statement false (1) or true (2)?\n"The level of {{indicator1}} {{effect_type}} influences the level of {{indicator2}}"'
+    # f"Answer with '1' for False and '2' for True.\nTrue or False: Does the level of {{indicator1}} {{effect_type}} affect the level of {{indicator2}}?",
+    f"The level of {{indicator1}} {{effect_type}} affects the level of {{indicator2}}.\n1) No 2) Yes"
     ]
 
 li_prompts_categories_scale_question_i2i: list[str] = [
-    'On a scale of 0 to {scale_max}, how strong is the influence of changes in \"{indicator1}\" on changes in \"{indicator2}\"?'
+    f'On a scale of 0 to {{scale_max}}, how strong is the influence of changes in "{{indicator1}}" on changes in "{{indicator2}}"?'
 ]
 
 # Prompts for the scaling categorisation method
@@ -260,7 +271,7 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
 
     llm_name = llm_name.lower()
     
-    if any(x in llm_name for x in ['hermes-llama-2','hermes-llama2']):
+    if any(x in llm_name for x in ['hermes-llama-2','hermes-llama2','yi']):
         if system_message is not None:
             template = format_alpaca
         else:
@@ -342,7 +353,9 @@ def create_negative_examples_b2i(dset:pd.DataFrame, random_state=None) -> pd.Dat
     return dset
 
 def joint_probabilities_for_category(
-    li_text, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
+    li_text, model, tokenizer, batch_size: int = 1, 
+    max_length=None, category_token_len=1,
+    map_tokenidx_similartokens:dict[int,list[int]]=None):
 
 
     """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
@@ -399,7 +412,7 @@ def joint_probabilities_for_category(
             out_logits = model(encoded_texts_batch, attention_mask=attn_masks_batch).logits
 
         shift_logits = out_logits[..., :-1, :]
-        shift_labels = labels[..., 1:]
+        shift_labels = labels[..., 1: ]
         shift_attention_mask_batch = attn_masks_batch[..., 1:]
 
         shift_logits = shift_logits[..., -category_token_len:, :]
@@ -414,16 +427,26 @@ def joint_probabilities_for_category(
         log_probs  = log_softmax(shift_logits, dim=-1)
 
         # Use gather to select the log probabilities for the actual tokens
-        gathered_log_probs = log_probs.gather(-1, shift_labels.unsqueeze(-1)).squeeze(-1)
+        if category_token_len == 1 and map_tokenidx_similartokens is not None:
+            # Get the aggregated log probabilities for the token shift_label and all similar tokens
+            gathered_log_probs = log_probs.gather(-1, shift_labels.unsqueeze(-1)).squeeze(-1)
+            # the shift_labels shoule be a single value, so we can use it to get the similar tokens
+            similar_tokens = map_tokenidx_similartokens[shift_labels.item()]
+            gathered_log_probs_similar = log_probs.gather(-1, torch.tensor(similar_tokens)[None,None,:].to(log_probs.device)).squeeze(-1)
+            
+            probs = torch.exp(gathered_log_probs).flatten() + torch.exp(gathered_log_probs_similar).sum()
+            # probs_agg = probs.sum(dim=-1)
+            joint_probs += probs.tolist()
+            
+        
+        else:
+            gathered_log_probs = log_probs.gather(-1, shift_labels.unsqueeze(-1)).squeeze(-1)
+            gathered_log_probs = gathered_log_probs * shift_attention_mask_batch
+            # Sum the log probabilities for the actual tokens to get the joint log probability
+            joint_log_prob_batch = gathered_log_probs.sum(dim=-1)
+            joint_prob_batch = torch.exp(joint_log_prob_batch)
 
-        gathered_log_probs = gathered_log_probs * shift_attention_mask_batch
-
-        # Sum the log probabilities for the actual tokens to get the joint log probability
-        joint_log_prob_batch = gathered_log_probs.sum(dim=-1)
-
-        joint_prob_batch = torch.exp(joint_log_prob_batch)
-
-        joint_probs += joint_prob_batch.tolist()
+            joint_probs += joint_prob_batch.tolist()
 
     return joint_probs
 
@@ -431,11 +454,12 @@ def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
     
         """Normalises a dictionary of probabilities"""
         # Normalise probabilities
+        norm_probs = {}
         total = sum(probs.values())
         for k,v in probs.items():
-            probs[k] = v/total
+            norm_probs[k] = v/total
     
-        return probs
+        return norm_probs
 
 class PromptBuilder():
     def __init__(self, 
