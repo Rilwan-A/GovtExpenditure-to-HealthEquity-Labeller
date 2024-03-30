@@ -1,4 +1,4 @@
-# This repository is work on for Getting Probabilistic Answers by using Perplexity based uncertainty quantification with Language Models.
+# This repository supported work towards fetting probabilistic answers by using Perplexity based uncertainty quantification with Language Models.
 
 ## Setup
 - Git Clone this repository
