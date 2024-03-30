@@ -25,16 +25,17 @@ from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
 from transformers import AutoTokenizer
 from langchain.llms.huggingface_pipeline import HuggingFacePipeline
-
+import langchain_community
+import langchain_core
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
 li_prompts_yes_no_question_b2i = [    
-    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?'
+    f"Yes or No, does government spending on {{budget_item}} {{effect_type}} affect the level of {{indicator}}?"
 ]
 
 li_prompts_openended_question_b2i = [    
-    'Does local government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
+    'Does government spending on \"{budget_item}\" {effect_type} affect \"{indicator}\"?',
 ]
 
 li_prompts_reasoning_question_b2i = [
@@ -62,7 +63,7 @@ li_prompts_categorical_question_w_reasoning_b2i: list[str] = [
     # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i["1"]}\t2) {map_category_answer_b2i["2"]}\n\nWrite the number of the category that fits the statement'
     # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i["1"]}\n2) {map_category_answer_b2i["2"]}\n\nWrite the number of the category that fits the statement',
     # f'Write "1" if the following statement implies {map_category_answer_b2i["1"]} or write "2" if it implies {map_category_answer_b2i["2"]}.\nStatement: {"{statement}"}',
-    f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\n1) {map_category_answer_b2i["1"]}\n2) {map_category_answer_b2i["2"]}'
+    f'Write only the number of the category that best fits the following statement.\nStatement: {{statement}}\nCategories:1) {map_category_answer_b2i["1"]}\t2) {map_category_answer_b2i["2"]}'
 ]
 
 li_prompts_categorical_question_w_reasoning_reversed_b2i: list[str] = [
@@ -70,7 +71,7 @@ li_prompts_categorical_question_w_reasoning_reversed_b2i: list[str] = [
     # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i_b2i_b2i_b2i_b2i_b2i["2"]}\t2) {map_category_answer_b2i["1"]}\n\nWrite the number of the category that fits the statement'
     # f'Statement: {"{statement}"}\n\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_answer_b2i["1"]}\n\nWrite the number of the category that fits the statement'
     # f'Write "1" if the following statement implies {map_category_answer_b2i["2"]} or write "2" if it implies {map_category_answer_b2i["1"]}.\nStatement: {"{statement}"}',
-    f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\n1) {map_category_answer_b2i["2"]}\n2) {map_category_label_b2i["1"]}'
+    f'Write only the number of the category that fits the following statement.\nStatement: {{statement}}\nCategories:\t1) {map_category_answer_b2i["2"]}\t2) {map_category_label_b2i["1"]}'
         ]
 
 li_prompts_categorical_question_b2i: list[str] = [
@@ -83,7 +84,9 @@ li_prompts_categorical_question_b2i: list[str] = [
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i["1"]}\n\t2) {map_category_answer_b2i_b2i["2"]}.'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["1"]}" or "2" if the answer is "{map_category_label_b2i["2"]}".',
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Answers: 1) {map_category_label_b2i["1"]} 2) {map_category_label_b2i["2"]}',
-    f'I want you to write 1 if the following statement is True or write 2 if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
+    # f'I want you to write 1 if the following statement is True or write 2 if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".',
+    
+    f"<|im_start|>user\nGovernment spending on {{budget_item}} {{effect_type}} affects the level of {{indicator}}.\n1) Yes 2) No.<|im_end|>\n<|im_start|>assistant\n The correct number is "
     ]
 
 li_prompts_categorical_question_reversed_b2i: list[str] = [
@@ -95,7 +98,7 @@ li_prompts_categorical_question_reversed_b2i: list[str] = [
     # f'Categories:\n1) {map_category_answer_b2i_b2i_b2i_b2i["2"]}\n2) {map_category_answer_b2i["1"]}\nWrite the number of the category that best answers whether government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i_b2i["2"]}\n\t2) {map_category_answer_b2i["1"]}.'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["2"]}" or "2" if the answer is "{map_category_label_b2i["1"]}".'
-    f'I want you to write 1 if the following statement is False or write 2 if it is True. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
+    f"<|im_start|>user\nGovernment spending on {{budget_item}} {{effect_type}} affects the level of {{indicator}}.\n1) No 2) Yes.<|im_end|>\n<|im_start|>assistant\n The correct number is "
 ]
 
 # endregion
@@ -117,23 +120,11 @@ map_relationship_promptsmap['budgetitem_to_indicator'] = budgetitem_to_indicator
 #endregion
 
 # region indicator to indicator templates
-li_prompts_yes_no_template_i2i = [
-    "Does the level of  \"{indicator1}\" {effect_type} influence the state of \"{indicator2}\"?",
-    
-    'Does local government spending on improving the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\" ?, yes or no',
-    
-    'Is it true that the level of \"{indicator1}\" is {effect_type} related to the level of \"{indicator2}\"?',
-    
-    'Do improvements in {indicator1} {effect_type} affect \"{indicator2}\"?, Yes or No',
-    
-    'Answer the following question with yes or no: Does local government spending aimed at affecting \"{indicator1}\" {effect_type} affect \"{indicator2}\"?'
-]
-
 li_prompts_yes_no_question_i2i = [
-    "Do changes in the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?"
+    f"Yes or No, does the level of {{budget_item}} {{effect_type}} affect the level of {{indicator}}? "
     ]
 li_prompts_openended_question_i2i = [
-    "Do changes in the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?"
+    "Does the level of \"{indicator1}\" {effect_type} affect the level of \"{indicator2}\"?"
 ]
 
 li_prompts_reasoning_question_i2i = [
@@ -141,17 +132,17 @@ li_prompts_reasoning_question_i2i = [
 ]
 
 # Prompts for the open prompt style methodology with categorical parse style
-map_category_answer_i2i = { '1':'The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".',
-                                        '2':'The level of \"{indicator1}\" is not {effect_type} influential to the state of \"{indicator2}\".' }
+map_category_answer_i2i = { '1':'The level of \"{indicator1}\" is {effect_type} does affect the level of \"{indicator2}\".',
+                                        '2':'The level of \"{indicator1}\" does not affect the level of \"{indicator2}\".' }
 map_category_label_i2i = {'1':'Yes',
                           '2':'No'}
 
 li_prompts_categorical_question_w_reasoning_i2i: list[str] = [
-    f'Write only the number of the category that fits the following statement.\nStatement: "{{statement}}"\nCategories:\n1) {map_category_answer_i2i["1"]}\n2) {map_category_answer_i2i["2"]}'
+    f'Write only the number of the category that best fits the following statement.\nStatement: "{{statement}}"\nCategories:\n1) {map_category_answer_i2i["1"]}\t2) {map_category_answer_i2i["2"]}'
 ]
 
 li_prompts_categorical_question_w_reasoning_reversed_i2i: list[str] = [
-    f'Write only the number of the category that fits the following statement.\nStatement: "{{statement}}"\nCategories:\n1) {map_category_answer_i2i["2"]}\n2) {map_category_label_i2i["1"]}'
+    f'Write only the number of the category that best fits the following statement.\nStatement: "{{statement}}"\nCategories:\n1) {map_category_answer_i2i["2"]}\t2) {map_category_label_i2i["1"]}'
 ]
 
 li_prompts_categorical_question_i2i: list[str] = [
@@ -160,7 +151,7 @@ li_prompts_categorical_question_i2i: list[str] = [
     # f'Choose 1 if the following statement is true or choose 2 if the following statement is false.\nStatement: The level of "{{indicator1}}" {{effect_type}} affects the level of "{{indicator2}}".',
     # f'Is the following statement true (1) or false (2)?\n"The level of {{indicator1}} {{effect_type}} influences the level of {{indicator2}}"',
     # f"Answer with '1' for True and '2' for False.\nTrue or False: Does the level of {{indicator1}} {{effect_type}} affect the level of {{indicator2}}?",
-    f"The level of {{indicator1}} {{effect_type}} affects the level of {{indicator2}}.\n1) Yes 2) No"
+    f"The level of {{indicator1}} {{effect_type}} does affect the level of {{indicator2}}.\n1) Yes 2) No"
     
     ]
 
@@ -170,15 +161,37 @@ li_prompts_categorical_question_reversed_i2i: list[str] = [
     # f'Choose 1 if the following statement is false or choose 2 if the following statement is true.\nStatement: The level of "{{indicator1}}" {{effect_type}} affects the level of "{{indicator2}}".'
     # f'Is the following statement false (1) or true (2)?\n"The level of {{indicator1}} {{effect_type}} influences the level of {{indicator2}}"'
     # f"Answer with '1' for False and '2' for True.\nTrue or False: Does the level of {{indicator1}} {{effect_type}} affect the level of {{indicator2}}?",
-    f"The level of {{indicator1}} {{effect_type}} affects the level of {{indicator2}}.\n1) No 2) Yes"
+    f"The level of {{indicator1}} {{effect_type}} does affect the level of {{indicator2}}.\n1) No 2) Yes"
     ]
 
 li_prompts_categories_scale_question_i2i: list[str] = [
-    f'On a scale of 0 to {{scale_max}}, how strong is the influence of changes in "{{indicator1}}" on changes in "{{indicator2}}"?'
+    # f'<|im_start|>user\nOn a scale of {{scale_min}} to {{scale_max}}, how strong is the effect of "{{indicator1}}" on "{{indicator2}}"?<|im_end|>\n<|im_start|>assistant\nOn a scale of {{scale_min}} to {{scale_max}} the level is a ',
+
+    f'<|im_start|>assistant\nOn a scale of {{scale_min}} to {{scale_max}}, the level of the effect of "{{indicator1}}" on "{{indicator2}}" is the number ',
+
+    # f'<|im_start|>user\nTell me a fact<|im_end|>\n<|im_start|>assistant\nOn a scale of {{scale_min}} to {{scale_max}}, the level of impact of "{{indicator1}}" on "{{indicator2}}" is the number ',
+
+    # f'<|im_start|>user\nTell me a fact<|im_end|>\n<|im_start|>assistant\nOn a scale of 1 to 3, the level of impact of "{{indicator1}}" on the level of "{{indicator2}}" is approximately the number ',
+    # f'<|im_start|>assistant\nOn a scale of 1 to 3, the level of impact of "{{indicator1}}" on "{{indicator2}}" is the number ',
+    # f"<|im_start|>user\nThe level of {{indicator1}} has a [FILL HERE] effect on {{indicator2}}.\n1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number is ",
+    # f"<|im_start|>user\nThe level of {{indicator1}} has a [FILL HERE] effect on {{indicator2}}. Choose the correct number  1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number is ",
+    # f"<|im_start|>user\nThe level of {{indicator1}} has a [FILL HERE] effect on {{indicator2}}. Choose the correct number from the following options 1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number is ",
+    
+    # f"<|im_start|>user\nWhat is the level of of effect {{indicator1}} has on {{indicator2}}? 1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number is ",
+    # f"<|im_start|>user\nRespond with the correct number for the level of effect {{indicator1}} has on {{indicator2}}? 1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number is ",
+    # f"<|im_start|>user\n{{indicator1}} has a [FILL HERE] effect on the level of {{indicator2}}.\n1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number is ",
+
+
+    # f"<|im_start|>user\n{{indicator1}} has a [FILL HERE] effect on the level of {{indicator2}}.\nSelect the correct number for FILL HERE. 1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number that fills the gap is ",
+    
+    # "<|im_start|>user\nWhich number best fills the GAP in the following statement: {indicator1} has a [GAP] effect on {indicator2}.\n{{{{1: 'weak', 2: 'moderate', 3:'strong'}}}}<|im_end|>\n<|im_start|>assistant\nThe number is ",
+
+    # f"<|im_start|>user\nThe level of {{indicator1}} has a [GAP] effect on the level of {{indicator2}}.\n1) weak 2) moderate 3) strong<|im_end|>\n<|im_start|>assistant\nThe number that fills the gap is",
+
 ]
 
 # Prompts for the scaling categorisation method
-category_scale_i2i = list(range(0,6))
+category_scale_i2i = lambda s_min, s_max: list(range(s_min, s_max+1))
 
 indicator_to_indicator_prompts = {
     'li_prompts_yes_no_question': li_prompts_yes_no_question_i2i,
@@ -230,7 +243,7 @@ map_system_prompts_i2i = {
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
     'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
-    'categories_scale':'Answer the following question with only a number between 0 and {scale_max}.',
+    'categories_scale':'Answer the following question with only a number between {scale_min} and {scale_max}.',
     'verbalize_scale':'Answer the following question with only a number.'
 
 }
@@ -427,16 +440,18 @@ def joint_probabilities_for_category(
         log_probs  = log_softmax(shift_logits, dim=-1)
 
         # Use gather to select the log probabilities for the actual tokens
+
         if category_token_len == 1 and map_tokenidx_similartokens is not None:
-            # Get the aggregated log probabilities for the token shift_label and all similar tokens
-            gathered_log_probs = log_probs.gather(-1, shift_labels.unsqueeze(-1)).squeeze(-1)
-            # the shift_labels shoule be a single value, so we can use it to get the similar tokens
-            similar_tokens = map_tokenidx_similartokens[shift_labels.item()]
-            gathered_log_probs_similar = log_probs.gather(-1, torch.tensor(similar_tokens)[None,None,:].to(log_probs.device)).squeeze(-1)
-            
-            probs = torch.exp(gathered_log_probs).flatten() + torch.exp(gathered_log_probs_similar).sum()
-            # probs_agg = probs.sum(dim=-1)
-            joint_probs += probs.tolist()
+            for shift_label in shift_labels.split(1):
+                # Get the aggregated log probabilities for the token shift_label and all similar tokens
+                gathered_log_probs = log_probs.gather(-1, shift_label.unsqueeze(-1)).squeeze(-1)
+                # the shift_labels shoule be a single value, so we can use it to get the similar tokens
+                similar_tokens = map_tokenidx_similartokens[shift_label.item()]
+                gathered_log_probs_similar = log_probs.gather(-1, torch.tensor(similar_tokens)[None,None,:].to(log_probs.device)).squeeze(-1)
+                
+                probs = torch.exp(gathered_log_probs).flatten() + torch.exp(gathered_log_probs_similar).sum()
+                # probs_agg = probs.sum(dim=-1)
+                joint_probs += probs.tolist()
             
         
         else:
@@ -519,11 +534,13 @@ class PromptBuilder():
         elif self.prompt_style == 'cot_categorise':
             templates = self._cot_template(seed=self.seed)
         elif self.prompt_style == 'categories_scale':
-            scale_max = kwargs.get('scale_max', 5)
-            templates = self._categories_scale_template(scale_max=scale_max)
+            scale_min = kwargs.get('scale_min', 1)
+            scale_max = kwargs.get('scale_max', 3)
+            templates = self._categories_scale_template(scale_max=scale_max, scale_min=scale_min)
         elif self.prompt_style == 'verbalize_scale':
-            scale_max = kwargs.get('scale_max', 5)
-            templates = self._categories_scale_template(scale_max=scale_max)
+            scale_min = kwargs.get('scale_min', 1)
+            scale_max = kwargs.get('scale_max', 3)
+            templates = self._categories_scale_template(scale_max=scale_max, scale_min=scale_min)
 
         else:
             raise ValueError('Invalid prompt_style: ' + self.prompt_style)
@@ -552,7 +569,7 @@ class PromptBuilder():
         generation_params = {}
         _ = {
             langchain.llms.huggingface_pipeline.HuggingFacePipeline:'max_new_tokens',
-            langchain.chat_models.ChatOpenAI:'max_tokens',
+            langchain_community.chat_models.ChatOpenAI:'max_tokens',
             PeftModel:'max_new_tokens',
             PreTrainedModel:'max_new_tokens'
         }
@@ -602,7 +619,7 @@ class PromptBuilder():
         else:
             model = self.llm
 
-        if isinstance(model, langchain.chat_models.ChatOpenAI): #type: ignore
+        if isinstance(model, langchain_community.chat_models.ChatOpenAI): #type: ignore
             
             generation_params = self.get_generation_params(self.prompt_style, **gen_kwargs)
             
@@ -623,7 +640,7 @@ class PromptBuilder():
                 li_preds: list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
-        elif isinstance(model, langchain.llms.base.LLM): #type: ignore
+        elif isinstance(model, langchain_core.language_models.llms.BaseLLM): #type: ignore
 
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
             for k,v in self.get_generation_params(self.prompt_style, **gen_kwargs).items():
@@ -886,16 +903,23 @@ class PromptBuilder():
         
         return templates
 
-    def _categories_scale_template(self, seed=None, scale_max=5) -> list[str]:
+    def _categories_scale_template(self, seed=None, scale_min=1, scale_max=5) -> list[str]:
         li_prompts = map_relationship_promptsmap[self.relationship]['li_prompts_categories_scale_question']
-        templates = copy.deepcopy( sample(li_prompts, self.ensemble_size)  )
         
-        for ens_idx in range(self.ensemble_size):
+        # Take the first n prompts from the list of prompts
+        # logging.info("Currently selec")
+        
+        if self.ensemble_size == -1:
+            templates = copy.deepcopy(li_prompts)    
+        else:
+            templates = copy.deepcopy(li_prompts[:self.ensemble_size])
+                
+        for ens_idx in range(len(li_prompts)):
             
             if self.relationship == 'budgetitem_to_indicator':
                 raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
             elif self.relationship == 'indicator_to_indicator':
-                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', scale_max=scale_max ).replace('  ',' ')
+                prompt = templates[ens_idx].format( indicator1='{target_indicator1}',  indicator2='{target_indicator2}', scale_min=scale_min, scale_max=scale_max ).replace('  ',' ')
 
             templates[ens_idx] = prompt
         return templates
@@ -925,12 +949,12 @@ class PromptBuilder():
                 ## filling context examples in template and target info
                 if self.relationship == 'budgetitem_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                        target_budget_item= row['budget_item'].strip('.'), target_indicator=row['indicator'].strip('.'),
                         **format_dict
                     )
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                        target_indicator1= row['indicator1'].strip('.'), target_indicator2=row['indicator2'].strip('.'),
                         **format_dict
                     )
                 li_prompts.append(prompt)
@@ -971,11 +995,11 @@ class PromptBuilder():
                     
                     # Creating the open ended answer version of the examples
                     if self.relationship == 'budgetitem_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type_str()).replace('  ',' ') for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(budget_item=d['budget_item'], indicator=d['indicator'], effect_type=self.effect_type_str()).replace('  ',' ') for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(budget_item=d['budget_item'], indicator=d['indicator'].strip('.'), effect_type=self.effect_type_str()).replace('  ',' ') for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(budget_item=d['budget_item'], indicator=d['indicator'].strip('.'), effect_type=self.effect_type_str()).replace('  ',' ') for d in neg_examples_sample ]
                     elif self.relationship == 'indicator_to_indicator':
-                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type_str().replace('  ',' ')) for  d in pos_examples_sample ]
-                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(indicator1=d['indicator1'], indicator2=d['indicator2'], effect_type=self.effect_type_str()).replace('  ',' ') for d in neg_examples_sample ]
+                        pos_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['Yes']].format(indicator1=d['indicator1'].strip('.'), indicator2=d['indicator2'].strip('.'), effect_type=self.effect_type_str().replace('  ',' ')) for  d in pos_examples_sample ]
+                        neg_examples_open_ended_answer = [ template_responses[ens_idx][map_category_label['No']].format(indicator1=d['indicator1'].strip('.'), indicator2=d['indicator2'].strip('.'), effect_type=self.effect_type_str()).replace('  ',' ') for d in neg_examples_sample ]
 
                     # python shuffle two lists in the same order 
                     li_examples = list(zip( list(pos_examples_sample) + list(neg_examples_sample), list(pos_examples_open_ended_answer) + list(neg_examples_open_ended_answer) ))
@@ -993,10 +1017,10 @@ class PromptBuilder():
 
                 # filling in the target info
                 if self.relationship == 'budgetitem_to_indicator':
-                    prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'], effect_type=self.effect_type_str(),
+                    prompt =  templates[ens_idx].format(target_budget_item= row['budget_item'], target_indicator=row['indicator'].strip('.'), effect_type=self.effect_type_str(),
                                                     **format_dict).replace('  ',' ')
                 elif self.relationship == 'indicator_to_indicator':
-                    prompt =  templates[ens_idx].format(target_indicator1= row['indicator1'], target_indicator2=row['indicator2'], effect_type=self.effect_type_str(),
+                    prompt =  templates[ens_idx].format(target_indicator1= row['indicator1'].strip('.'), target_indicator2=row['indicator2'].strip('.'), effect_type=self.effect_type_str(),
                                                     **format_dict).replace('  ',' ')
                 
                 li_prompts.append(prompt)
@@ -1071,12 +1095,12 @@ class PromptBuilder():
                 ## filling context examples in template and target info
                 if self.relationship == 'budgetitem_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                        target_budget_item= row['budget_item'].strip('.'), target_indicator=row['indicator'].strip('.'),
                         **format_dict
                     )
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                        target_indicator1= row['indicator1'].strip('.'), target_indicator2=row['indicator2'].strip('.'),
                         **format_dict
                     )
                 li_prompts.append(prompt)
@@ -1103,11 +1127,11 @@ class PromptBuilder():
                 ## filling context examples in template and target info
                 if self.relationship == 'budgetitem_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_budget_item= row['budget_item'], target_indicator=row['indicator'],
+                        target_budget_item= row['budget_item'].strip('.'), target_indicator=row['indicator'].strip('.'),
                     )
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_indicator1= row['indicator1'], target_indicator2=row['indicator2'],
+                        target_indicator1= row['indicator1'].strip('.'), target_indicator2=row['indicator2'].strip('.'),
                         
                     )
                 li_prompts.append(prompt)
@@ -1141,13 +1165,13 @@ class PromptBuilder():
            
             if self.relationship == 'budgetitem_to_indicator':
                 budget_item = dict_datum['budget_item']
-                indicator = dict_datum['indicator']
+                indicator = dict_datum['indicator'].strip('.')
                 
                 li_filledtemplate = [ template.format(statement=pred, budget_item=budget_item, indicator=indicator, effect_type=self.effect_type_str()).replace('  ', ' ') for pred in li_reasoning ]
             
             elif self.relationship == 'indicator_to_indicator':
-                indicator1 = dict_datum['indicator1']
-                indicator2 = dict_datum['indicator2']
+                indicator1 = dict_datum['indicator1'].strip('.')
+                indicator2 = dict_datum['indicator2'].strip('.')
                 li_filledtemplate = [ template.format(statement=pred, indicator1=indicator1, indicator2=indicator2, effect_type=self.effect_type_str()).replace('  ', ' ') for pred in li_reasoning ]
             
             li_li_filledtemplate.append(li_filledtemplate)
@@ -1165,15 +1189,15 @@ class PromptBuilder():
             li_prompts = []
             prompt = None
 
-            for ens_idx in range(self.ensemble_size):
+            for ens_idx in range(len(templates)):
 
                 if self.relationship == 'budgetitem_to_indicator':
                     raise NotImplementedError("Categories scale question not implemented for budgetitem_to_indicator relationship")
 
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_indicator1= row['indicator1'], 
-                        target_indicator2=row['indicator2']
+                        target_indicator1= row['indicator1'].strip('.'), 
+                        target_indicator2=row['indicator2'].strip('.')
                     )
                 li_prompts.append(prompt)
 
@@ -1202,8 +1226,8 @@ class PromptBuilder():
 
                 elif self.relationship == 'indicator_to_indicator':
                     prompt = templates[ens_idx].format(
-                        target_indicator1= row['indicator1'], 
-                        target_indicator2=row['indicator2']
+                        target_indicator1= row['indicator1'].strip('.'), 
+                        target_indicator2=row['indicator2'].strip('.')
                     ) 
                 li_prompts.append(prompt)
                 

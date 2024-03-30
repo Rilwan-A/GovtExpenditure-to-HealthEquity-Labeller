@@ -1,5 +1,5 @@
 import unittest
-from agent_based_modelling.i2i_edge_estimation.add_edge_weights import entropy_edge_weights
+from agent_based_modelling.i2i_edge_estimation.add_i2i_edge_weights import entropy_edge_weights
 from scipy.stats import entropy
 
 class TestEntropyEdgeWeights(unittest.TestCase):

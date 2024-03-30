@@ -17,7 +17,7 @@ from langdetect import detect, LangDetectException
 from datasets import Features, Value
 
 from prompt_engineering.my_logger import setup_logging_preprocess
-from prompt_engineering.utils import load_llm
+from utils import load_llm
 from prompt_engineering.utils_prompteng import map_llmname_input_format
 
 import multiprocessing as mp
@@ -25,7 +25,7 @@ import multiprocessing as mp
 import math
 import re
 import torch
-from prompt_engineering.utils import HUGGINGFACE_MODELS
+from utils import HUGGINGFACE_MODELS
 
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 

@@ -4,6 +4,10 @@ ckpt
 prompt_engineering/output
 agent_based_modelling/output
 
+#archives
+**/archive
+
+
 #Python files
 __pycache*
 **.pytest_cache
@@ -11,6 +15,12 @@ __pycache*
 
 # Environment variables
 tests/env_vars.yml
+
+# Scripts
+scripts
+
+# Analysis
+agent_based_modelling/analysis
 
 # Temporary Files
 **/**.temp

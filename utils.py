@@ -2,11 +2,8 @@ from time import sleep
 import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
-from langchain import HuggingFacePipeline, PromptTemplate, LLMChain
-from langchain.schema import (
-    HumanMessage,
-    SystemMessage
-)
+from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline 
+
 from prompt_engineering.utils_prompteng import (map_relationship_system_prompt, map_relationship_promptsmap, 
                                                 map_relationship_sysprompt_categoriesanswer,
                                                 map_llmname_input_format,
@@ -23,8 +20,9 @@ import os
 from contextlib import redirect_stdout
 import openai
 from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
-from  langchain.chat_models import ChatOpenAI
-from  langchain.llms import HuggingFaceHub
+import langchain_community
+from  langchain_community.chat_models import ChatOpenAI
+from langchain_community.llms import HuggingFaceHub
 
 from transformers import PreTrainedTokenizer, pipeline
 
@@ -50,7 +48,7 @@ HUGGINGFACE_MODELS = [
     'stabilityai/StableBeluga2',
     
     'trl-internal-testing/dummy-GPT2-correct-vocab',
-    
+    '01-ai/Yi-6B-Chat',
     '01-ai/Yi-34B-Chat']
 
 MAP_LOAD_IN_NBIT = {
@@ -71,7 +69,7 @@ MAP_LOAD_IN_NBIT = {
     'stabilityai/StableBeluga2':4,
 
     'trl-internal-testing/dummy-GPT2-correct-vocab':4,
-
+    '01-ai/Yi-6B-Chat':16,
     '01-ai/Yi-34B-Chat':4,
       }
 
@@ -83,10 +81,8 @@ import logging
 def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', api_key:str|None=None, device=-1, 
              finetune_dir='./finetune/finetuned_models/', exp_name='',
              finetune_version=0,
-             loraConfig=None ) -> tuple[HuggingFacePipeline|ChatOpenAI, PreTrainedTokenizer|None]:
+             loraConfig=None, override_double_quant=None ) -> tuple[HuggingFacePipeline|ChatOpenAI, PreTrainedTokenizer|None]:
     
-    
-
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
     if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
     if local_or_remote == 'local': assert llm_name not in OPENAI_MODELS, f"llm_name must be a HuggingFace model if local_or_remote is 'local'" 
@@ -94,10 +90,11 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
-        from torch import bfloat16
+        from torch import bfloat16, float16
 
         if llm_name in HUGGINGFACE_MODELS:
             from transformers import BitsAndBytesConfig
+
             
             bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
             bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
@@ -106,11 +103,11 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                 quant_config = BitsAndBytesConfig(
                     
                     load_in_8bit=bool_8,
-                    llm_int8_has_fp16_weights=bool_8,
+                    llm_int8_has_fp16_weights=False,
                     
                     load_in_4bit=bool_4,
                     bnb_4bit_quant_type="nf4" ,
-                    bnb_4bit_use_double_quant=bool_4,
+                    bnb_4bit_use_double_quant=bool_4 if override_double_quant is None else override_double_quant,
                     bnb_4bit_compute_dtype=bfloat16 if bool_4 else None
                 )
             else:
@@ -118,17 +115,20 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
 
             if not finetuned:
                 model_id = llm_name
+                model_kwargs = {'trust_remote_code':True,
+                                    'quantization_config':quant_config,
+                                    'do_sample':False,
+                                    'device_map': 'auto' 
+                                    }
+                if MAP_LOAD_IN_NBIT[llm_name] == 16:
+                    # model_kwargs['torch_dtype'] = bfloat16
+                    model_kwargs['torch_dtype'] = float16
+
                 llm = HuggingFacePipeline.from_model_id(
                     model_id=model_id,
                     task="text-generation",
-                    model_kwargs={'trust_remote_code':True,
-                                    'quantization_config':quant_config,
-                                    'do_sample':False,
-                                    'device_map':'auto'
-                                    # 'device_map':None,
-                                    # 'device':None,
-                                    # 'hf_device_map':None
-                                    },)
+                    model_kwargs=model_kwargs,
+                    device=None)
 
                 tokenizer = llm.pipeline.tokenizer
                 if loraConfig is not None:
@@ -195,7 +195,6 @@ class PredictionGenerator():
     def __init__(self, llm,  
                  llm_name,
                  prompt_style:str,
-                  ensemble_size:int,
                   edge_value:str="binary_weight", # binary_weight or float_weight or float pair
                   parse_style:str='rules',
                   relationship:str='budgetitem_to_indicator',
@@ -206,20 +205,18 @@ class PredictionGenerator():
                 
         if parse_style in ['categories_perplexity']: 
             assert local_or_remote == 'local', "Can not get model logits scores from remote models"
-            assert not isinstance(llm, langchain.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
+            assert not isinstance(llm, langchain_community.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
 
         # Restrictions on combinations of parse style and edge value
-        if edge_value in ['distribution'] and parse_style in ['rules','categories_rules']:
-            assert ensemble_size>1, "Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
-                                                         To use ensemble size 1, please use parse_style='categories_perplexity'.\
-                                                         Alternatively use ensemble size > 1, "
+        # if edge_value in ['distribution'] and parse_style in ['rules','categories_rules']:
+        #     assert ensemble_size>1, "Can not get a float edge value with ensemble size 1 and parse_style:{parse_style}.\
+        #                                                  To use ensemble size 1, please use parse_style='categories_perplexity'.\
+        #                                                  Alternatively use ensemble size > 1, "
             
         self.llm = llm
         self.llm_name = llm_name
         
-
         self.prompt_style = prompt_style
-        self.ensemble_size = ensemble_size
         self.parse_style = parse_style
         self.relationship = relationship
         self.edge_value   = edge_value
@@ -246,7 +243,7 @@ class PredictionGenerator():
             elif self.prompt_style == 'cot_categorise':
                 li_li_pred = [ self.parse_outp_cotcategories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'categories_scale':
-                li_li_pred = [ self.parse_outp_categories_scale(li_filled_template, scale_max = kwargs.get('scale_max',5)) for li_filled_template in li_li_filled_template]
+                li_li_pred = [ self.parse_outp_categories_scale(li_filled_template, scale_min=kwargs.get('scale_min',1), scale_max = kwargs.get('scale_max',5)) for li_filled_template in li_li_filled_template]
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
@@ -260,7 +257,6 @@ class PredictionGenerator():
         for idx, prediction in enumerate(li_filled_template):
             
             prediction = copy.deepcopy(prediction).lower()
-            
             if any( ( neg_phrase in prediction for neg_phrase in ['cannot answer','can\'t answer', 'not sure', 'not certain',  ])):
                 dict_pred = {'Yes':0.0, 'No':0.0, 'NA':1.0}
 
@@ -369,12 +365,6 @@ class PredictionGenerator():
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
-        # li_filledtemplate_fmtd = [
-        #         map_llmname_input_format(self.llm_name,
-        #                                 user_message = filledtemplate, 
-        #                                 system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] )
-        #                             for filledtemplate in li_filledtemplate ] #Added some base model formatting
-
         li_filledtemplate_fmtd = [
             apply_chat_templates(
                 self.llm.pipeline.tokenizer,
@@ -382,8 +372,6 @@ class PredictionGenerator():
                 user_messages=[prompt])
             for prompt in li_filledtemplate
         ]
-
-        
         # For each template, create a set of templates that ask a categorical question about the LLMs answer to if Budget Item affects an indiciator 
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         answers = list(  map_category_answer.keys() )
@@ -420,22 +408,21 @@ class PredictionGenerator():
         map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
-        # Formatting prompts to adhere to format required by Base Language Model
-        # li_filledtemplate_fmtd = [
-        #         map_llmname_input_format(self.llm_name,
-        #                                 user_message = prompt, 
-        #                                 system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] 
-        #                                 )
-        #                             for prompt in li_filledtemplate ] #Added some base model formatting
+        # # Formatting prompts to adhere to format required by Base Language Model
 
-        li_filledtemplate_fmtd = [
-            apply_chat_templates(
-                self.llm.pipeline.tokenizer,
-                system_message=(map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]) if self.use_system_prompt else None,
-                # system_message=None,
-                user_messages=[prompt])
-            for prompt in li_filledtemplate
-        ]
+        logging.warning("CURRENT TEMPLATING FOR CATEGORIES SCALE ONLY WORKS FOR THE YI CHAT MODEL")
+        li_filledtemplate_fmtd = []
+        for prompt in li_filledtemplate:
+            # li_filledtemplate_fmtd.append(apply_chat_templates(self.llm.pipeline.tokenizer, user_messages=[prompt]))
+            if '<|im_start|>' in prompt:
+                li_filledtemplate_fmtd.append(prompt)
+            else:
+                m = apply_chat_templates(
+                    self.llm.pipeline.tokenizer,
+                    system_message=(map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]) if self.use_system_prompt else None,
+                    user_messages=[prompt]
+                    )
+                li_filledtemplate_fmtd.append(m)
 
         # For each template, create a set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -481,36 +468,33 @@ class PredictionGenerator():
 
         return li_map_probability_norm
 
-    def parse_outp_categories_scale(self, li_filledtemplate:list[str], scale_max=5)->  list[dict[str,float]] :
+    def parse_outp_categories_scale(self, li_filledtemplate:list[str], scale_min=1, scale_max=5)->  list[dict[str,float]] :
         # returns a multinomial distribution over the values 1-10
+        category_scale = copy.deepcopy( map_relationship_promptsmap[self.relationship]['category_scale'](scale_min, scale_max) )
 
-        category_scale = copy.deepcopy( map_relationship_promptsmap[self.relationship]['category_scale'] )
+        # TODO (rilwan-ade): think of more intricate way to handle case where prompt templating happens in prompt template maker
+        # or where prompt template filling happens for the message of the assistant not just the user message
+        logging.warning("CURRENT TEMPLATING FOR CATEGORIES SCALE ONLY WORKS FOR THE YI CHAT MODEL")
         
-        # Formatting prompts to adhere to format required by Base Language Model
-        # li_filledtemplate_fmtd = [
-        #         map_llmname_input_format(self.llm_name,
-        #                                 user_message = prompt, 
-        #                                 system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
-        #                                 # system_message = map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
-        #                                 # system_message = None
-        #                                 )
-        #                             for prompt in li_filledtemplate ] #Added some base model formatting
-
-        li_filledtemplate_fmtd = [
-            apply_chat_templates(
-                self.llm.pipeline.tokenizer,
-                # system_message=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style],
-                system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max)) if self.use_system_prompt else None,
-                user_messages=[prompt])
-            for prompt in li_filledtemplate
-        ]
+        li_filledtemplate_fmtd = []
+        for prompt in li_filledtemplate:
+            # li_filledtemplate_fmtd.append(apply_chat_templates(self.llm.pipeline.tokenizer, user_messages=[prompt]))
+            if '<|im_start|>' in prompt:
+                li_filledtemplate_fmtd.append(prompt)
+            else:
+                m = apply_chat_templates(
+                    self.llm.pipeline.tokenizer,
+                    system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max)) if self.use_system_prompt else None,
+                    user_messages=[prompt]
+                    )
+                li_filledtemplate_fmtd.append(m)
 
 
         # For each template, create the set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
         # NOTE: In our work we found that the template required a space after the filled template or it would not work for weaker models
         answers = category_scale
-        li_li_filledtemplates_with_answers = [ [ filledtemplate + ' ' + str(ans) for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
+        li_li_filledtemplates_with_answers = [ [ filledtemplate + str(ans) for ans in answers ] for filledtemplate in li_filledtemplate_fmtd ]
 
 
         # For each filled template set calcualte the relative probability of each answer
@@ -521,7 +505,7 @@ class PredictionGenerator():
                 li_filledtemplates_with_answers, 
                 self.llm.pipeline.model, 
                 self.llm.pipeline.tokenizer,
-                batch_size=len(answers), 
+                batch_size=1, 
                 category_token_len=1 ) 
             
             li_li_probability.append(li_probability)

@@ -31,10 +31,9 @@ from prompt_engineering.utils_prompteng import PromptBuilder
 from django.core.files.uploadedfile import UploadedFile
 import random
 import time
+from utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
-from prompt_engineering.utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
-
-from prompt_engineering.utils import load_annotated_examples, load_llm
+from utils import load_annotated_examples, load_llm
 
 
 
@@ -80,7 +79,8 @@ def main(
     finetune_dir:str|None=None,
     finetune_version:int=0,
 
-    use_system_prompt:bool=True
+    use_system_prompt:bool=True,
+    override_double_quant:bool=False
     ):
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
@@ -91,7 +91,7 @@ def main(
         assert parse_style == 'categories_rules'
 
     elif prompt_style in ['categorise','cot_categorise']:
-        assert parse_style == 'categories_perplexity'
+        assert parse_style in ['categories_perplexity', 'categories_rules']
     else:
         raise ValueError(f"Invalid prompt_style: {prompt_style}")
 
@@ -128,7 +128,9 @@ def main(
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm, tokenizer =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir, exp_name, finetune_version=finetune_version)
+        llm, tokenizer =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, 
+                                   finetune_dir, exp_name, finetune_version=finetune_version,
+                                   override_double_quant=override_double_quant)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -147,7 +149,6 @@ def main(
                                         seed=data_load_seed,
                                         tokenizer = tokenizer
                                         )
-    
     prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type, relationship='indicator_to_indicator',
@@ -159,7 +160,6 @@ def main(
     prediction_generator_b2i = None if predict_b2i is False else PredictionGenerator(llm,
                                                         llm_name,
                                                         prompt_style,
-                                                        ensemble_size,
                                                         edge_value,
                                                         parse_style,
                                                         relationship='budgetitem_to_indicator',
@@ -170,7 +170,6 @@ def main(
     prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, 
                                                         llm_name,
                                                         prompt_style,
-                                                        ensemble_size,
                                                         edge_value,
                                                         parse_style,
                                                         relationship='indicator_to_indicator',
@@ -264,7 +263,7 @@ def main(
         if predict_i2i: 
             save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_discourse_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
-        logging.info("\tOutput Saved")
+        logging.info("\tOutput Saved to: {}".format(save_dir))
 
     return {
         'li_record_b2i': li_record_b2i,
@@ -302,7 +301,6 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
 
         # set_budget_items = sorted(set(li_budget_items))
         # set_indicator = sorted(set(li_indicator))
-
         li_labels = json_data.get('related', [None]*len(li_budget_items) )
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
@@ -433,7 +431,6 @@ def sample_records( li_record, line_range:str|None , sampling_method:str|None, s
 
 
     return li_record
-
 
 def predict_batches(prompt_builder:PromptBuilder, 
                         prediction_generator:PredictionGenerator, 
@@ -586,15 +583,12 @@ def parse_args():
 
     parser.add_argument('--data_load_seed', type=int, default=10, help='The seed to use when loading the data' )
     parser.add_argument('--line_range', type=str, default=None, help='The range of lines to load from the input file' )
-    # parser.add_argument('--sampling_method', type=str, default=None, choices=['stratified_sampling_related', 'random', None],
-                        #  help = 'The method to use when sampling the data. Note that for both stratified sampling and random sampling we use fix random seed of 42' )
-    
     parser.add_argument('--sampling_method', type=validate_sampling_method, default=None,
                     help='The method to use when sampling the data. Note that for both stratified sampling and random sampling we use fix random seed of 42')
-
     
     parser.add_argument('--sample_count', type=int, default=None, help='The number of samples to use when sampling the data')
 
+    parser.add_argument('--override_double_quant', action='store_true', default=False, help='Indicates whether to override the double quantity prompt' )
     parser.add_argument('--save_output', action='store_true', default=True, help='Indicates whether the output should be saved' )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
