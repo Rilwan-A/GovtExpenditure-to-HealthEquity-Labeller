@@ -11,7 +11,7 @@ In this project we provide a NLP based approach to establishing the starting set
 - Follow instructions in the Data section below to download the exact dataset used 
 
 ## How To Use
-- To be updated
+- Examples of how to key functions can be found in the example_scripts folder
 
 ## Data 
 ### Data Download
