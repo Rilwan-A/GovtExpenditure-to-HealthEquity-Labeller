@@ -1,3 +1,26 @@
+# This script is designed to impute missing indicator values for future years based on the 
+# Public Policy Intervention (PPI) model, utilizing both agent-based modeling and network analysis 
+# techniques. It performs the following key functions:
+# 1. Loads model parameters and hyperparameters from previously calibrated experiments, 
+#    allowing for the customization of the imputation process based on experimental setups.
+# 2. Processes input data including current indicator levels, forecasted resource allocations, 
+#    and legal frameworks to prepare for simulation.
+# 3. Utilizes the PPI model to forecast indicator values over a specified number of years, 
+#    starting from a given year. The model supports both serial and parallel execution modes, 
+#    facilitating Monte Carlo simulations for uncertainty analysis.
+# 4. Constructs and utilizes both budget-to-indicator (B2I) and indicator-to-indicator (I2I) 
+#    networks based on specified methods and thresholds, enhancing the model's ability to 
+#    simulate complex policy impacts and spillover effects.
+# 5. Aligns forecasted budgets with the B2I network to ensure consistency in the simulation inputs.
+# 6. Saves the imputed indicators, resource allocations, and spillover effects for further analysis 
+#    and comparison with actual indicator values, aiding in the evaluation of the model's performance.
+# 7. Offers flexibility in specifying the experiment group and number for both loading calibration 
+#    parameters and saving imputation results, supporting structured experimentation and analysis.
+
+# Usage of the script is facilitated through command-line arguments, making it adaptable to different 
+# scenarios and datasets. The script stands as a comprehensive tool for researchers and policymakers 
+# to analyze the potential outcomes of public policies through advanced simulation techniques.
+
 import argparse
 import pandas as pd
 import os

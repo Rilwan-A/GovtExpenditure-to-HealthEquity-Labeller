@@ -3,7 +3,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer
 from datasets import load_dataset, Dataset, DatasetDict
 from argparse import ArgumentParser
 
-from prompt_engineering.utils import HUGGINGFACE_MODELS
+from utils import HUGGINGFACE_MODELS
 from prompt_engineering.utils_prompteng import map_llmname_input_format
 from prompt_engineering.my_logger import setup_logging_preprocess
 

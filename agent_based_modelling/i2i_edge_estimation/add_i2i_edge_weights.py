@@ -11,22 +11,16 @@ import gc
 from prompt_engineering.my_logger import setup_logging_add_i2i_edge_weights
 from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
 
-from prompt_engineering.utils import PredictionGenerator, load_llm
+from utils import PredictionGenerator, load_llm
 from prompt_engineering.utils_prompteng import PromptBuilder
 from torch.cuda import empty_cache
 from torch import no_grad
-# exp_dirs = [
-#     os.path.join('prompt_engineering','output','spot','exp_i2i_7bn_distr', 'exp_sbeluga7b_non_uc'),
-#     os.path.join('prompt_engineering','output','spot','exp_i2i_13b_distr', 'exp_sbeluga13b_non_uc'),
-#     os.path.join('prompt_engineering','output','spot','exp_i2i_30b_distr','exp_upllama30b_non_uc'),
 
-    # # TODO: update the following paths when model to be used is decided
-    # os.path.join('prompt_engineering','output','spot','exp_i2i_30bn_distr', '30bn_HMRC'),
-
-# ]
-
-
-def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_max=5, gpu_batch_size=1 ):
+def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_min=1, scale_max=5, gpu_batch_size=1,
+            leave_out_verbalisation=False, leave_out_multinomial=False, leave_out_entropy=False,
+            mn_ensemble_size:int=1
+            ):
+    
     if gpu_batch_size > batch_size:
         batch_size = gpu_batch_size
 
@@ -72,48 +66,66 @@ def main( experiment_dir, debugging=False, batch_size=1, finetune_dir='', scale_
                         local_or_remote='local',
                         finetune_dir=config['finetune_dir'],
                         exp_name = config['exp_name'],
-                        finetune_version = config.get('finetune_version',None) )
+                        finetune_version = config.get('finetune_version',None),
+                         override_double_quant = False )
 
     # verbalization on a scale 0 to scale_max
-    li_pred_agg_verbalized, li_pred_ensembles_verbalized = verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale_max, logger, batch_size, gpu_batch_size=gpu_batch_size)
+    if not leave_out_verbalisation:
+        li_pred_agg_verbalized, li_pred_ensembles_verbalized = verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale_min, scale_max, logger, batch_size, gpu_batch_size=gpu_batch_size)
 
     # For each indicator pair we produce an ensemble of predictions
     # Retrieve a list of the prediction ensembles list[ list[ dict[str,float] ] ]
     # Retreive the mean of the sets of prediction ensembles list[ dict['mean',float] ]
-    multinomial_means, multinomial_distributions = multinomial_edge_weights(model, llm_name, li_records_filtered, config, scale_max, logger, batch_size)
+    if not leave_out_multinomial:
+        multinomial_means, multinomial_distributions, multinomial_entropy = multinomial_edge_weights(model, llm_name, li_records_filtered, config, scale_min, scale_max,
+                                                                                                      logger, mn_ensemble_size, batch_size)
 
     # We use the entropy over the binomial distribution as a measure of relationship strength 
-    entropy_preds = entropy_edge_weights( li_records_filtered )
+    if not leave_out_entropy or not leave_out_multinomial:
+        entropy_preds = entropy_edge_weights( li_records_filtered )
 
     # Adjusting for the fact that we only made predictions for a subset of the indicator pairs
     if idx_existing_edges is not None:
         
-        _iter = iter(multinomial_means)
-        multinomial_means = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
+        if not leave_out_multinomial: 
+            _iter = iter(multinomial_means)
+            multinomial_means = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
 
-        _iter = iter(multinomial_distributions)
-        multinomial_distributions = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
+            _iter = iter(multinomial_distributions)
+            multinomial_distributions = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
 
-        _iter = iter(entropy_preds)
-        entropy_preds = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
+            _iter = iter(multinomial_entropy)
+            multinomial_entropy = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
+
+        if not leave_out_entropy or not leave_out_multinomial:
+            _iter = iter(entropy_preds)
+            entropy_preds = [ next(_iter) if i in idx_existing_edges else None for i in range(original_len) ]
         
     # Saving these results to file
-    path_mn = os.path.join(experiment_dir, 'i2i_mn_weights.csv')
-    path_vb = os.path.join(experiment_dir, 'i2i_vb_weights.csv')
-    path_et = os.path.join(experiment_dir, 'i2i_et_weights.csv')
+    if not leave_out_multinomial:
+        path_mn = os.path.join(experiment_dir, 'i2i_mn_weights.csv')
+        df_mn = pd.DataFrame({'indicator1':indicator1, 'indicator2':indicator2, 'weight':multinomial_means, 
+                              'weight_distribution':multinomial_distributions, 'weight_scaled_entropy':multinomial_entropy,
+                              'edge_existence':preds, 'edge_existence_scaled_entropy':[ dict_['mean'] if dict_!=None else None for dict_ in entropy_preds] })
+        df_mn = df_mn.round(3)
+        logger.info(f'Saving multinomial edge weights to {path_mn}')
+        df_mn.to_csv(path_mn, index=False)
 
-    df_mn = pd.DataFrame({'indicator1':indicator1, 'indicator2':indicator2, 'weight':multinomial_means, 'distribution':multinomial_distributions})
-    df_vb = pd.DataFrame({'indicator1':indicator1, 'indicator2':indicator2, 'weight':li_pred_agg_verbalized, 'preds':li_pred_ensembles_verbalized })
-    df_et = pd.DataFrame({'indicator1':indicator1, 'indicator2':indicator2, 'weight':entropy_preds})
+    if not leave_out_verbalisation:
+        path_vb = os.path.join(experiment_dir, 'i2i_vb_weights.csv')
+        df_vb = pd.DataFrame({'indicator1':indicator1, 'indicator2':indicator2, 'weight':li_pred_agg_verbalized, 'preds':li_pred_ensembles_verbalized })
+        df_vb = df_vb.round(3)
+        logger.info(f'Saving verbalization edge weights to {path_vb}')
+        df_vb.to_csv(path_vb, index=False)
 
-    logger.info(f'Saving multinomial edge weights to {path_mn}')
-    logger.info(f'Saving verbalization edge weights to {path_vb}')
-    logger.info(f'Saving entropy edge weights to {path_et}')
-    df_mn.to_csv(path_mn, index=False)
-    df_vb.to_csv(path_vb, index=False)
-    df_et.to_csv(path_et, index=False)
+    if not leave_out_entropy:
+        path_et = os.path.join(experiment_dir, 'i2i_et_weights.csv')
+        df_et = pd.DataFrame({'indicator1':indicator1, 'indicator2':indicator2, 'weight':entropy_preds})
+        df_et = df_et.round(3)
+        logger.info(f'Saving entropy edge weights to {path_et}')
+        df_et.to_csv(path_et, index=False)
 
-def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, logger=None, batch_size=2):
+def multinomial_edge_weights(model, llm_name, li_records, config, scale_min, scale_max, logger=None, ensemble_size=1, batch_size=2):
 
     # Get the prompt template for querying the strength of the relationship between the two indicators
     prompt_builder = PromptBuilder(
@@ -121,8 +133,8 @@ def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, log
         llm_name,
         prompt_style='categories_scale',
         k_shot = 0,
-        ensemble_size = 1,
-        effect_type = 'arbitrary',
+        ensemble_size = ensemble_size,
+        effect_type = config.get('effect_type', 'arbitrary'),
         relationship = 'indicator_to_indicator'
     )
 
@@ -130,11 +142,12 @@ def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, log
         model,
         llm_name,
         prompt_style = 'categories_scale',
-        ensemble_size=1,
         edge_value = 'multinomial_distribution',
         parse_style = 'categories_perplexity',
         relationship = 'indicator_to_indicator',
-        local_or_remote = 'local')
+        local_or_remote = 'local',
+        use_system_prompt=False
+        )
         
     li_pred_agg = []
     li_pred_ensembles = []
@@ -153,7 +166,7 @@ def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, log
 
         with no_grad():
             #  Create prompts
-            batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch, scale_max=scale_max)
+            batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch, scale_min=scale_min, scale_max=scale_max)
 
             # Generate predictions
             batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement, scale_max=scale_max)
@@ -169,9 +182,32 @@ def multinomial_edge_weights(model, llm_name, li_records, config, scale_max, log
     gc.collect()
     logger.info('Finished Generating Multinomial Edges Predictions')
 
-    return li_pred_agg, li_pred_ensembles
+    # Calculate the perplexities 
+    li_pred_scaled_entropy = [] 
+    for idx, pred_ensembles in enumerate(li_pred_ensembles):
+        if pred_ensembles is None:
+            li_pred_scaled_entropy.append(None)
+            continue
+        
+        # Each record may have an ensemble of predictions - we get the average entropy
 
-def verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale_max, logger=None, batch_size=2, gpu_batch_size=None):
+        # Calculate the entropy of the multinomial distribution
+        scaled_entropies = [ 1- entropy( list( distr.values() ), base=len(distr)) for distr in pred_ensembles ]
+        
+        # Get average
+        avg_entropy = sum(scaled_entropies) / len(scaled_entropies)
+
+        # Calculate the scaled entropy
+        li_pred_scaled_entropy.append(avg_entropy)
+
+    # Ensure values in li_pred_agg, li_pred_ensembles and li_pred_scaled_entropy are rounded to 3 decimal places
+    li_pred_agg = [ {key:round(val,3) for key, val in pred.items()} for pred in li_pred_agg ]
+    li_pred_ensembles = [ [ {key:round(val,3) for key, val in distr.items()} for distr in pred_ensembles ] if pred_ensembles is not None else None for pred_ensembles in li_pred_ensembles ]
+    li_pred_scaled_entropy = [ round(val,3) if val is not None else None for val in li_pred_scaled_entropy ]
+
+    return li_pred_agg, li_pred_ensembles, li_pred_scaled_entropy
+
+def verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale_min, scale_max, logger=None, batch_size=2, gpu_batch_size=None):
 
 
     # Get the prompt template for querying the strength of the relationship between the two indicators
@@ -220,7 +256,7 @@ def verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale
                 last_time = time.time()
 
         #  Create prompts
-        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch, scale_max=scale_max, gpu_batch_size=gpu_batch_size)
+        batch_li_li_statement, batch_li_li_discourse = prompt_builder(batch, scale_min=scale_min, scale_max=scale_max, gpu_batch_size=gpu_batch_size)
 
         # Generate predictions
         batch_pred_ensembles = prediction_generator.predict(batch_li_li_statement, scale_max=scale_max)
@@ -239,31 +275,28 @@ def verbalize_edge_weights(model, llm_name, tokenizer, li_records, config, scale
 
     return li_pred_agg, li_pred_ensembles
 
-def entropy_edge_weights(li_records):
-    # Calculate an edge weight based on the entropy over a bernoulli estimation of edge existence
-    
+def entropy_edge_weights(li_records, key='pred_aggregated'):
+
+    # Calculate an edge weight based on the entropy over a bernoulli estimation of edge existence    
     li_entorpy_preds = [None for _ in range(len(li_records))]
 
-    
     for idx, record in enumerate(li_records):
 
         # if idx not in idx_existing_edges:
         #     continue
-        yes_pred = record['pred_aggregated']['Yes']
-        no_pred = record['pred_aggregated']['No']
+        yes_pred = record[key]['Yes']
+        no_pred = record[key]['No']
 
         # normalize the predictions j.i.c
         yes_pred = yes_pred / (yes_pred + no_pred)
         no_pred = no_pred / (yes_pred + no_pred)
 
         entropy_val = entropy([yes_pred, no_pred], base=2)
-
+        
         # Transform so more uncertainty is weaker weight
-
         entropy_val = 1 - entropy_val
+        li_entorpy_preds[idx] = {'mean':entropy_val }
 
-        li_entorpy_preds[idx]= {'mean':entropy_val }
-    
     return li_entorpy_preds
 
 def parse_args():
@@ -274,8 +307,12 @@ def parse_args():
     parser.add_argument('--gpu_batch_size', type=int, default=1 )
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
     parser.add_argument('--finetune_dir', type=str, default='', help='Directory where finetuned model is stored' )
-    parser.add_argument('--scale_max', type=int, default=5, help='The maximum value of the scale used to generate the prompt for multinomial edge prediction method')
+    parser.add_argument('--scale_max', type=int, default=3, help='The maximum value of the scale used to generate the prompt for multinomial edge prediction method')
 
+    parser.add_argument('--leave_out_verbalisation', action='store_true', default=False, help='Indicates whether to leave out the verbalization edge weight method' )
+    parser.add_argument('--leave_out_multinomial', action='store_true', default=False, help='Indicates whether to leave out the multinomial edge weight method' )
+    parser.add_argument('--leave_out_entropy', action='store_true', default=False, help='Indicates whether to leave out the entropy edge weight method' )
+    parser.add_argument('--mn_ensemble_size', type=int, default=-1, help='The number of ensembles to use for the multinomial edge weight method')
 
     args = parser.parse_known_args()[0]
 

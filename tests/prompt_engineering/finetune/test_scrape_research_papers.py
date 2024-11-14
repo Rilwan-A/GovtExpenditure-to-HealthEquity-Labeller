@@ -10,7 +10,6 @@ from data.finetune.scrape_research_papers import extract_text_pdftotext, remove_
 @pytest.fixture
 def pdf_data():
     """Sample pdf data to test extract_text_pdftotext function"""
-    # url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     url = """https://www.health.org.uk/sites/default/files/2020-03/Health%20Equity%20in%20England_The%20Marmot%20Review%2010%20Years%20On_executive%20summary_web.pdf"""
     
     response = requests.get(url)

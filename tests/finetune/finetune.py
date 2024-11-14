@@ -4,7 +4,7 @@ from prompt_engineering.finetune.finetune import DataModule
 
 def test_train_dataloader():
     # Create an instance of the DataModule class
-    data_module = DataModule(model_id="model1", dir_data="./data", batch_size=32, batch_size_inf=16,
+    data_module = DataModule(model_id="model", dir_data="./data", batch_size=32, batch_size_inf=16,
                              train_dset_names=["research_paper", "wizardLM_instruct_70k"], val_tasks=["next_token", "spot_alignment"],
                              num_workers=4, seed=10)
 

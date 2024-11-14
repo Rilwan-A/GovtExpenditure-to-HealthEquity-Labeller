@@ -1,6 +1,11 @@
-"""
-
-"""
+# This script implements the calibration and analysis pipeline for a policy performance impact (PPI) model. It integrates various components such as agent-based modeling,
+# data preprocessing, and logging to assess the impact of policy interventions on different indicators over a specified time frame. The script supports different methods for
+# budget-to-indicator (b2i) and indicator-to-indicator (i2i) relationship estimation, leveraging machine learning models for predicting these relationships. It enables the user
+# to specify a range of parameters, including the start and end years for calibration, the model size, thresholds for calibration, and options for running the model with different
+# levels of verbosity and debugging. The script also provides functionalities for parallel processing to accelerate the calibration process, handling of low precision counts to
+# refine calibration, and the capability to conduct multiple Monte Carlo simulations to ensure robustness in the calibration results. Additionally, it includes utilities for logging
+# and output management, ensuring that the calibration results, parameters, and runtime statistics are systematically recorded for analysis. The argparse library is used for
+# command-line argument parsing, allowing for flexible and user-defined model configuration.
 
 import matplotlib.pyplot as plt
 import os, warnings, csv
@@ -9,7 +14,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 import argparse 
 from agent_based_modelling import ppi
-from prompt_engineering.utils import ALL_MODELS
+from utils import ALL_MODELS
 import yaml
 warnings.simplefilter("ignore")
 import glob

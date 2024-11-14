@@ -31,6 +31,11 @@ from prompt_engineering.utils_prompteng import PromptBuilder
 from django.core.files.uploadedfile import UploadedFile
 import random
 import time
+from utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
+
+from utils import load_annotated_examples, load_llm
+
+
 
 from prompt_engineering.utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
 
@@ -80,7 +85,8 @@ def main(
     finetune_dir:str|None=None,
     finetune_version:int=0,
 
-    use_system_prompt:bool=True
+    use_system_prompt:bool=True,
+    override_double_quant:bool=False
     ):
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
@@ -91,7 +97,7 @@ def main(
         assert parse_style == 'categories_rules'
 
     elif prompt_style in ['categorise','cot_categorise']:
-        assert parse_style == 'categories_perplexity'
+        assert parse_style in ['categories_perplexity', 'categories_rules']
     else:
         raise ValueError(f"Invalid prompt_style: {prompt_style}")
 
@@ -128,7 +134,9 @@ def main(
     # Load LLM
     logging.info(f"\tLoading {llm_name}")
     try:
-        llm, tokenizer =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, finetune_dir, exp_name, finetune_version=finetune_version)
+        llm, tokenizer =  load_llm(llm_name, finetuned, local_or_remote, api_key, 0, 
+                                   finetune_dir, exp_name, finetune_version=finetune_version,
+                                   override_double_quant=override_double_quant)
     except Exception as e:
         logging.error(f"Error loading LLM: {e}")
         raise e
@@ -148,7 +156,6 @@ def main(
                                         seed=data_load_seed,
                                         tokenizer = tokenizer
                                         )
-    
     prompt_builder_i2i: PromptBuilder | None = None if predict_i2i is False else PromptBuilder(llm, llm_name, prompt_style, k_shot_i2i,
                                                                            ensemble_size, annotated_examples_i2i, 
                                                                            effect_type, relationship='indicator_to_indicator',
@@ -160,7 +167,6 @@ def main(
     prediction_generator_b2i = None if predict_b2i is False else PredictionGenerator(llm,
                                                         llm_name,
                                                         prompt_style,
-                                                        ensemble_size,
                                                         edge_value,
                                                         parse_style,
                                                         relationship='budgetitem_to_indicator',
@@ -171,7 +177,6 @@ def main(
     prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, 
                                                         llm_name,
                                                         prompt_style,
-                                                        ensemble_size,
                                                         edge_value,
                                                         parse_style,
                                                         relationship='indicator_to_indicator',
@@ -265,7 +270,7 @@ def main(
         if predict_i2i: 
             save_experiment( li_record_i2i, li_prompt_ensemble_i2i, li_discourse_ensemble_i2i, li_pred_ensemble_i2i, li_pred_agg_i2i, relationship='indicator_to_indicator', save_dir=save_dir) #type: ignore #ignore
         
-        logging.info("\tOutput Saved")
+        logging.info("\tOutput Saved to: {}".format(save_dir))
 
     return {
         'li_record_b2i': li_record_b2i,
@@ -303,7 +308,6 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
 
         # set_budget_items = sorted(set(li_budget_items))
         # set_indicator = sorted(set(li_indicator))
-
         li_labels = json_data.get('related', [None]*len(li_budget_items) )
     
     elif isinstance(input_file, str) and input_file[-4:] == '.csv':
@@ -419,7 +423,8 @@ def sample_records( li_record, line_range:str|None , sampling_method:str|None, s
 
 
     elif sampling_method == 'random':
-        li_record = random.sample(li_record, sample_count)
+        if sample_count < len(li_record):
+            li_record = random.sample(li_record, sample_count)
     
     elif 'stratified_sampling' in sampling_method:
         # sampling category is all text after the first _
@@ -439,7 +444,6 @@ def sample_records( li_record, line_range:str|None , sampling_method:str|None, s
 
 
     return li_record
-
 
 def predict_batches(prompt_builder:PromptBuilder, 
                         prediction_generator:PredictionGenerator, 
@@ -516,13 +520,13 @@ def save_experiment(
                         'budget_item': [ d['budget_item'] for d in li_record],
                        'indicator': [ d['indicator'] for d in li_record],
                        'pred_aggregated':li_pred_agg, 
-                       'prompts':encode(li_prompt_ensemble), 
                        'predictions':encode(li_pred_ensemble), 
+                       'prompts':encode(li_prompt_ensemble), 
                        'discourse':encode(li_discourse_ensemble) })
         
         if 'related' in li_record[0].keys():
             df['related'] = [ d['related'] for d in li_record]
-            df = df[['budget_item', 'indicator', 'related', 'pred_aggregated', 'prompts', 'predictions', 'discourse']]
+            df = df[['budget_item', 'indicator', 'related', 'pred_aggregated', 'predictions', 'prompts', 'discourse']]
 
     elif relationship == 'indicator_to_indicator':
         df = pd.DataFrame({ 'indicator1': [ d['indicator1'] for d in li_record],
@@ -533,7 +537,7 @@ def save_experiment(
                        'discourse':encode(li_discourse_ensemble)})
         if 'related' in li_record[0].keys():
             df['related'] = [ d['related'] for d in li_record]
-            df = df[['indicator1', 'indicator2', 'related', 'pred_aggregated', 'prompts', 'predictions','discourse']]
+            df = df[['indicator1', 'indicator2', 'related', 'pred_aggregated', 'predictions', 'prompts','discourse']]
                 
     else:
         raise ValueError("relationship must be one of ['budgetitem_to_indicator', 'indicator_to_indicator']")
@@ -605,6 +609,7 @@ def parse_args():
     
     parser.add_argument('--sample_count', type=int, default=None, help='The number of samples to use when sampling the data')
 
+    parser.add_argument('--override_double_quant', action='store_true', default=False, help='Indicates whether to override the double quantity prompt' )
     parser.add_argument('--save_output', action='store_true', default=True, help='Indicates whether the output should be saved' )
 
     parser.add_argument('--debugging', action='store_true', default=False, help='Indicates whether to run in debugging mode' )
