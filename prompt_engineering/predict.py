@@ -17,24 +17,26 @@ import os,sys
 sys.path.append(os.getcwd())
 from prompt_engineering.my_logger import setup_logging_predict
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 
 import pandas as pd
 
 import json as json
 
 # Testing models to see how well they aligned to expert's annotations of the SPOT dataset with yes_no prompt style w/ rule based parsing and binary weight edge value 
-
-from prompt_engineering.utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
-
-from prompt_engineering.utils import load_annotated_examples, load_llm
-
+import math
 import yaml
 from prompt_engineering.utils_prompteng import PromptBuilder
 
 from django.core.files.uploadedfile import UploadedFile
 import random
 import time
+
+from prompt_engineering.utils import HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS,  MAP_LOAD_IN_NBIT
+
+from prompt_engineering.utils import load_annotated_examples, load_llm
+
+
 
 def main(
     llm_name:str,
@@ -54,6 +56,8 @@ def main(
 
     input_file:str|UploadedFile,
     line_range:str|None=None,
+    sampling_method:str|None=None,
+    sample_count:int|None=None,
 
     k_shot_b2i:int=2,
     k_shot_i2i:int=0,
@@ -75,6 +79,8 @@ def main(
     
     finetune_dir:str|None=None,
     finetune_version:int=0,
+
+    use_system_prompt:bool=True
     ):
     
     assert (predict_b2i is True and predict_i2i is False) or (predict_b2i is False and predict_i2i is True), "Only one of predict_b2i or predict_i2i can be true"
@@ -112,6 +118,7 @@ def main(
     logging.info(f"\tk_shot_example_dset_name_b2i: {k_shot_example_dset_name_b2i}")
     logging.info(f"\tk_shot_example_dset_name_i2i: {k_shot_example_dset_name_i2i}")
     logging.info(f"\tunbias_categorisations: {unbias_categorisations}")
+    logging.info(f"\tuse_system_prompt: {use_system_prompt}")
     if line_range is not None:
         logging.info(f"\tline_range: {line_range}")
     
@@ -131,6 +138,7 @@ def main(
     annotated_examples_b2i = None if predict_b2i is False else load_annotated_examples(k_shot_example_dset_name_b2i, relationship_type='budgetitem_to_indicator' )
     annotated_examples_i2i = None if predict_i2i is False else load_annotated_examples(k_shot_example_dset_name_i2i, relationship_type='indicator_to_indicator')
     logging.info("\Annotated Examples Loaded")
+
 
     # Create Prompt Builders
     logging.info("\tCreating Prompt Builders")
@@ -157,7 +165,8 @@ def main(
                                                         parse_style,
                                                         relationship='budgetitem_to_indicator',
                                                         local_or_remote=local_or_remote,
-                                                        effect_type=effect_type
+                                                        effect_type=effect_type,
+                                                        use_system_prompt=use_system_prompt
                                                         )
     prediction_generator_i2i = None if predict_i2i is False else PredictionGenerator(llm, 
                                                         llm_name,
@@ -167,7 +176,9 @@ def main(
                                                         parse_style,
                                                         relationship='indicator_to_indicator',
                                                         local_or_remote=local_or_remote,
-                                                        effect_type=effect_type
+                                                        effect_type=effect_type,
+                                                        use_system_prompt=use_system_prompt
+
                                                         )
     logging.info("\tPrediction Generators Created")
         
@@ -184,15 +195,13 @@ def main(
                                                             logging=logging )
     logging.info("\tData Prepared")
     
-    if line_range is not None:
-        start, end = line_range.split(',')
-        start, end = int(start), int(end)
-        
+    # Sampling Methods    
+    if sampling_method is not None or line_range is not None:
         if li_record_b2i is not None:
-            li_record_b2i = li_record_b2i[start:end+1]
+            li_record_b2i = sample_records( li_record_b2i, line_range, sampling_method, sample_count )
         
         if li_record_i2i is not None:
-            li_record_i2i = li_record_i2i[start:end+1]
+            li_record_i2i = sample_records( li_record_i2i, line_range, sampling_method, sample_count )
 
     # run predictions
     logging.info("\tRunning Predictions")
@@ -319,25 +328,8 @@ def prepare_data_b2i(input_file:str|UploadedFile, debugging=False, data_load_see
     li_record_b2i = [ {'budget_item':budget_item, 'indicator':indicator, 'related':label  } for budget_item, indicator, label in zip( li_budget_items, li_indicator, li_labels) ] 
     
     if debugging:
-        random.seed(data_load_seed)
-        # sample 5 where 'related' is Yes and 5 where 'related' is No
-    
-        li_record_b2i_yes = [x for x in li_record_b2i if x['related']=='Yes']
-        li_record_b2i_no = [x for x in li_record_b2i if x['related']=='No']
+        li_record_b2i = li_record_b2i[:2]
         
-        li_record_b2i_ = []
-        if len(li_record_b2i_yes) > 0:
-            li_record_b2i_ += random.sample(li_record_b2i_yes, 3)
-        else:
-            li_record_b2i_ += random.sample(li_record_b2i, 3)
-
-        if len(li_record_b2i_no) > 0:
-            li_record_b2i_ += random.sample(li_record_b2i_no, 3)
-        else:
-            li_record_b2i_ += random.sample(li_record_b2i, 3)
-
-        li_record_b2i = li_record_b2i_
-
     return li_record_b2i # type: ignore
 
 def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_seed=10, 
@@ -387,16 +379,76 @@ def prepare_data_i2i(input_file:str|UploadedFile, debugging=False, data_load_see
     li_record_i2i = [ {'indicator1':indicator1, 'indicator2':indicator2, 'related':label  } for indicator1, indicator2, label in zip( li_indicator1, li_indicator2, li_labels) ] 
     
     if debugging:
-        li_record_i2i = random.sample(li_record_i2i, 1)
-    
+        li_record_i2i = li_record_i2i[:2]
+        
     return li_record_i2i
+
+def sample_records( li_record, line_range:str|None , sampling_method:str|None, sample_count:int=None ):
+
+    random.seed(42)
+
+    if line_range is not None:
+        start, end = line_range.split(',')
+        start, end = int(start), int(end)
+        li_record = li_record[start:end+1]
+    
+    elif sampling_method is None:
+        return li_record
+
+    elif sampling_method == 'stratified_sampling_related':
+        # sample a total of 10 where 'related' is Yes or No in proportions based on the occurence of Yes and No in related
+
+        yes_count = len([x for x in li_record if x['related']=='Yes'])
+        no_count = len([x for x in li_record if x['related']=='No'])
+
+        yes_sample_count = int(sample_count * yes_count / (yes_count + no_count))
+        no_sample_count = sample_count - yes_sample_count
+
+        li_record_yes = [x for x in li_record if x['related']=='Yes']
+        li_record_no = [x for x in li_record if x['related']=='No']
+
+        li_record_ = []
+        assert len(li_record_yes) > sample_count//2
+        li_record_ += random.sample(li_record_yes, sample_count//2)
+
+
+        assert len(li_record_no) > sample_count//2
+        li_record_ += random.sample(li_record_no, sample_count//2)
+
+        li_record = li_record_
+
+
+    elif sampling_method == 'random':
+        li_record = random.sample(li_record, sample_count)
+    
+    elif 'stratified_sampling' in sampling_method:
+        # sampling category is all text after the first _
+        category = '_'.join(sampling_method.split('_')[2:])
+
+        assert category in li_record[0].keys(), f"Category {category} not in record"
+        len_record = len(li_record)
+        li_categories = [x[category] for x in li_record]
+        category_values = set([x[category] for x in li_record])
+        li_record_ = []
+        for val in category_values:
+            li_val = [x for x in li_record if x[category]==val]
+            li_val = random.sample(li_val, min( 1, math.ceil(sample_count * ( len(li_val)/len_record ) )   ) )
+            li_record_ += li_val
+
+        li_record = li_record_
+
+
+    return li_record
+
 
 def predict_batches(prompt_builder:PromptBuilder, 
                         prediction_generator:PredictionGenerator, 
                         li_record:list[dict[str,str]],
                         batch_size=2,
                         unbias_categorisations:bool=False,
-                        logger=None ) -> tuple[list[list[str]], list[list[str]], list[str], list[str]]:
+                        logger=None,
+                        
+                          ) -> tuple[list[list[str]], list[list[str]], list[str], list[str]]:
 
     # Creating Predictions for each row in the test set
     li_prompt_ensemble = []
@@ -404,6 +456,7 @@ def predict_batches(prompt_builder:PromptBuilder,
     li_pred_ensemble = []
     li_pred_agg = []
 
+    
     li_li_record = [ li_record[i:i+batch_size] for i in range(0, len(li_record), batch_size) ]
 
     last_log_time = time.time() - 30
@@ -497,9 +550,16 @@ def save_experiment(
     return None
 
 def parse_args():
+
+    def validate_sampling_method(value):
+        if value is not None and not value.startswith('stratified_sampling') and value != 'random':
+            raise ArgumentTypeError("%s is an invalid sampling method" % value)
+        return value
+
     
     parser = ArgumentParser(add_help=True, allow_abbrev=False)
-    parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
+    # parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat', choices=ALL_MODELS )
+    parser.add_argument('--llm_name', type=str, default='mosaicml/mpt-7b-chat' )
     parser.add_argument('--exp_name', type=str, default='mpt7b', required=True )
     parser.add_argument('--exp_group', type=str, default='exp_run', required=True )
 
@@ -512,6 +572,7 @@ def parse_args():
     parser.add_argument('--finetune_version', type=int, default=0, help='Version of finetuned model to use')
 
     parser.add_argument('--prompt_style',type=str, choices=['yes_no','open', 'categorise', 'cot_categorise' ], default='open', help='Style of prompt' )
+    parser.add_argument('--use_system_prompt', type=lambda val: bool(int(val)), default=True, help='Indicates whether to use the system prompt', choices=[0, 1])
     parser.add_argument('--parse_style', type=str, choices=['rules', 'categories_rules', 'categories_perplexity'], default='categories_perplexity', help='How to convert the output of the model to a Yes/No Output' )
 
     parser.add_argument('--ensemble_size', type=int, default=1 )
@@ -535,6 +596,14 @@ def parse_args():
 
     parser.add_argument('--data_load_seed', type=int, default=10, help='The seed to use when loading the data' )
     parser.add_argument('--line_range', type=str, default=None, help='The range of lines to load from the input file' )
+    # parser.add_argument('--sampling_method', type=str, default=None, choices=['stratified_sampling_related', 'random', None],
+                        #  help = 'The method to use when sampling the data. Note that for both stratified sampling and random sampling we use fix random seed of 42' )
+    
+    parser.add_argument('--sampling_method', type=validate_sampling_method, default=None,
+                    help='The method to use when sampling the data. Note that for both stratified sampling and random sampling we use fix random seed of 42')
+
+    
+    parser.add_argument('--sample_count', type=int, default=None, help='The number of samples to use when sampling the data')
 
     parser.add_argument('--save_output', action='store_true', default=True, help='Indicates whether the output should be saved' )
 

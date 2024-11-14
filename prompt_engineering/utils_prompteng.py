@@ -25,7 +25,7 @@ from peft import PeftModel, PeftModelForCausalLM
 from functools import lru_cache
 from transformers import AutoTokenizer
 from langchain.llms.huggingface_pipeline import HuggingFacePipeline
-
+from langchain_community.chat_models import ChatOpenAI
 map_relationship_promptsmap ={}
 
 # region budgetitem to indicator templates
@@ -83,7 +83,7 @@ li_prompts_categorical_question_b2i: list[str] = [
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i["1"]}\n\t2) {map_category_answer_b2i_b2i["2"]}.'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["1"]}" or "2" if the answer is "{map_category_label_b2i["2"]}".',
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Answers: 1) {map_category_label_b2i["1"]} 2) {map_category_label_b2i["2"]}',
-    f'Write "1" if the following statement is True or "2" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
+    f'I want you to write 1 if the following statement is True or write 2 if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
     ]
 
 li_prompts_categorical_question_reversed_b2i: list[str] = [
@@ -95,7 +95,7 @@ li_prompts_categorical_question_reversed_b2i: list[str] = [
     # f'Categories:\n1) {map_category_answer_b2i_b2i_b2i_b2i["2"]}\n2) {map_category_answer_b2i["1"]}\nWrite the number of the category that best answers whether government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}"?'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write the number (1 or 2) of category which correctly answers the question:\nCategories:\n\t1) {map_category_answer_b2i_b2i["2"]}\n\t2) {map_category_answer_b2i["1"]}.'
     # f'Does government spending on "{{budget_item}}" {{effect_type}} affect "{{indicator}}"? Please write "1" if the answer is "{map_category_label_b2i["2"]}" or "2" if the answer is "{map_category_label_b2i["1"]}".'
-    f'Write "2" if the following statement is True or "1" if it is False. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
+    f'I want you to write 1 if the following statement is False or write 2 if it is True. Local government spending on "{{budget_item}}" {{effect_type}} affects "{{indicator}}".'
 ]
 
 # endregion
@@ -155,15 +155,20 @@ li_prompts_categorical_question_w_reasoning_reversed_i2i: list[str] = [
 ]
 
 li_prompts_categorical_question_i2i: list[str] = [
-    f'Write "1" if the following statement is True or "2" if it is False. The level of "{{indicator1}}" is {{effect_type}} influential to the state of "{{indicator2}}".'
+    # f'Write "1" if the following statement is True or "2" if it is False. The level of "{{indicator1}}" is {{effect_type}} influential to the state of "{{indicator2}}".',
+    # f'I want you to write the number 1 if the following statement is true or write the number 2 if it is false. The level of "{{indicator1}}" is {{effect_type}} influential to the level of "{{indicator2}}".'
+    f'Choose 1 if the following statement is true or choose 2 if the following statement is false.\nStatement: The level of "{{indicator1}}" {{effect_type}} affects the level of "{{indicator2}}".'
+    
     ]
 
 li_prompts_categorical_question_reversed_i2i: list[str] = [
-    'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
+    # 'Write "2" if the following statement is True or "1" if it is False. The level of \"{indicator1}\" is {effect_type} influential to the state of \"{indicator2}\".'
+    #f'I want you to write the number 1 if the following statement is false or write the number 2 if it is true. The level of "{{indicator1}}" is {{effect_type}} influential to the level of "{{indicator2}}".'
+    f'Choose 1 if the following statement is false or choose 2 if the following statement is true.\nStatement: The level of "{{indicator1}}" {{effect_type}} affects the level of "{{indicator2}}".'
     ]
 
 li_prompts_categories_scale_question_i2i: list[str] = [
-    'On a scale of 0 to {scale_max}, how strong is the influence of changes in \"{indicator1}\" on changes in \"{indicator2}\"?'
+    f'On a scale of 0 to {{scale_max}}, how strong is the influence of changes in "{{indicator1}}" on changes in "{{indicator2}}"?'
 ]
 
 # Prompts for the scaling categorisation method
@@ -208,7 +213,7 @@ map_system_prompts_b2i = {
     'yes_no':'Answer the following question with "Yes" or "No".',
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
+    'cot_categorise':'Write a concise and conclusive three sentence answer to the following question.',
 }
 
 map_system_prompts_i2i = {
@@ -218,7 +223,7 @@ map_system_prompts_i2i = {
     'yes_no':'Answer the following question with "Yes" or "No".',
     'open':'Write a conclusive, one sentence answer to the following question.',
     'categorise':'',
-    'cot_categorise':'Write a thorough, detailed and conclusive four sentence answer to the following question.',
+    'cot_categorise':'Write a concise and conclusive three sentence answer to the following question.',
     'categories_scale':'Answer the following question with only a number between 0 and {scale_max}.',
     'verbalize_scale':'Answer the following question with only a number.'
 
@@ -251,6 +256,21 @@ format_beluga_no_sysmessage = "### User: {user_message}\n\n### Assistant:\n"
 format_dummy = "{system_message}\n\n{user_message}\n\n"
 format_dummy_no_sysmessage = "{user_message}\n\n"
 
+def extract_assistant_answer(text:str, llm_name:str) -> str:
+
+    if any(x in llm_name for x in ['hermes-llama-2','hermes-llama2','yi']):
+        return text.split('ASSISTANT: ')[-1].strip()
+
+    elif any(x in llm_name for x in ['vicuna', 'lazarus', 'minotaur']):
+        return text.split('Response:\n')[-1].strip()
+
+    elif any(x in llm_name for x in ['beluga','llama-2-70b-instruct-v2', 'llama-30b-instruct-2048', 'llama-3.2-1b-instruct', 'llama-3.2-3b-instruct', 'llama-3.2-8b-instruct', 'llama-3.1-70b-instruct','meta-llama']):
+        return text.split('Assistant:\n')[-1].strip()
+
+    else:
+        raise ValueError(f'Unknown llm_name: {llm_name}')
+
+
 
 def map_llmname_input_format(llm_name, user_message, system_message=None, response=None):
 
@@ -260,7 +280,7 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
 
     llm_name = llm_name.lower()
     
-    if any(x in llm_name for x in ['hermes-llama-2','hermes-llama2']):
+    if any(x in llm_name for x in ['hermes-llama-2','hermes-llama2','yi','alpaca', 'guanaco']):
         if system_message is not None:
             template = format_alpaca
         else:
@@ -271,14 +291,8 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
             template = format_vicuna_1_1
         else:
             template = format_vicuna_1_1_no_sysmessage
-
-    elif any( x in llm_name for x in ['alpaca', 'guanaco']):
-        if system_message is not None:
-            template = format_alpaca
-        else:
-            template = format_alpaca_no_sysmessage
     
-    elif any( x in llm_name for x in ['beluga','llama-2-70b-instruct-v2', 'llama-30b-instruct-2048']):
+    elif any( x in llm_name for x in ['beluga','llama-2-70b-instruct-v2', 'llama-30b-instruct-2048', 'llama-3.2-1b-instruct', 'llama-3.2-3b-instruct', 'llama-3.2-8b-instruct', 'llama-3.1-70b-instruct']):
         if system_message is not None:
             template = format_beluga
         else:
@@ -304,7 +318,6 @@ def map_llmname_input_format(llm_name, user_message, system_message=None, respon
         template += response
 
     return template
-
 # endregion
 
 def create_negative_examples_b2i(dset:pd.DataFrame, random_state=None) -> pd.DataFrame:
@@ -342,7 +355,7 @@ def create_negative_examples_b2i(dset:pd.DataFrame, random_state=None) -> pd.Dat
     return dset
 
 def joint_probabilities_for_category(
-    li_text, model, tokenizer, batch_size: int = 16, max_length=None, category_token_len=1):
+    li_text, model, tokenizer, batch_size: int = 1, max_length=None, category_token_len=1):
 
 
     """For a given prompt taking the style of "Answer with the letter of the Category which best answers my question", This function returns the joint probabilities for the category tokens in each posible answer,
@@ -399,7 +412,7 @@ def joint_probabilities_for_category(
             out_logits = model(encoded_texts_batch, attention_mask=attn_masks_batch).logits
 
         shift_logits = out_logits[..., :-1, :]
-        shift_labels = labels[..., 1:]
+        shift_labels = labels[..., 1: ]
         shift_attention_mask_batch = attn_masks_batch[..., 1:]
 
         shift_logits = shift_logits[..., -category_token_len:, :]
@@ -431,11 +444,12 @@ def nomalized_probabilities( probs: dict[str,float]) -> dict[str,float]:
     
         """Normalises a dictionary of probabilities"""
         # Normalise probabilities
+        norm_probs = {}
         total = sum(probs.values())
         for k,v in probs.items():
-            probs[k] = v/total
+            norm_probs[k] = v/total
     
-        return probs
+        return norm_probs
 
 class PromptBuilder():
     def __init__(self, 
@@ -528,7 +542,7 @@ class PromptBuilder():
         generation_params = {}
         _ = {
             langchain.llms.huggingface_pipeline.HuggingFacePipeline:'max_new_tokens',
-            langchain.chat_models.ChatOpenAI:'max_tokens',
+            ChatOpenAI:'max_tokens',
             PeftModel:'max_new_tokens',
             PreTrainedModel:'max_new_tokens'
         }
@@ -578,7 +592,7 @@ class PromptBuilder():
         else:
             model = self.llm
 
-        if isinstance(model, langchain.chat_models.ChatOpenAI): #type: ignore
+        if isinstance(model, ChatOpenAI): #type: ignore
             
             generation_params = self.get_generation_params(self.prompt_style, **gen_kwargs)
             
@@ -599,7 +613,7 @@ class PromptBuilder():
                 li_preds: list[str] = [ li_chatgen[0].text for li_chatgen in outputs.generations ]
                 li_li_preds.append(li_preds)
         
-        elif isinstance(model, langchain.llms.base.LLM): #type: ignore
+        elif isinstance(model, langchain.llms.BaseLLM): #type: ignore
 
             # Set the generation kwargs - Langchain equivalent method to allow variable generation kwargs            
             for k,v in self.get_generation_params(self.prompt_style, **gen_kwargs).items():
@@ -632,10 +646,15 @@ class PromptBuilder():
                     )
 
                 outputs = model.generate(
-                    prompts=li_prompts_fmtd)
+                    prompts=li_prompts_fmtd,
+                    # skip_special_tokens=True
+                    )
                 
                 li_preds : list[str] = [ chatgen.text.strip(' ') for chatgen in sum(outputs.generations,[]) ]
-            
+                
+                # Extract just the assistant's answer
+                li_preds = [ extract_assistant_answer(pred, self.llm_name.lower()) for pred in li_preds ]
+
                 li_li_prompts_fmtd.append(li_prompts_fmtd)
                 li_li_preds.append(li_preds)
         

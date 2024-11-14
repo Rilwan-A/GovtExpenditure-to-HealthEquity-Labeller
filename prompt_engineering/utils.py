@@ -2,11 +2,13 @@ from time import sleep
 import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
-from langchain import HuggingFacePipeline, PromptTemplate, LLMChain
+from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+from langchain.chains import LLMChain
 from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
+import langchain_community
 from prompt_engineering.utils_prompteng import (map_relationship_system_prompt, map_relationship_promptsmap, 
                                                 map_relationship_sysprompt_categoriesanswer,
                                                 map_llmname_input_format,
@@ -22,9 +24,9 @@ import warnings
 import os
 from contextlib import redirect_stdout
 import openai
-from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
-from  langchain.chat_models import ChatOpenAI
-from  langchain.llms import HuggingFaceHub
+from peft import get_peft_config, get_peft_model, LoraConfig, TaskType
+from langchain_community.chat_models import ChatOpenAI
+from langchain_community.llms import HuggingFaceHub
 
 from transformers import PreTrainedTokenizer, pipeline
 
@@ -49,7 +51,17 @@ HUGGINGFACE_MODELS = [
     'upstage/Llama-2-70b-instruct-v2',
     'stabilityai/StableBeluga2',
     
-    'trl-internal-testing/dummy-GPT2-correct-vocab']
+    'trl-internal-testing/dummy-GPT2-correct-vocab',
+    
+    '01-ai/Yi-34B-Chat',
+    'meta-llama/Meta-Llama-3-70B',
+
+    'meta-llama/Llama-3.2-1B-Instruct',
+    'meta-llama/Llama-3.2-3B-Instruct',
+    'meta-llama/Llama-3.1-8B-Instruct',
+    'meta-llama/Llama-3.1-70B-Instruct',
+    'meta-llama/Llama-3.2-1B'
+    ]
 
 MAP_LOAD_IN_NBIT = {
     'TheBloke/Wizard-Vicuna-7B-Uncensored-HF':4,
@@ -68,7 +80,14 @@ MAP_LOAD_IN_NBIT = {
     'upstage/Llama-2-70b-instruct-v2':4,
     'stabilityai/StableBeluga2':4,
 
-    'trl-internal-testing/dummy-GPT2-correct-vocab':4
+    'trl-internal-testing/dummy-GPT2-correct-vocab':4,
+
+    '01-ai/Yi-34B-Chat':4,
+    'meta-llama/Meta-Llama-3-70B':4,
+    'meta-llama/Llama-3.2-1B-Instruct':4,
+    'meta-llama/Llama-3.2-3B-Instruct':4,
+    'meta-llama/Llama-3.1-8B-Instruct':4,
+    'meta-llama/Llama-3.1-70B-Instruct':4,
       }
 
 OPENAI_MODELS = ['gpt-3.5-turbo', 'gpt-4']
@@ -84,9 +103,9 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
     
 
     assert local_or_remote in ['local', 'remote'], f"local_or_remote must be either 'local' or 'remote', not {local_or_remote}"
-    if local_or_remote == 'remote': assert api_key is not None, f"api_key must be provided if local_or_remote is 'remote'"
+    
     if local_or_remote == 'local': assert llm_name not in OPENAI_MODELS, f"llm_name must be a HuggingFace model if local_or_remote is 'local'" 
-    assert llm_name in ALL_MODELS, f"llm_name must be a valid model name, not {llm_name}"
+    # assert llm_name in ALL_MODELS, f"llm_name must be a valid model name, not {llm_name}"
     # TODO: All models used done on Huggingface Hub
     # TODO: if user wants to run it faster they can download the model from Huggingface Hub and load it locally and use the predict step with different --local_or_remote set to local
     if local_or_remote == 'local':
@@ -95,8 +114,8 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
         if llm_name in HUGGINGFACE_MODELS:
             from transformers import BitsAndBytesConfig
             
-            bool_8=MAP_LOAD_IN_NBIT[llm_name] == 8
-            bool_4=MAP_LOAD_IN_NBIT[llm_name] == 4
+            bool_8=MAP_LOAD_IN_NBIT.get(llm_name,4) == 8
+            bool_4=MAP_LOAD_IN_NBIT.get(llm_name,4) == 4
             
             if bool_8 or bool_4:
                 quant_config = BitsAndBytesConfig(
@@ -120,10 +139,23 @@ def load_llm( llm_name:str, finetuned:bool=False, local_or_remote:str='local', a
                     model_kwargs={'trust_remote_code':True,
                                     'quantization_config':quant_config,
                                     'do_sample':False,
-                                    'device_map':'auto'
-                                    },)
+                                    'device_map':'balanced',
+                                    # 'device_map':None,
+                                    # 'device':None,
+                                    # 'hf_device_map':None
+                                    },
+                                    # token=os.environ.get('HF_TOKEN'),
+                                    # use_auth_token=os.environ.get('HF_TOKEN')
+                                    )
 
                 tokenizer = llm.pipeline.tokenizer
+                # tokenizer.eos_token_id = llm.pipeline.model.config.eos_token_id
+                if llm.pipeline.model.config.pad_token_id is None and 'meta-llama' in llm_name.lower():
+                    tokenizer.pad_token = '<|begin_of_text|>'
+                    tokenizer.pad_token_id = tokenizer.bos_token_id
+
+                
+
                 if loraConfig is not None:
                     # llm = get_peft_model(llm.pipeline.model, loraConfig)
                     llm.pipeline.model = get_peft_model(llm.pipeline.model, loraConfig)
@@ -194,11 +226,12 @@ class PredictionGenerator():
                   relationship:str='budgetitem_to_indicator',
                   local_or_remote='local',
                   effect_type:str='directly',
+                  use_system_prompt:bool=True,
                 **kwargs ):
                 
         if parse_style in ['categories_perplexity']: 
             assert local_or_remote == 'local', "Can not get model logits scores from remote models"
-            assert not isinstance(llm, langchain.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
+            assert not isinstance(llm, langchain_community.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
 
         # Restrictions on combinations of parse style and edge value
         if edge_value in ['distribution'] and parse_style in ['rules','categories_rules']:
@@ -218,6 +251,7 @@ class PredictionGenerator():
         self.local_or_remote = local_or_remote
       
         self.effect_type = effect_type
+        self.use_system_prompt = use_system_prompt
 
     def predict(self, li_li_filled_template:list[list[str]], reverse_categories=False, **kwargs)->tuple[ list[list[str]], list[list[str]], list[list[dict[str,int|float]]] ]:
         "Given a list of prompt ensembels, returns a list of predictions, with one prediction per member of the ensemble"
@@ -238,8 +272,6 @@ class PredictionGenerator():
                 li_li_pred = [ self.parse_outp_cotcategories_perplexity(li_filled_template, reverse_categories=reverse_categories) for li_filled_template in li_li_filled_template]
             elif self.prompt_style == 'categories_scale':
                 li_li_pred = [ self.parse_outp_categories_scale(li_filled_template, scale_max = kwargs.get('scale_max',5)) for li_filled_template in li_li_filled_template]
-        
-
         else:
             raise ValueError(f"parse_style {self.parse_style} not recognized")
 
@@ -253,7 +285,6 @@ class PredictionGenerator():
         for idx, prediction in enumerate(li_filled_template):
             
             prediction = copy.deepcopy(prediction).lower()
-
             
             if any( ( neg_phrase in prediction for neg_phrase in ['cannot answer','can\'t answer', 'not sure', 'not certain',  ])):
                 dict_pred = {'Yes':0.0, 'No':0.0, 'NA':1.0}
@@ -346,6 +377,8 @@ class PredictionGenerator():
         return li_preds_parsed
     
     def parse_outp_cotcategories_perplexity(self, li_filledtemplate:list[str], reverse_categories:bool=False)->  list[dict[str,float]] :
+        
+        # NOTE: there is an error here - From the initial filled template we should extract the ASSISTANTS answer and then judge that answer
 
         # This function outputs a distribution of probabilities over Yes,:
         #   - First select a prompt which contains the initial statement to verify and a space for potential answers
@@ -362,12 +395,14 @@ class PredictionGenerator():
         map_category_answer = map_relationship_promptsmap[self.relationship]['map_category_answer']
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
-        # Formatting prompts to adhere to format required by Base Language Model
         li_filledtemplate_fmtd = [
-                map_llmname_input_format(self.llm_name,
-                                        user_message = filledtemplate, 
-                                        system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] )
-                                    for filledtemplate in li_filledtemplate ] #Added some base model formatting
+            apply_chat_templates(
+                self.llm.pipeline.tokenizer,
+                system_message = map_relationship_sysprompt_categoriesanswer[self.relationship] if self.use_system_prompt else None,
+                user_messages=[prompt])
+            for prompt in li_filledtemplate
+        ]
+
         
         # For each template, create a set of templates that ask a categorical question about the LLMs answer to if Budget Item affects an indiciator 
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -406,12 +441,21 @@ class PredictionGenerator():
         map_category_label = map_relationship_promptsmap[self.relationship]['map_category_label']
 
         # Formatting prompts to adhere to format required by Base Language Model
+        # li_filledtemplate_fmtd = [
+        #         map_llmname_input_format(self.llm_name,
+        #                                 user_message = prompt, 
+        #                                 system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] 
+        #                                 )
+        #                             for prompt in li_filledtemplate ] #Added some base model formatting
+
         li_filledtemplate_fmtd = [
-                map_llmname_input_format(self.llm_name,
-                                        user_message = prompt, 
-                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style] 
-                                        )
-                                    for prompt in li_filledtemplate ] #Added some base model formatting
+            apply_chat_templates(
+                self.llm.pipeline.tokenizer,
+                system_message=(map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style]) if self.use_system_prompt else None,
+                # system_message=None,
+                user_messages=[prompt])
+            for prompt in li_filledtemplate
+        ]
 
         # For each template, create a set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -445,9 +489,9 @@ class PredictionGenerator():
         li_map_probability = [ { _categorise_response_labels[answer]:li_probability[idx] for idx, answer in enumerate(answers) } for li_probability in li_li_probability ]
 
         # Convert this to normalised probabilities
-        li_map_probability = [  nomalized_probabilities(map_probability) for map_probability in li_map_probability ]
+        li_map_probability_norm = [ nomalized_probabilities(map_probability) for map_probability in li_map_probability ]
 
-        return li_map_probability
+        return li_map_probability_norm
 
     def parse_outp_categories_scale(self, li_filledtemplate:list[str], scale_max=5)->  list[dict[str,float]] :
         # returns a multinomial distribution over the values 1-10
@@ -455,14 +499,24 @@ class PredictionGenerator():
         category_scale = copy.deepcopy( map_relationship_promptsmap[self.relationship]['category_scale'] )
         
         # Formatting prompts to adhere to format required by Base Language Model
+        # li_filledtemplate_fmtd = [
+        #         map_llmname_input_format(self.llm_name,
+        #                                 user_message = prompt, 
+        #                                 system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
+        #                                 # system_message = map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
+        #                                 # system_message = None
+        #                                 )
+        #                             for prompt in li_filledtemplate ] #Added some base model formatting
+
         li_filledtemplate_fmtd = [
-                map_llmname_input_format(self.llm_name,
-                                        user_message = prompt, 
-                                        system_message = map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
-                                        # system_message = map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max) 
-                                        # system_message = None
-                                        )
-                                    for prompt in li_filledtemplate ] #Added some base model formatting
+            apply_chat_templates(
+                self.llm.pipeline.tokenizer,
+                # system_message=map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style],
+                system_message = (map_relationship_system_prompt[self.relationship][self.effect_type] + ' ' + map_relationship_system_prompt[self.relationship][self.prompt_style].format(scale_max=scale_max)) if self.use_system_prompt else None,
+                user_messages=[prompt])
+            for prompt in li_filledtemplate
+        ]
+
 
         # For each template, create the set of 2 filled templates with each of the possible answers
         # NOTE: The answers must not include any extra tokens such as punctuation since this will affect the perplexity
@@ -620,3 +674,56 @@ def load_annotated_examples(k_shot_example_dset_name:str|None,
         raise ValueError('Invalid dset_name: ' + str(k_shot_example_dset_name))
 
     return li_records
+
+def apply_chat_templates( tokenizer, system_message=None, user_messages:list[str]|None=None, assistant_messages:list[str]|None=None ):
+    """
+        Apply the chat templates to the user message and system message
+    """
+    messages = []
+    user_messages = [] if user_messages is None else user_messages
+    assistant_messages = [] if assistant_messages is None else assistant_messages
+
+    if system_message is not None:
+        system_message = {
+            "role": "system",
+            "content": system_message
+        }
+
+        messages.append(system_message)
+
+
+    len_am = len(assistant_messages) if assistant_messages is not None else 0
+    len_um = len(user_messages)
+    assert len_am in [ len_um, len_um-1], f"Assistant messages and user messages must be the same length or one less. Got {len_am} assistant messages and {len_um} user messages" 
+
+    if len_um > 0:
+        messages.append(
+            {"role": "user",
+            "content": user_messages[0]}
+        )
+
+        for user_message, assistem_message in zip(user_messages[1:], assistant_messages[:-1]):
+
+            assistant_message = {
+                "role": "assistant",
+                "content": assistem_message
+            }
+
+            user_message = {
+                "role": "user",
+                "content": user_message
+            }
+
+            messages.append(user_message)
+            messages.append(assistant_message)
+    
+    if len_am > 0:
+        messages.append(
+            {"role": "assistant",
+            "content": assistant_messages[-1]}
+        )
+
+
+    templated_message = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True )
+
+    return templated_message

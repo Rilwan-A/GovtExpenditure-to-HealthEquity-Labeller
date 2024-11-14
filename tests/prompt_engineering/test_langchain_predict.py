@@ -1,9 +1,8 @@
 import os
 import pytest
-
-from langchain import HuggingFacePipeline
-from  langchain.chat_models import ChatOpenAI
-from  langchain.llms import HuggingFaceHub
+from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+from langchain_community.chat_models import ChatOpenAI
+from langchain_community.llms import HuggingFaceHub
 
 from prompt_engineering.utils import  HUGGINGFACE_MODELS, OPENAI_MODELS, PredictionGenerator, ALL_MODELS, MAP_LOAD_IN_8BIT
 from prompt_engineering.predict import load_llm

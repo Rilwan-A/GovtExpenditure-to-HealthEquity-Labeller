@@ -44,7 +44,34 @@ kwargs_30bn = {
     "unbias_categorisations": False,
 }
 
-exps_kwargs = [kwargs_7bn, kwargs_13bn, kwargs_30bn]
+# TODO: update when experiment name is known
+kwargs_13bn_1 = {
+    'exp_group':'ppi_b2i_13bn',
+    'exp_name':'HMRC',
+
+    'finetuned':False,
+    'finetune_version':None,
+
+    'llm_name':'',
+    'local_or_remote':'local',
+
+    "unbias_categorisations": False,
+}
+
+kwargs_30bn_1 = {
+    'exp_group':'ppi_b2i_30bn',
+    'exp_name':'HMRC',
+
+    'finetuned':False,
+    'finetune_version':None,
+
+    'llm_name':'',
+    'local_or_remote':'local',
+
+    "unbias_categorisations": False,
+}
+
+exps_kwargs = [kwargs_7bn, kwargs_13bn, kwargs_30bn, kwargs_13bn_1, kwargs_30bn_1]
 
 # Import variable kwargs. e.g. whether to use CPUQ and Verbalize
 parser = ArgumentParser()
@@ -52,9 +79,19 @@ parser.add_argument('--exp_idx', type=int, choices=[0,1,2], default=0)
 parser.add_argument('--cpuq_verbalize', type=str, choices=['cpuq','verbalize'] )
 parser.add_argument('--debugging', action='store_true')
 parser.add_argument('--batch_size', type=int, default=1)
-parser.add_argument('--finetune_dir', type=str)
+parser.add_argument('--finetune_dir', type=str, default='prompt_engineering/finetune/ckpt' )
+
+parser.add_argument('--exp_group', type=str, default='ppi_b2i_7bn' )
+parser.add_argument('--exp_name', type=str, default='sbeluga7b' )
+parser.add_argument('--finetuned', action='store_true', default=False)
+parser.add_argument('--finetune_version', type=int, default=4)
+parser.add_argument('--llm_name', type=str, default='stabilityai/StableBeluga-7B')
+parser.add_argument('--local_or_remote', type=str, default='local')
+parser.add_argument('--unbias_categorisations', action='store_true', default=False)
+
 parse_kwargs = parser.parse_args()
 
+# Defining kwargs from prompting strategy
 model_kwargs = exps_kwargs[parse_kwargs.exp_idx]
 if parse_kwargs.cpuq_verbalize == 'cpuq':
     prompt_style = 'categorise'
@@ -65,6 +102,7 @@ elif parse_kwargs.cpuq_verbalize == 'verbalize':
     prompt_style = 'yes_no'
     parse_style = 'rules'
     model_kwargs['exp_group'] = model_kwargs['exp_group'] + '_verbalize'
+
 
 
 

@@ -2,7 +2,8 @@ from time import sleep
 import langchain
 from langchain.cache import InMemoryCache
 langchain.llm_cache = InMemoryCache()
-from langchain import HuggingFacePipeline, PromptTemplate, LLMChain
+from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+from langchain.chains import LLMChain
 from langchain.schema import (
     HumanMessage,
     SystemMessage
@@ -23,8 +24,8 @@ import os
 from contextlib import redirect_stdout
 import openai
 from peft import get_peft_config, prepare_model_for_int8_training, get_peft_model, LoraConfig, TaskType
-from  langchain.chat_models import ChatOpenAI
-from  langchain.llms import HuggingFaceHub
+from langchain_community.chat_models import ChatOpenAI
+from langchain_community.llms import HuggingFaceHub
 
 from transformers import PreTrainedTokenizer, pipeline
 
@@ -202,7 +203,7 @@ class PredictionGenerator():
                 
         if parse_style in ['categories_perplexity']: 
             assert local_or_remote == 'local', "Can not get model logits scores from remote models"
-            assert not isinstance(llm, langchain.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
+            assert not isinstance(llm, langchain_community.chat_models.ChatOpenAI), "Can not get model logits scores from ChatOpenAI"
 
         # Restrictions on combinations of parse style and edge value
         if edge_value in ['distribution'] and parse_style in ['rules','categories_rules']:

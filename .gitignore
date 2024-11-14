@@ -47,3 +47,5 @@ temp*
 # VSCode settings
 **/**workspace
 .vscode/
+
+scripts/*
